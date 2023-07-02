@@ -11,6 +11,6 @@ What I wanted to do with it was not very clear at first, but as I do a lot of da
 3. Get the data contained in the files into dataframes containing only the data I'm interested in for my dashboard
 4. Upload the processed files to a Google Drive location, which is linked to my PowerBI report.
 
-Feel free to reuse some parts of this code if this proves useful for your project, below is the description of how the code works in general, followed by the description of what each file does. 
+Feel free to reuse some parts of this code if this proves useful for your project, below is the description of how the code works in general, followed by the description of what each file does ⬇️
 
 ## General flow of the code
