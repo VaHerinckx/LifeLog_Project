@@ -30,7 +30,7 @@ def expand_df(df):
     df['end'] = pd.to_datetime(df['end']) + pd.Timedelta(hours = 8)
     df['duration_s'] = (df.end - df.start).dt.total_seconds().astype(float)
     new_df = pd.DataFrame(columns=['date', 'screen_time', 'pickups'])
-    old_df = pd.read_csv('processed_files/offscreen_processed.csv', sep = '|')
+    old_df = pd.read_csv('files/processed_files/offscreen_processed.csv', sep = '|')
     #old_df['date'] = pd.to_datetime(old_df['date'])
     new_df = pd.concat([new_df, old_df], ignore_index=True)
     df = df[(df['start']-pd.Timedelta(seconds = 30)).round('T')>max(new_df["date"])].reset_index(drop=True)
@@ -42,7 +42,7 @@ def expand_df(df):
     return new_df
 
 def screentime_before_sleep(df):
-    df2 = pd.read_csv('processed_files/garmin_sleep_processed.csv', sep = '|')
+    df2 = pd.read_csv('files/processed_files/garmin_sleep_processed.csv', sep = '|')
     df['date'] = pd.to_datetime(df.date, utc = True).dt.tz_localize(None)
     df['sleepDate'] = df.date.apply(lambda x: x - pd.Timedelta(days = 1) if x.hour < 6 else x).dt.date
     df['sleepDate'] = pd.to_datetime(df.sleepDate, utc = True).dt.tz_localize(None)
@@ -53,7 +53,7 @@ def screentime_before_sleep(df):
     return merged_df.drop(["sleepDate", "time_diff"], axis = 1)
 
 def process_offscreen_export():
-    df = pd.read_csv("exports/offscreen_exports/Pickup.csv")
+    df = pd.read_csv("files/exports/offscreen_exports/Pickup.csv")
     df = expand_df(df)
     df = screentime_before_sleep(df)
-    df.sort_values("date", ascending = False).to_csv('processed_files/offscreen_processed.csv', sep = '|', index = False)
+    df.sort_values("date", ascending = False).to_csv('files/processed_files/offscreen_processed.csv', sep = '|', index = False)

@@ -19,8 +19,8 @@ dict_identifier ={
 }
 
 def clean_import_file():
-    path = 'exports/apple_exports/apple_health_export/export.xml'
-    new_path = 'exports/apple_exports/apple_health_export/cleaned_export.xml'
+    path = 'files/exports/apple_exports/apple_health_export/export.xml'
+    new_path = 'files/exports/apple_exports/apple_health_export/cleaned_export.xml'
     command = f"sed -e '156,211d' {path} > {new_path}"
     subprocess.run(command, shell=True)
 
@@ -29,11 +29,11 @@ def apple_df_formatting(path):
         input_data = xmltodict.parse(xml_file.read())
     records_list = input_data['HealthData']['Record']
     df = pd.DataFrame(records_list)
-    df.to_csv('exports/apple_exports/apple_health_export/cleaned_export.csv', sep = '|', index = False)
+    df.to_csv('files/exports/apple_exports/apple_health_export/cleaned_export.csv', sep = '|', index = False)
     return df
 
 def select_columns(df, name_val):
-    path = f'processed_files/apple_{name_val}.csv'
+    path = f'files/processed_files/apple_{name_val}.csv'
     df = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
     df["@value"] = df["@value"].astype(float)
     df.rename(columns = {'@startDate' : 'date', '@sourceName' : 'source', '@value' : name_val}, inplace = True)
@@ -43,7 +43,7 @@ def select_columns(df, name_val):
     return new_df
 
 def expand_df(df, name_val, aggreg_method='sum'):
-    path = f'processed_files/apple_processed_files/apple_{name_val}.csv'
+    path = f'files/processed_files/apple_processed_files/apple_{name_val}.csv'
     df = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
     df["@value"] = df["@value"].astype(float)
     new_df = pd.DataFrame(columns=['date', 'val', 'source'])
@@ -78,8 +78,8 @@ def row_expander_minutes(row, aggreg_method):
     return date_df
 
 def process_apple_export():
-    path_cleaned_xml = 'exports/apple_exports/apple_health_export/cleaned_export.xml'
-    path_csv_export =  'exports/apple_exports/apple_health_export/cleaned_export.csv'
+    path_cleaned_xml = 'files/exports/apple_exports/apple_health_export/cleaned_export.xml'
+    path_csv_export =  'files/exports/apple_exports/apple_health_export/cleaned_export.csv'
     if not os.path.isfile(path_csv_export):
         if not os.path.isfile(path_cleaned_xml):
             clean_import_file()
@@ -107,7 +107,7 @@ def process_apple_export():
     for col in list(apple_df.columns[1:]):
         apple_df[col] = apple_df[col].astype(float)
     apple_df.sort_values('date', inplace = True)
-    apple_df.to_csv('processed_files/apple_processed.csv', sep = '|', index = False)
+    apple_df.to_csv('files/processed_files/apple_processed.csv', sep = '|', index = False)
 
 #process_apple_export()
 #update_file('processed_files/apple_processed.csv')

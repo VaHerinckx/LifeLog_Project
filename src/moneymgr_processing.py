@@ -12,8 +12,8 @@ def add_sorting_columns(df):
     return df
 
 def process_moneymgr_export():
-    df = pd.read_excel(f"exports/moneymgr_exports/moneymgr_export.xlsx")
+    df = pd.read_excel(f"files/exports/moneymgr_exports/moneymgr_export.xlsx")
     df.sort_values(by = "Period", inplace = True)
     df.drop('Accounts.1', axis = 1, inplace=True)
     df = add_sorting_columns(df)
-    df.to_csv('processed_files/moneymgr_processed.csv', sep = '|', index=False)
+    df.to_csv('files/processed_files/moneymgr_processed.csv', sep = '|', index=False)

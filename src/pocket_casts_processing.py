@@ -15,8 +15,8 @@ from googletrans import Translator
 import time
 load_dotenv()
 
-path_dict_language = 'work_files/pocket_casts_work_files/podcasts_language.csv'
-path_dict_translation = 'work_files/pocket_casts_work_files/podcasts_cleaned_translated.csv'
+path_dict_language = 'files/work_files/pocket_casts_work_files/podcasts_language.csv'
+path_dict_translation = 'files/work_files/pocket_casts_work_files/podcasts_cleaned_translated.csv'
 
 def import_dict(option = '1'):
     """Imports the already translated records for the different features to translate"""
@@ -180,7 +180,7 @@ def completion_calculation(listen_time, duration):
         return int((float(listen_time)/float(duration))*100)
 
 def retrieve_podcast_genre(podcast_id):
-    df = pd.read_excel('work_files/pocket_casts_work_files/podcast_mapping.xlsx')
+    df = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
     dict_podcast_genre = df.set_index('podcast_id')['podcast_genre'].to_dict()
     if podcast_id in dict_podcast_genre.keys():
         return dict_podcast_genre[podcast_id]
@@ -188,7 +188,7 @@ def retrieve_podcast_genre(podcast_id):
         return "Unknown"
 
 def retrieve_podcast_name(podcast_id, list_new = []):
-    df = pd.read_excel('work_files/pocket_casts_work_files/podcast_mapping.xlsx')
+    df = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
     dict_podcast_name = df.set_index('podcast_id')['podcast_name'].to_dict()
     if podcast_id in dict_podcast_name.keys():
         return dict_podcast_name[podcast_id]
@@ -198,7 +198,7 @@ def retrieve_podcast_name(podcast_id, list_new = []):
         return "Unknown"
 
 def process_pocket_casts_export():
-    tables = open_txt_file('exports/pocket_casts_exports/data.txt')
+    tables = open_txt_file('files/exports/pocket_casts_exports/data.txt')
     #Get status of the different episodes I listened
     table_episodes = tables[3]
     df_episodes = parse_table_episodes(table_episodes).drop(parse_table_episodes(table_episodes).index[-2:])
@@ -226,9 +226,9 @@ def process_pocket_casts_export():
     df['new_recurring_podcast_yn'] = df.groupby('podcast_name').cumcount() == 5
     df['new_recurring_podcast_yn'] = df['new_recurring_podcast_yn'].astype(int)
     df.sort_values('modified at', ascending=False, inplace = True)
-    df.to_csv('processed_files/pocket_casts_processed.csv', sep = "|", encoding = "utf-16")
+    df.to_csv('files/processed_files/pocket_casts_processed.csv', sep = "|", encoding = "utf-16")
 
-#process_pocket_casts_export()
+process_pocket_casts_export()
 #update_file('processed_files/pocket_casts_processed.csv')
 #df = pd.read_csv('processed_files/pocket_casts_processed.csv', sep = "|", encoding = "utf-16")
 #print(df[df['podcast_name'] == 'Hard Fork'])

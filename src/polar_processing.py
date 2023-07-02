@@ -34,7 +34,7 @@ def garmin_processing_summary(df):
                          'HR max' : 'maxHr',
                          'VO2max' : 'vO2MaxValue'}, inplace = True)
     df['Source'] = 'Polar'
-    df.sort_values('startTimeLocal').to_csv('processed_files/polar_summary_processed.csv', sep = '|', index = False)
+    df.sort_values('startTimeLocal').to_csv('files/processed_files/polar_summary_processed.csv', sep = '|', index = False)
 
 def garmin_processing_splits(df):
     #Adding new columns
@@ -52,10 +52,10 @@ def garmin_processing_splits(df):
                          'Stride length (m)' : 'WEIGHTED_MEAN_STRIDE_LENGTH__M',
                          }, inplace = True)
     df['Source'] = 'Polar'
-    df.sort_values('date').to_csv('processed_files/polar_details_processed.csv', sep = '|', index = False)
+    df.sort_values('date').to_csv('files/processed_files/polar_details_processed.csv', sep = '|', index = False)
 
 
-def polar_processing(folder_path = 'exports/polar_exports'):
+def polar_processing(folder_path = 'files/exports/polar_exports'):
     # create an empty list to store the dataframes
     summary_dfs = []
     detail_dfs = []

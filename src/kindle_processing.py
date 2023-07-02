@@ -7,9 +7,9 @@ from bs4 import BeautifulSoup
 
 def amazon_scraping(gr_df):
     list_ASIN = list(gr_df['ASIN'].unique())
-    dict_path = 'work_files/kindle_ASIN_dictionnary.json'
+    dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
     gr_df['start_timestamp'] = pd.to_datetime(gr_df['start_timestamp'])
-    goodreads_titles = list(pd.read_csv('processed_files/gr_processed.csv', sep = '|').Title.unique())
+    goodreads_titles = list(pd.read_csv('files/processed_files/gr_processed.csv', sep = '|').Title.unique())
     uncap_goodreads_titles = [str(t).lower() for t in goodreads_titles]
     with open(dict_path, 'r') as f:
         dict_ASIN = json.load(f)
@@ -46,7 +46,7 @@ def amazon_scraping(gr_df):
     return dict_ASIN
 
 def kindle_ratio(df):
-    dict_path = 'work_files/kindle_title_ratio_dictionnary.json'
+    dict_path = 'files/work_files/kindle_title_ratio_dictionnary.json'
     with open(dict_path, 'r') as f:
         dict_ratio = json.load(f)
     for _, row in df.iterrows():
@@ -60,7 +60,7 @@ def kindle_ratio(df):
     return dict_ratio
 
 def kindle_page_ratio(gr_df):
-    df = pd.read_csv('processed_files/gr_processed.csv', sep = '|')
+    df = pd.read_csv('files/processed_files/gr_processed.csv', sep = '|')
     gr_df['uncapitalized_title'] = gr_df['Title'].apply(lambda x: str(x).lower())
     df['uncapitalized_title'] = df['Title'].apply(lambda x: x.lower())
     merged = pd.merge(gr_df, df[['Book Id', 'uncapitalized_title', 'Number of Pages']], on = 'uncapitalized_title', how = 'left')
@@ -97,7 +97,7 @@ def row_expander_minutes(row):
     return date_df
 
 def process_kindle_export():
-    path = "exports/kindle_exports/Kindle.Devices.ReadingSession/Kindle.Devices.ReadingSession.csv"
+    path = "files/exports/kindle_exports/Kindle.Devices.ReadingSession/Kindle.Devices.ReadingSession.csv"
     df = pd.read_csv(path)
     df = df[df['start_timestamp']!="Not Available"]
     df['start_timestamp'] = pd.to_datetime(df['start_timestamp'])\
@@ -127,6 +127,6 @@ def process_kindle_export():
         dict_new_ratio[title] = df[df['Title'] == title].actual_page_flip.sum()/new_df[new_df['Title'] == title].page_split.sum()
     new_df['page_split'] = new_df.apply(lambda x: x.page_split * dict_new_ratio[x.Title], axis = 1)
     new_df['Source'] = 'Kindle'
-    new_df.sort_values('Timestamp', ascending = False).to_csv('processed_files/kindle_processed.csv', sep = '|', index = False)
+    new_df.sort_values('Timestamp', ascending = False).to_csv('files/processed_files/kindle_processed.csv', sep = '|', index = False)
 
 process_kindle_export()

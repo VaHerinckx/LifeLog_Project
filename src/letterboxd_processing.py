@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_genre(title, release_year):
-    df_processed = pd.read_csv('processed_files/letterboxd_processed.csv', sep = '|')
+    df_processed = pd.read_csv('files/processed_files/letterboxd_processed.csv', sep = '|')
     df_processed["Key"] = df_processed["Name"] + df_processed["Year"].astype(str)
     key_input = str(title) + str(release_year)
     if key_input in list(df_processed["Key"].unique()):
@@ -27,9 +27,9 @@ def get_watched_rating(path_watched, path_ratings):
     return df_watched.merge(df_ratings[['Name', 'Year', 'Rating']], on = ['Name', 'Year'], how = 'left')
 
 def process_letterboxd_export():
-    path_watched = "exports/letterboxd_exports/watched.csv"
-    path_ratings = "exports/letterboxd_exports/ratings.csv"
+    path_watched = "files/exports/letterboxd_exports/watched.csv"
+    path_ratings = "files/exports/letterboxd_exports/ratings.csv"
     df = get_watched_rating(path_watched, path_ratings)
     df['Genre'] = df.apply(lambda x: get_genre(x.Name, x.Year), axis = 1)
     df['Date'] = pd.to_datetime(df['Date'])
-    df.to_csv('processed_files/letterboxd_processed.csv', sep = '|')
+    df.to_csv('files/processed_files/letterboxd_processed.csv', sep = '|')

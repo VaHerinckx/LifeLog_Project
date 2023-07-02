@@ -47,7 +47,7 @@ def generate_calory_needs():
     return calorie_breakdown
 
 def generate_dict_ingredients():
-    meal_input_df = pd.read_excel('work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
+    meal_input_df = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
     dict_ingredients = {}
     for _, row in meal_input_df.iterrows():
         dict_ingredients[row['Ingredient']] = {'Score' : row['Score'],
@@ -83,11 +83,11 @@ def prompt_new_ingredients(df):
         return "OK"
     else:
         print(chat_gpt_prompt + new_ingredients)
-        subprocess.Popen(['open', 'work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx'])
+        subprocess.Popen(['open', 'files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx'])
         return "NOK"
 
 def ingredient_category(df):
-    meal_input_df = pd.read_excel('work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
+    meal_input_df = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
     dict_ingredients = generate_dict_ingredients()
     for cat in list(meal_input_df.Category.unique()):
         df[cat] = 0
@@ -163,7 +163,7 @@ def extract_data(column):
     return str(column).split('(')[0].strip()
 
 def drinks_category(drinks):
-    df_drinks = pd.read_excel('work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx')
+    df_drinks = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx')
     chat_gpt_prompt = ("\n\n\n" + "Please give me your best assessment of the category for each of the drinks below.\n"
                        "Use these 4 categories: soda/soft drinks, strong alcohol, light alcohol, healthy drinks. \n"
                        "Give me as only output a table with 2 columns: Drink and Category, so that I can easily copy paste it in Excel. \n"
@@ -180,7 +180,7 @@ def drinks_category(drinks):
         return "OK"
     if new_drinks_count > 0:
         print(chat_gpt_prompt + new_drinks_list)
-        subprocess.Popen(['open', 'work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx'])
+        subprocess.Popen(['open', 'files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx'])
     answer = input("Chat GPT output integrated in work file + file saved & closed? (Y/N) \n")
     while answer != 'Y':
         answer = input("Chat GPT output integrated in work file + file saved & closed? (Y/N) \n")
@@ -197,12 +197,12 @@ def generate_pbi_files(df, indicator):
     sliced_df.columns = [col.split('_')[0] for col in sliced_df.columns]
     melted_df = sliced_df.melt(id_vars='Full Date', value_vars=sliced_df.columns[1:], var_name=indicator, value_name='Value')
     melted_df = melted_df[melted_df['Value'] >= 1]
-    melted_df.sort_values("Full Date", ascending = False).to_csv(f"processed_files/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False)
+    melted_df.sort_values("Full Date", ascending = False).to_csv(f"files/processed_files/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False)
     if indicator == "drinks":
         drinks_category(list(melted_df.drinks.unique()))
 
 def process_nutrilio_export():
-    df = pd.read_csv(f'exports/nutrilio_exports/nutrilio_export.csv', sep = ',')
+    df = pd.read_csv(f'files/exports/nutrilio_exports/nutrilio_export.csv', sep = ',')
     #Remove quantity when unnecessary
     for col in col_unnecessary_qty:
         df[col] = df[col].apply(lambda x: extract_data(x))
@@ -222,28 +222,28 @@ def process_nutrilio_export():
     df['Score_meal'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[0], axis = 1)
     df['Meal_data_warning'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[1], axis = 1)
     df['Source'] = 'Nutrilio'
-    df_daylio = pd.read_csv('processed_files/daylio_processed.csv', sep = '|')
+    df_daylio = pd.read_csv('files/processed_files/daylio_processed.csv', sep = '|')
     df = pd.concat([df, df_daylio], ignore_index=True).sort_values('Full Date')
     df = ingredient_category(df)
     df['Work_duration_est'] = df["Work - duration_text"].apply(lambda x: dict_work_duration[x] if x in dict_work_duration.keys() else None)
     df['Work - good day_text'] = df['Work - good day_text'].apply(lambda x: "Average" if x =="Ok" else x)
-    df.drop(list_col, axis = 1).to_csv("processed_files/nutrilio_processed.csv", sep = '|', index = False)
-    drive_list = ["processed_files/nutrilio_processed.csv",
-                  "work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx",
-                  "work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx"]
+    df.drop(list_col, axis = 1).to_csv("files/processed_files/nutrilio_processed.csv", sep = '|', index = False)
+    drive_list = ["files/processed_files/nutrilio_processed.csv",
+                  "files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx",
+                  "files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx"]
     for _, value in dict_extract_data.items():
         generate_pbi_files(df, value)
-        drive_list.append(f"processed_files/nutrilio_{value}_pbi_processed_file.csv")
+        drive_list.append(f"files/processed_files/nutrilio_{value}_pbi_processed_file.csv")
     return drive_list
 
 #process_nutrilio_export()
-drive_list = ['processed_files/nutrilio_processed.csv', 'processed_files/nutrilio_food_pbi_processed_file.csv', 'processed_files/nutrilio_drinks_pbi_processed_file.csv',
-              'processed_files/nutrilio_body_sensations_pbi_processed_file.csv', 'processed_files/nutrilio_dreams_pbi_processed_file.csv',
-              'processed_files/nutrilio_work_content_pbi_processed_file.csv', 'processed_files/nutrilio_self_improvement_pbi_processed_file.csv',
-              'processed_files/nutrilio_social_activity_pbi_processed_file.csv']
+drive_list = ['files/processed_files/nutrilio_processed.csv', 'files/processed_files/nutrilio_food_pbi_processed_file.csv', 'files/processed_files/nutrilio_drinks_pbi_processed_file.csv',
+              'files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv', 'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
+              'files/processed_files/nutrilio_work_content_pbi_processed_file.csv', 'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv',
+              'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv']
 #update_drive(drive_list)
 #update_file("work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx")
-#process_nutrilio_export()
+process_nutrilio_export()
 #update_file("work_files/Objectives.xlsx")
 #process_nutrilio_export()
 #update_file('processed_files/offscreen_processed.csv')

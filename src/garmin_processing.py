@@ -63,7 +63,7 @@ dict_col = {
     'startTimeLocalACT': 'no agg'
 }
 
-dict_path = 'work_files/garmin_work_files/garmin_zip_dictionnary.json'
+dict_path = 'files/work_files/garmin_work_files/garmin_zip_dictionnary.json'
 with open(dict_path, 'r') as f:
         dict_files = json.load(f)
 
@@ -134,12 +134,12 @@ def activity_summary_extract(path):
     df['TimeDiffGMT'] = df['startTimeLocal'] - df['startTimeGmt']
     df.rename(columns = {'startTimeGmt' : 'startTimeGMTACT'}, inplace = True)
     df['Source'] = 'Garmin'
-    df_polar = pd.read_csv('processed_files/polar_summary_processed.csv', sep = '|')
+    df_polar = pd.read_csv('files/processed_files/polar_summary_processed.csv', sep = '|')
     df = pd.concat([df_polar, df], ignore_index=False).reset_index(drop=True)
     df['Calories_kcal'] = df['calories']/4.18
     df['elevationGain'] = df.apply(lambda x: x.elevationGain / 100 if x.Source == "Garmin" else x.elevationGain, axis = 1)
     df.drop(['splits', 'splitSummaries', 'summarizedDiveInfo'], axis =1)\
-      .to_csv('processed_files/garmin_activities_list_processed.csv', sep = '|', index = False)
+      .to_csv('files/processed_files/garmin_activities_list_processed.csv', sep = '|', index = False)
     return df
 
 def activity_splits_extract(df):
@@ -180,7 +180,7 @@ def activity_splits_extract(df):
     for _, row in df.iterrows():
         new_df = pd.concat([new_df, row_expander_minutes(row)], ignore_index=True)
     new_df['Source'] = 'Garmin'
-    new_df.to_csv('processed_files/garmin_activities_splits_processed.csv', sep = '|', index = False)
+    new_df.to_csv('files/processed_files/garmin_activities_splits_processed.csv', sep = '|', index = False)
     return new_df
 
 def sleep_extract(x, key):
@@ -199,7 +199,7 @@ def sleep_file(path):
     return df
 
 def process_rename_sleep_file():
-    folder_path = "exports/garmin_exports/DI_CONNECT/DI-Connect-Wellness"
+    folder_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Wellness"
     filenames = []
     file_dates = []
     file_list = os.listdir(folder_path)
@@ -215,14 +215,14 @@ def process_rename_sleep_file():
         biggest_date_filename = file_dates_sorted[0][1]
         biggest_date_filepath = os.path.join(folder_path, biggest_date_filename)
     df = sleep_file(biggest_date_filepath)
-    df.to_csv('processed_files/garmin_sleep_processed.csv', sep = "|")
+    df.to_csv('files/processed_files/garmin_sleep_processed.csv', sep = "|")
 
 def extract_fit_files_path():
     """
     Returns a list of paths to all .fit files in the specified folder and its subfolders.
     """
     fit_files = []
-    for root, _, filenames in os.walk("exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/FitFiles"):
+    for root, _, filenames in os.walk("files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/FitFiles"):
         for filename in fnmatch.filter(filenames, '*.fit'):
             fit_files.append(os.path.join(root, filename))
     return fit_files
@@ -235,10 +235,10 @@ def stress_level_qualification(x):
     return stress_level
 
 def process_stress_level():
-    zip_file_path = "exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip"
+    zip_file_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip"
     if os.path.exists(zip_file_path):
         with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-                zip_ref.extractall("exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/FitFiles")
+                zip_ref.extractall("files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/FitFiles")
         os.remove(zip_file_path)
     fit_files = extract_fit_files_path()
     data = []
@@ -254,17 +254,17 @@ def process_stress_level():
     with open(dict_path, 'w') as f:
         json.dump(dict_files, f)
     print(f"{count_new_files} new fit files to process for stress level data")
-    df_stress_level = pd.read_csv('processed_files/garmin_stress_level_processed.csv', sep = '|')
+    df_stress_level = pd.read_csv('files/processed_files/garmin_stress_level_processed.csv', sep = '|')
     if len(data) > 0:
         df = pd.DataFrame(data)
         df_stress_level = pd.concat([df_stress_level,df], ignore_index=True).reset_index(drop = True).drop_duplicates()
         df_stress_level['stress_level_time'] = pd.to_datetime(df_stress_level['stress_level_time']).apply(lambda x: time_difference_correction(x, 'GMT'))
         df_stress_level['stress_level'] = df_stress_level['stress_level_value'].apply(lambda x: stress_level_qualification(x))
         df_stress_level.sort_values('stress_level_time', inplace = True)
-        df_stress_level.to_csv('processed_files/garmin_stress_level_processed.csv', sep = '|', index = False)
+        df_stress_level.to_csv('files/processed_files/garmin_stress_level_processed.csv', sep = '|', index = False)
 
 def process_training_history():
-    folder_path = "exports/garmin_exports/DI_CONNECT/DI-Connect-Metrics"
+    folder_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Metrics"
     #Finding the .json file with the latest end date in the folder
     pattern = r"^TrainingHistory_\d{8}_\d{8}_\d{9}\.json$"
     filenames = os.listdir(folder_path)
@@ -284,7 +284,7 @@ def process_training_history():
     df.sort_values('timestamp', ascending = False).to_csv('processed_files/garmin_training_history_processed.csv', sep = '|', index = False)
 
 def process_garmin_export():
-    df = activity_summary_extract('exports/garmin_exports/DI_CONNECT/DI-Connect-Fitness/valentin.herinckx@gmail.com_0_summarizedActivities.json')
+    df = activity_summary_extract('files/exports/garmin_exports/DI_CONNECT/DI-Connect-Fitness/valentin.herinckx@gmail.com_0_summarizedActivities.json')
     print("garmin_activies_list_processed.csv was generated \n")
     activity_splits_extract(df)
     print("garmin_activities_splits_processed.csv was generated \n")
@@ -296,5 +296,5 @@ def process_garmin_export():
     print("garmin_sleep_processed.csv was generated \n")
 
 #process_garmin_export()
-#update_file('processed_files/garmin_activities_list_processed.csv')
+#update_file('files/processed_files/garmin_activities_list_processed.csv')
 #process_training_history()

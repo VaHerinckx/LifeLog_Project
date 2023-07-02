@@ -2,7 +2,7 @@ import pandas as pd
 import datetime
 from datetime import datetime, timedelta
 
-time_diff_excel = pd.read_excel('work_files/GMT_timediff.xlsx')
+time_diff_excel = pd.read_excel('files/work_files/GMT_timediff.xlsx')
 
 def today_export():
     current_date = datetime.now()

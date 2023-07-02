@@ -129,7 +129,7 @@ def dict_weather_code():
 
 def get_weather_data():
     # Read the location log file to obtain the start and end dates for each location
-    df = pd.read_excel('work_files/weather_work_files/location_log.xlsx')
+    df = pd.read_excel('files/work_files/weather_work_files/location_log.xlsx')
 
     # Filter out any rows with end dates greater than 30 days ago
     df = max_30_days_timedeltas(df)
@@ -143,7 +143,7 @@ def get_weather_data():
     df_weather = pd.DataFrame(columns=col_names, index=range(0,0))
 
     # Read in the alreadu processed weather data
-    df_weather_processed = pd.read_csv('processed_files/weather_processed.csv', sep = '|')
+    df_weather_processed = pd.read_csv('files/processed_files/weather_processed.csv', sep = '|')
 
     # Iterate over each row in the location log file
     for _, row in df.iterrows():
@@ -179,4 +179,4 @@ def get_weather_data():
     df_weather.drop_duplicates(inplace=True)
 
     # Save to a CSV file
-    df_weather.to_csv('processed_files/weather_processed.csv', sep = '|', index=False)
+    df_weather.to_csv('files/processed_files/weather_processed.csv', sep = '|', index=False)

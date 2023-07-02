@@ -83,7 +83,7 @@ def artist_info(token, artist_names, artist_df):
             dict_artists[artist_name] = dict_info_artists
     print (f"{count} new artists were added to the artist dictionnary")
     df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
-    df_artist.to_csv('work_files/lfm_work_files/artists_infos.csv', sep = '|', index = False)
+    df_artist.to_csv('files/work_files/lfm_work_files/artists_infos.csv', sep = '|', index = False)
     return df_artist
 
 def track_info(token, song_keys, track_df):
@@ -151,7 +151,7 @@ def track_info(token, song_keys, track_df):
                 dict_tracks[song_key] = dict_info_tracks
     print (f"{count} new tracks were added to the track dictionnary \n")
     df_tracks = pd.DataFrame.from_dict(dict_tracks, orient='index').reset_index().rename(columns={'index':'song_key'})
-    df_tracks.to_csv('work_files/lfm_work_files/tracks_infos.csv', sep = '|', index = False)
+    df_tracks.to_csv('files/work_files/lfm_work_files/tracks_infos.csv', sep = '|', index = False)
     return df_tracks
 
 def merge_dfs(export, artist_df, track_df):
@@ -176,7 +176,7 @@ def process_lfm_export():
     By default, the file processed will be the export of today (if present & in good folder),\
     but other export can be processed by giving as argument the date of the export (in format ddmmyy)
     """
-    df = pd.read_csv(f"exports/lfm_exports/lfm_export.csv", header = None)
+    df = pd.read_csv(f"files/exports/lfm_exports/lfm_export.csv", header = None)
     df.columns = ['artist_name', 'album_name', 'track_name', 'timestamp']
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     client_id = os.environ['Spotify_API_Client_ID']
@@ -186,11 +186,11 @@ def process_lfm_export():
     df['song_key'] = df['track_name'] + " /: " + df['artist_name']
     unique_tracks = list(df.song_key.unique())
     #Importing the current dictionnary with all artists listened to & their characteristics
-    artist_df = pd.read_csv('work_files/lfm_work_files/artists_infos.csv', sep = '|')
+    artist_df = pd.read_csv('files/work_files/lfm_work_files/artists_infos.csv', sep = '|')
     #Adding the new artists since last export using the Spotify API, and saving them in the dictionnary
     artist_df = artist_info(token, unique_artists, artist_df)
     #Importing the current dictionnary with all tracks listened to & their characteristics
-    track_df = pd.read_csv('work_files/lfm_work_files/tracks_infos.csv', sep = '|')
+    track_df = pd.read_csv('files/work_files/lfm_work_files/tracks_infos.csv', sep = '|')
     #Adding the new tracks since last export using the Spotify API, and saving them in the dictionnary
     track_df = track_info(token, unique_tracks, track_df)
     #Merging the export with the detailled artist & track infos
@@ -208,7 +208,7 @@ def process_lfm_export():
     df['new_track_yn'] = df['new_track_yn'].astype(int)
     df['new_recurring_track_yn'] = df['new_recurring_track_yn'].astype(int)
     df.sort_values('timestamp', ascending=False, inplace = True)
-    df.to_csv('processed_files/lfm_processed.csv', sep = '|', index = False)
+    df.to_csv('files/processed_files/lfm_processed.csv', sep = '|', index = False)
 
-#process_lfm_export()
+process_lfm_export()
 #update_file('processed_files/lfm_processed.csv')

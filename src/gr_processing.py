@@ -10,8 +10,8 @@ import time
 fiction_genres = ['drama', 'horror', 'thriller']
 
 def add_dates_read():
-    df = pd.read_csv("exports/goodreads_exports/gr_export.csv")
-    df2 = pd.read_excel('work_files/gr_work_files/gr_dates_input.xlsx')
+    df = pd.read_csv("files/exports/goodreads_exports/gr_export.csv")
+    df2 = pd.read_excel('files/work_files/gr_work_files/gr_dates_input.xlsx')
     df2["Book Id"].fillna(0, inplace=True)
     d = pd.merge(df, df2, on = "Book Id", how = 'left')
     d = d[(d['Exclusive Shelf'] == 'read') & (d['Check'].isna())].reset_index(drop = True)
@@ -26,7 +26,7 @@ def add_dates_read():
         df2.loc[row_num, 'Date started'] = pd.to_datetime(input(f"When did you start {row['Title_x']} ? dd/mm/YYYY "), format='%d/%m/%Y')
         df2.loc[row_num, 'Date ended'] = pd.to_datetime(input(f"When did you finish {row['Title_x']} ? dd/mm/YYYY "), format='%d/%m/%Y')
         df2.loc[row_num, 'Check'] = "OK"
-    df2.to_excel('work_files/gr_work_files/gr_dates_input.xlsx', index=False)
+    df2.to_excel('files/work_files/gr_work_files/gr_dates_input.xlsx', index=False)
     return df, df2
 
 def expand_gr_reading_split(row, columns, col):
@@ -69,7 +69,7 @@ def process_gr_export():
     expanded_df['Fiction_yn'] = expanded_df['Genre'].apply(lambda x: "fiction" if x in fiction_genres else "non-fiction")
     expanded_df['Source'] = 'GoodReads'
     expanded_df['Title'] = expanded_df['Title'].apply(lambda x: str(x).strip())
-    expanded_df.to_csv('processed_files/gr_processed.csv', sep = '|', index=False)
+    expanded_df.to_csv('files/processed_files/gr_processed.csv', sep = '|', index=False)
 
 def get_genre(ISBN):
     api_url = 'https://www.googleapis.com/books/v1/volumes'
@@ -92,8 +92,8 @@ def get_genre(ISBN):
         return "issue3"
 
 def merge_gr_kindle():
-    df_gr = pd.read_csv('processed_files/gr_processed.csv', sep ='|')
-    df_kl = pd.read_csv('processed_files/kindle_processed.csv', sep = '|')
+    df_gr = pd.read_csv('files/processed_files/gr_processed.csv', sep ='|')
+    df_kl = pd.read_csv('files/processed_files/kindle_processed.csv', sep = '|')
     columns = list(df_gr.columns[2:-4])
     columns.append('Book Id')
     enhanced_kl=pd.merge(df_kl, df_gr[columns], on = 'Book Id', how = 'left')
@@ -103,8 +103,8 @@ def merge_gr_kindle():
     cleaned_df = pd.concat([kl_only_df, gr_only_df], ignore_index=True).sort_values('Timestamp', ascending = False)
     cleaned_df['Timestamp'] = pd.to_datetime(cleaned_df['Timestamp'])
     cleaned_df.drop_duplicates(inplace = True)
-    cleaned_df.to_csv('processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')
+    cleaned_df.to_csv('files/processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')
 
-#process_gr_export()
-#merge_gr_kindle()
+process_gr_export()
+merge_gr_kindle()
 #update_file('processed_files/kindle_gr_processed.csv')
