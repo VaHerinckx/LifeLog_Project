@@ -7,3 +7,6 @@ work_files/
 _LifeLog_tests.ipynb
 client_secrets.json
 Untitled.ipynb
+.DS_Store
+__pycache__
+.ipynb_checkpoints
