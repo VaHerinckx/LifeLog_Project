@@ -1,4 +1,4 @@
-# The Lifelog Project
+![The Lifelog Project](lifelog_homepage.png)
 
 
 ## Introduction
