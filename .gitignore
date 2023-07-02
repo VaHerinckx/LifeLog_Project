@@ -1,1 +1,9 @@
 .env
+exports/
+other_files/
+processed_files/
+tools/
+work_files/
+_LifeLog_tests.ipynb
+client_secrets.json
+Untitled.ipynb
