@@ -105,6 +105,6 @@ def merge_gr_kindle():
     cleaned_df.drop_duplicates(inplace = True)
     cleaned_df.to_csv('files/processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')
 
-process_gr_export()
-merge_gr_kindle()
+#process_gr_export()
+#merge_gr_kindle()
 #update_file('processed_files/kindle_gr_processed.csv')

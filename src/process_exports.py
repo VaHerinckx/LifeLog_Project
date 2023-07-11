@@ -129,7 +129,7 @@ def execute_processing():
         print('Starting the processing of the lfm export \n')
         clean_rename_move_file("files/exports/lfm_exports", "/Users/valen/Downloads", "entinval.csv", "lfm_export.csv")
         process_lfm_export()
-        file_names.append('processed_files/lfm_processed.csv')
+        file_names.append('files/processed_files/lfm_processed.csv')
         print('lfm_processed.csv was created\n')
         print('----------------------------------------------')
     PCC = input("Is there new Pocket Cast data available? (Y/N) ")

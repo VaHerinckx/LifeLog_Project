@@ -210,5 +210,5 @@ def process_lfm_export():
     df.sort_values('timestamp', ascending=False, inplace = True)
     df.to_csv('files/processed_files/lfm_processed.csv', sep = '|', index = False)
 
-process_lfm_export()
+#process_lfm_export()
 #update_file('processed_files/lfm_processed.csv')

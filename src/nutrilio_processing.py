@@ -243,7 +243,7 @@ drive_list = ['files/processed_files/nutrilio_processed.csv', 'files/processed_f
               'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv']
 #update_drive(drive_list)
 #update_file("work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx")
-process_nutrilio_export()
+#process_nutrilio_export()
 #update_file("work_files/Objectives.xlsx")
 #process_nutrilio_export()
 #update_file('processed_files/offscreen_processed.csv')
