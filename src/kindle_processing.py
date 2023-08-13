@@ -1,11 +1,13 @@
 import pandas as pd
 import json
 from utils import time_difference_correction
-import requests
 import time
 from bs4 import BeautifulSoup
+from selenium import webdriver
 
-def amazon_scraping(gr_df):
+dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
+
+def amazon_scraping_sel(gr_df):
     list_ASIN = list(gr_df['ASIN'].unique())
     dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
     gr_df['start_timestamp'] = pd.to_datetime(gr_df['start_timestamp'])
@@ -13,17 +15,29 @@ def amazon_scraping(gr_df):
     uncap_goodreads_titles = [str(t).lower() for t in goodreads_titles]
     with open(dict_path, 'r') as f:
         dict_ASIN = json.load(f)
-    for ASIN in list_ASIN:
+    new_ASIN = [asin for asin in list_ASIN if asin not in dict_ASIN.keys()]
+    if len(new_ASIN) == 0:
+        return "No new ASIN"
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    driver = webdriver.Chrome('files/other_files/chromedriver_mac64(2)/chromedriver',chrome_options=chrome_options)
+    for ASIN in new_ASIN:
         time.sleep(2)
         if ASIN in dict_ASIN.keys():
             continue
         else:
             url = f"https://www.amazon.fr/s?k={ASIN}&__mk_fr_FR=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=MCGNNB0G7BY7&sprefix=b09g6wdz9j%2Caps%2C663&ref=nb_sb_noss"
-            HEADERS = ({'User-Agent' : 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0',
-                        'Accept-Language' : 'en-us, en;q=0.5'})
-            html = requests.get(url, headers = HEADERS)
-            soup = BeautifulSoup(html.text)
-            title = soup.find('span', class_='a-size-base-plus a-color-base a-text-normal').text.strip()
+            driver.get(url)
+            time.sleep(5)
+            page_source = driver.page_source
+            soup = BeautifulSoup(page_source, 'lxml')
+            title_element = soup.find('span', class_='a-size-base-plus a-color-base a-text-normal')
+            if title_element is None:
+                print("Title element not found.")
+                continue
+            title = title_element.text.strip()
             cleaned_title = str(title.split('(')[0].strip()).lower()
             print(f"Amazon scraped is {cleaned_title}\n")
             print(f"Started reading on {gr_df[gr_df['ASIN']==ASIN]['start_timestamp'].dt.date} \n")
@@ -43,18 +57,21 @@ def amazon_scraping(gr_df):
                 print('\n')
     with open(dict_path, 'w') as f:
         json.dump(dict_ASIN, f)
-    return dict_ASIN
+    driver.quit()
 
 def kindle_ratio(df):
     dict_path = 'files/work_files/kindle_title_ratio_dictionnary.json'
     with open(dict_path, 'r') as f:
         dict_ratio = json.load(f)
     for _, row in df.iterrows():
-        if (row['Title'] in dict_ratio.keys()) & (dict_ratio[row['Title']] == dict_ratio[row['Title']]):
-            continue
-        else:
+        if row['Title'] not in dict_ratio.keys():
             result = None if row['number_of_page_flips'] < 100 else row['number_of_page_flips']/row['Number of Pages']
             dict_ratio[row['Title']] = result
+        elif dict_ratio[row['Title']] != dict_ratio[row['Title']]:
+            result = None if row['number_of_page_flips'] < 100 else row['number_of_page_flips']/row['Number of Pages']
+            dict_ratio[row['Title']] = result
+        else:
+            continue
     with open(dict_path, 'w') as f:
         json.dump(dict_ratio, f)
     return dict_ratio
@@ -110,7 +127,9 @@ def process_kindle_export():
                             .apply(lambda x: time_difference_correction(x,'GMT'))
     gr_df = df.groupby("ASIN").aggregate({'start_timestamp' : 'min', 'end_timestamp' : 'max', 'number_of_page_flips' : 'sum'}).reset_index()
     gr_df['start_timestamp'] = gr_df['start_timestamp'].dt.date
-    dict_ASIN = amazon_scraping(gr_df)
+    amazon_scraping_sel(gr_df)
+    with open(dict_path, 'r') as f:
+        dict_ASIN = json.load(f)
     df['Title'] = df['ASIN'].map(dict_ASIN)
     gr_df['Title'] = gr_df['ASIN'].map(dict_ASIN)
     df = df[['Title','start_timestamp', 'end_timestamp', 'ASIN', 'total_reading_millis', 'number_of_page_flips']].sort_values('start_timestamp')
@@ -128,5 +147,6 @@ def process_kindle_export():
     new_df['page_split'] = new_df.apply(lambda x: x.page_split * dict_new_ratio[x.Title], axis = 1)
     new_df['Source'] = 'Kindle'
     new_df.sort_values('Timestamp', ascending = False).to_csv('files/processed_files/kindle_processed.csv', sep = '|', index = False)
+
 
 #process_kindle_export()

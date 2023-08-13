@@ -90,6 +90,18 @@ def get_genre(ISBN):
             return "issue2"
     else:
         return "issue3"
+def flag_clicks(row, gr_date_df):
+    if not gr_date_df.loc[gr_date_df['Title'] == row["Title"]].empty:
+        if row.Timestamp.date() > gr_date_df.loc[gr_date_df['Title'] == row["Title"], 'Date ended'].iloc[0].date():
+            return 1
+        else:
+            return 0
+    return 0
+
+def remove_accidental_clicks(df):
+    gr_date_df = pd.read_excel('files/work_files/gr_work_files/gr_dates_input.xlsx')
+    df['Flag_remove'] = df.apply(lambda x: flag_clicks(x, gr_date_df), axis = 1)
+    return df[df['Flag_remove'] == 0].drop('Flag_remove', axis = 1)
 
 def merge_gr_kindle():
     df_gr = pd.read_csv('files/processed_files/gr_processed.csv', sep ='|')
@@ -102,9 +114,9 @@ def merge_gr_kindle():
     kl_only_df = all_data[all_data['Source'] == 'Kindle']
     cleaned_df = pd.concat([kl_only_df, gr_only_df], ignore_index=True).sort_values('Timestamp', ascending = False)
     cleaned_df['Timestamp'] = pd.to_datetime(cleaned_df['Timestamp'])
+    cleaned_df = remove_accidental_clicks(cleaned_df)
     cleaned_df.drop_duplicates(inplace = True)
     cleaned_df.to_csv('files/processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')
 
 #process_gr_export()
-#merge_gr_kindle()
 #update_file('processed_files/kindle_gr_processed.csv')

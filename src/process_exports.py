@@ -32,6 +32,9 @@ def find_unzip_folder(data_source, zip_file_path = None):
         elif (data_source == 'apple') & (zip_file == 'export.zip'):
             zip_file_path = os.path.join(download_folder, zip_file)
             break
+        elif (data_source == 'pocket_casts') & (zip_file == 'data_export.zip'):
+            zip_file_path = os.path.join(download_folder, zip_file)
+            break
     if zip_file_path is not None:
     # Extract the contents of the zip file to a new folder
         unzip_folder = os.path.join(download_folder, f"{data_source}_export_unzipped")
@@ -77,18 +80,12 @@ def clean_rename_move_file(export_folder, download_folder, file_name, new_file_n
 
 # List of URLs to open in new tabs
 def download_web_data():
-    download_YN = input("Do you want to download new data from websites? (Y/N) ")
     urls = [
         'https://www.goodreads.com/review/import',
         'https://benjaminbenben.com/lastfm-to-csv/',
         'https://www.amazon.com/hz/privacy-central/data-requests/preview.html',
         'https://www.garmin.com/fr-BE/account/datamanagement/exportdata/',
         'https://letterboxd.com/settings/data/']
-    if download_YN == 'N':
-        GR = 'N'
-        LFM = 'N'
-        LBX = 'N'
-        return GR, LFM, LBX
     for url in urls:
         subprocess.run(['open', '-a', 'Firefox', '-g', url])
     GR = input("Did GR export got downloaded ? (Y/N) ")
@@ -99,22 +96,32 @@ def download_web_data():
     return GR, LFM, LBX
 
 def download_app_data():
-    download_YN = input("Did you download new data from apps? (Y/N) ")
-    if download_YN == 'N':
-        MM = 'N'
-        NUT = 'N'
-        APH = 'N'
-        OFF = 'N'
-        return MM, NUT, APH, OFF
     MM = input("Did Money MGR export got downloaded ? (Y/N) ")
     NUT = input("Did Nutrilio export got downloaded ? (Y/N) ")
     APH = input("Did Apple Health export got downloaded ? (Y/N) ")
     OFF = input("Did Offscreen export got downloaded ? (Y/N) ")
     return MM, NUT, APH, OFF
 
-def execute_processing():
-    GR, LFM, LBX = download_web_data()
-    MM, NUT, APH, OFF = download_app_data()
+if __name__=="__main__":
+    web_download = input("Do you want to download new data from websites? (Y/N) ")
+    if web_download == "Y":
+        GR, LFM, LBX = download_web_data()
+    else:
+        GR = input("New Goodreads file? (Y/N) ")
+        LFM = input("New LFM file? (Y/N) ")
+        LBX = input("New Letterboxd file? (Y/N) ")
+    app_download = input("Do you want to download new data from mobile apps? (Y/N) ")
+    if app_download == "Y":
+        MM, NUT, APH, OFF = download_app_data()
+    else:
+        MM = input("New Money Mgr file? (Y/N) ")
+        NUT = input("New Nutrilio file? (Y/N) ")
+        APH = input("New Apple Health file? (Y/N) ")
+        OFF = input("New OffScreen file? (Y/N) ")
+    PCC = input("New Pocket Cast file? (Y/N) ")
+    GAR = input("New Garmin file? (Y/N) ")
+    KIN = input("New Kindle file? (Y/N) ")
+    WEA = input("Use API to download latest weather data? (Y/N) ")
     file_names = []
     print('\n')
     if GR == 'Y':
@@ -132,16 +139,15 @@ def execute_processing():
         file_names.append('files/processed_files/lfm_processed.csv')
         print('lfm_processed.csv was created\n')
         print('----------------------------------------------')
-    PCC = input("Is there new Pocket Cast data available? (Y/N) ")
     if PCC == 'Y':
         print('----------------------------------------------')
-        print('Starting the processing of the Pocket Cast export \n')
-        clean_rename_move_file("files/exports/pocket_casts_exports", "/Users/valen/Downloads", "data.txt", "data.txt")
+        print('Starting the processing of the Pocket Casts export \n')
+        find_unzip_folder("pocket_casts")
+        clean_rename_move_folder("files/exports", "/Users/valen/Downloads", "pocket_casts_export_unzipped", "pocket_casts_exports")
         process_pocket_casts_export()
         file_names.append('files/processed_files/pocket_casts_processed.csv')
         print('pocket_casts_processed.csv was created \n')
         print('----------------------------------------------')
-    GAR = input("Is there new Garmin data available? (Y/N) ")
     if GAR == 'Y':
         print('----------------------------------------------')
         print('Starting the processing of the Garmin export \n')
@@ -151,10 +157,10 @@ def execute_processing():
         file_names.append('files/processed_files/garmin_activities_list_processed.csv')
         file_names.append('files/processed_files/garmin_activities_splits_processed.csv')
         file_names.append('files/processed_files/garmin_sleep_processed.csv')
+        file_names.append('files/processed_files/garmin_stress_level_processed.csv')
         file_names.append('files/processed_files/garmin_training_history_processed.csv')
         print('garmin processed files were created \n')
         print('----------------------------------------------')
-    KIN = input("Is there new Kindle data available? (Y/N) ")
     if KIN == 'Y':
         print('----------------------------------------------')
         print('Starting the processing of the Kindle export \n')
@@ -223,7 +229,6 @@ def execute_processing():
         file_names.append('files/processed_files/letterboxd_processed.csv')
         print('letterboxd_processed.csv was created \n')
         print('----------------------------------------------')
-    WEA = input("Use API to download latest weather data? (Y/N) ")
     if WEA == 'Y':
         print('----------------------------------------------')
         print('Adding the latest Weather data \n')
@@ -231,6 +236,4 @@ def execute_processing():
         file_names.append('files/processed_files/weather_processed.csv')
         print('weather_processed.csv was created \n')
         print('----------------------------------------------')
-    update_drive(file_names)
-
-execute_processing()
+    print("No file updated") if len(file_names) == 0 else update_drive(file_names)

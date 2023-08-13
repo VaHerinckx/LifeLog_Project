@@ -13,6 +13,7 @@ import os
 from langdetect import detect
 from googletrans import Translator
 import time
+import json
 load_dotenv()
 
 path_dict_language = 'files/work_files/pocket_casts_work_files/podcasts_language.csv'
@@ -179,46 +180,42 @@ def completion_calculation(listen_time, duration):
     else:
         return int((float(listen_time)/float(duration))*100)
 
-def retrieve_podcast_genre(podcast_id):
-    df = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
-    dict_podcast_genre = df.set_index('podcast_id')['podcast_genre'].to_dict()
-    if podcast_id in dict_podcast_genre.keys():
-        return dict_podcast_genre[podcast_id]
-    else:
-        return "Unknown"
-
-def retrieve_podcast_name(podcast_id, list_new = []):
-    df = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
-    dict_podcast_name = df.set_index('podcast_id')['podcast_name'].to_dict()
-    if podcast_id in dict_podcast_name.keys():
-        return dict_podcast_name[podcast_id]
-    else:
-        if podcast_id not in list_new:
-            list_new.append(podcast_id)
-        return "Unknown"
-
 def process_pocket_casts_export():
     tables = open_txt_file('files/exports/pocket_casts_exports/data.txt')
     #Get status of the different episodes I listened
     table_episodes = tables[3]
     df_episodes = parse_table_episodes(table_episodes).drop(parse_table_episodes(table_episodes).index[-2:])
-    #GRetrieve my listening history + additionnal information about the episodes
+    #Retrieve my listening history + additionnal information about the episodes
     table_history = tables[5].split('\n-------')[2]
     df_history = parse_table_history(table_history).drop(parse_table_history(table_history).index[-2:])
     df = merge_history_episodes(df_history,df_episodes)
     df["completion_%"] = df.apply(lambda x: completion_calculation(x["played up to"], x["duration"]),axis = 1)
-    list_new = []
-    df["podcast_name"] = df["podcast"].apply(lambda x: retrieve_podcast_name(x, list_new))
-    df["podcast_genre"] = df["podcast"].apply(lambda x: retrieve_podcast_genre(x))
+    df_pod = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
+    dict_podcast_genre = df_pod.set_index('podcast_id')['podcast_genre'].to_dict()
+    dict_podcast_name = df_pod.set_index('podcast_id')['podcast_name'].to_dict()
+    df["podcast_name"] = df["podcast"].apply(lambda x: dict_podcast_name[x] if x in dict_podcast_name.keys() else "Check")
+    df["podcast_genre"] = df["podcast"].apply(lambda x: dict_podcast_genre[x] if x in dict_podcast_genre.keys() else "Check")
+    list_new = list(df[df["podcast_name"] == "Check"]["podcast"].unique())
     if len(list_new) > 0:
-        print(f"{len(list_new)} new podcast, add them in excel file to continue")
+        df_pod = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
+        print(f"{len(list_new)} new podcasts")
         for new in list_new:
+            new_podcast_data = {}
             print(new)
-        add = input("New podcasts added to excel? (Y/N) ")
-        if add == 'Y':
-            list_new = []
-            df["podcast_name"] = df["podcast"].apply(lambda x: retrieve_podcast_name(x, list_new))
-            df["podcast_genre"] = df["podcast"].apply(lambda x: retrieve_podcast_genre(x))
+            new_podcasts = list(df[df['podcast'] == new].title.unique())
+            print(f"These are the episodes from this new podcast : {new_podcasts}" + "\n")
+            new_podcast_data["podcast_id"] = new
+            new_podcast_data["podcast_name"] = input("What's the podcast's name ? " + "\n")
+            new_podcast_data["podcast_genre"] = input("What's the podcast's genre ? Please choose from the following list: " + "\n" +
+                                                      "News and Current Affairs" + "\n"  + "Real-life stories" + "\n"  + "Educational" + "\n"  +
+                                                      "Sports" + "\n"  + "History" + "\n"  + "Humor" + "\n"  + "Technology" + "\n"  + "Horror" + "\n"  +
+                                                      "Culture" + "\n"  + "Self-Improvement" + " : ")
+            df_pod = df_pod.append(new_podcast_data, ignore_index=True)
+            df_pod.to_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
+    dict_podcast_genre = df_pod.set_index('podcast_id')['podcast_genre'].to_dict()
+    dict_podcast_name = df_pod.set_index('podcast_id')['podcast_name'].to_dict()
+    df["podcast_name"] = df["podcast"].apply(lambda x: dict_podcast_name[x] if x in dict_podcast_name.keys() else "Unknown")
+    df["podcast_genre"] = df["podcast"].apply(lambda x: dict_podcast_genre[x] if x in dict_podcast_genre.keys() else "Unknown")
     df = translate_clean(df)
     df.sort_values('modified at', ascending=True, inplace = True)
     df['new_podcast_yn'] = df.groupby('podcast_name').cumcount() == 0
@@ -229,6 +226,3 @@ def process_pocket_casts_export():
     df.to_csv('files/processed_files/pocket_casts_processed.csv', sep = "|", encoding = "utf-16")
 
 #process_pocket_casts_export()
-#update_file('processed_files/pocket_casts_processed.csv')
-#df = pd.read_csv('processed_files/pocket_casts_processed.csv', sep = "|", encoding = "utf-16")
-#print(df[df['podcast_name'] == 'Hard Fork'])

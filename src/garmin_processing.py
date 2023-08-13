@@ -289,7 +289,7 @@ def process_training_history():
             dataframes.append(df)
     df = pd.concat(dataframes, ignore_index=True)
     df['timestamp'] = pd.to_datetime(df['timestamp']).apply(lambda x: time_difference_correction(x, 'GMT'))
-    df.sort_values('timestamp', ascending = False).to_csv('processed_files/garmin_training_history_processed.csv', sep = '|', index = False)
+    df.sort_values('timestamp', ascending = False).to_csv('files/processed_files/garmin_training_history_processed.csv', sep = '|', index = False)
 
 def process_garmin_export():
     df = activity_summary_extract('files/exports/garmin_exports/DI_CONNECT/DI-Connect-Fitness/valentin.herinckx@gmail.com_0_summarizedActivities.json')
