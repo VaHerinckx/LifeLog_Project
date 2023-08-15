@@ -69,6 +69,7 @@ def find_language(title, podcast):
         return find_specific_cases_language(title,podcast)
 
 def find_specific_cases_language(title, podcast):
+    """Checks the language when translators do not agree"""
     if (title is None) | (title== ''):
         return ''
     google_lang = {'fr' : 'FRENCH','nl' : 'DUTCH','en': 'ENGLISH', 'zh-TW' : 'CHINESE', 'zh-CN' : 'CHINESE'}
@@ -224,5 +225,3 @@ def process_pocket_casts_export():
     df['new_recurring_podcast_yn'] = df['new_recurring_podcast_yn'].astype(int)
     df.sort_values('modified at', ascending=False, inplace = True)
     df.to_csv('files/processed_files/pocket_casts_processed.csv', sep = "|", encoding = "utf-16")
-
-#process_pocket_casts_export()
