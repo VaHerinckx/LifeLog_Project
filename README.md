@@ -1,4 +1,3 @@
-![The Lifelog Project](images/lifelog_logo.png)
 <div align="center">
   <img src="images/lifelog_logo.png" alt="Image Description">
 </div>
