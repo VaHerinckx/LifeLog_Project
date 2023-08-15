@@ -1,9 +1,7 @@
 import pandas as pd
 import os
 import xmltodict
-import xml.etree.ElementTree as ET
 import subprocess
-from drive_storage import update_file
 
 # Disable pandas warning about chained assignment
 pd.options.mode.chained_assignment = None  # default='warn'
