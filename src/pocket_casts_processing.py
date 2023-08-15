@@ -8,12 +8,8 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 import string
 import unidecode
-from drive_storage import update_file
-import os
 from langdetect import detect
 from googletrans import Translator
-import time
-import json
 load_dotenv()
 
 path_dict_language = 'files/work_files/pocket_casts_work_files/podcasts_language.csv'
