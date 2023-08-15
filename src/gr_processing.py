@@ -1,8 +1,5 @@
 import pandas as pd
 import numpy as np
-from datetime import datetime
-from utils import today_export
-from drive_storage import update_file
 import subprocess
 import requests
 import time
@@ -10,11 +7,13 @@ import time
 fiction_genres = ['drama', 'horror', 'thriller']
 
 def add_dates_read():
+    """Load Goodreads export and input Excel files"""
     df = pd.read_csv("files/exports/goodreads_exports/gr_export.csv")
     df2 = pd.read_excel('files/work_files/gr_work_files/gr_dates_input.xlsx')
     df2["Book Id"].fillna(0, inplace=True)
     d = pd.merge(df, df2, on = "Book Id", how = 'left')
     d = d[(d['Exclusive Shelf'] == 'read') & (d['Check'].isna())].reset_index(drop = True)
+    # Prompt user to input reading dates for each book
     if d.shape[0] == 0:
         return df, df2
     print(f"There are {d.shape[0]} book(s) where reading dates must be added")
@@ -30,6 +29,7 @@ def add_dates_read():
     return df, df2
 
 def expand_gr_reading_split(row, columns, col):
+    """Splits the rows to have one row per day, with a division of the total pages in the book by the number of days to read it"""
     if (row['Date started'] != row['Date started']) | (row['Date ended'] != row['Date ended']):
         date_df = pd.DataFrame(columns=col)
         for col in col[:-2]:
@@ -45,13 +45,13 @@ def expand_gr_reading_split(row, columns, col):
     return date_df
 
 def gr_only_bookid(df):
+    """Returns the books that are only in GoodReads, not in the Kindle data"""
     groups = df.groupby(['Book Id'])
     gr_only_bookid = [g['Book Id'].values[0] for _, g in groups if all(g['Source'] == 'GoodReads')]
     return gr_only_bookid
 
 def process_gr_export():
     df, df2 = add_dates_read()
-    #df['Genre'] = df['ISBN'].apply(lambda x: get_genre(x))
     df3 = pd.merge(df2[['Title', 'Book Id', 'Date started', 'Date ended', 'Check']], df, on='Book Id', how='left')\
             .rename(columns = {'Title_x' : 'Title', 'Bookshelves' : 'Genre'})
     df3['reading_duration'] = (df3['Date ended'] - df3['Date started']).dt.days + 1
@@ -72,6 +72,7 @@ def process_gr_export():
     expanded_df.to_csv('files/processed_files/gr_processed.csv', sep = '|', index=False)
 
 def get_genre(ISBN):
+    """Function to retrieve the book genre from the Google API, but not used eventually"""
     api_url = 'https://www.googleapis.com/books/v1/volumes'
     params = {'q': f'isbn:{ISBN}'}
     time.sleep(5 )
@@ -90,7 +91,9 @@ def get_genre(ISBN):
             return "issue2"
     else:
         return "issue3"
+
 def flag_clicks(row, gr_date_df):
+    """Add a flag to the rows where the date a book has been read is higher than what was manually input in GoodReads"""
     if not gr_date_df.loc[gr_date_df['Title'] == row["Title"]].empty:
         if row.Timestamp.date() > gr_date_df.loc[gr_date_df['Title'] == row["Title"], 'Date ended'].iloc[0].date():
             return 1
@@ -99,11 +102,13 @@ def flag_clicks(row, gr_date_df):
     return 0
 
 def remove_accidental_clicks(df):
+    """Removes the data points where a book was accidentally clicked in the Kindle, to make sure reading dates remain coherent with what's in GR"""
     gr_date_df = pd.read_excel('files/work_files/gr_work_files/gr_dates_input.xlsx')
     df['Flag_remove'] = df.apply(lambda x: flag_clicks(x, gr_date_df), axis = 1)
     return df[df['Flag_remove'] == 0].drop('Flag_remove', axis = 1)
 
 def merge_gr_kindle():
+    """Merges goodreads & kindle files"""
     df_gr = pd.read_csv('files/processed_files/gr_processed.csv', sep ='|')
     df_kl = pd.read_csv('files/processed_files/kindle_processed.csv', sep = '|')
     columns = list(df_gr.columns[2:-4])
@@ -117,6 +122,3 @@ def merge_gr_kindle():
     cleaned_df = remove_accidental_clicks(cleaned_df)
     cleaned_df.drop_duplicates(inplace = True)
     cleaned_df.to_csv('files/processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')
-
-#process_gr_export()
-#update_file('processed_files/kindle_gr_processed.csv')

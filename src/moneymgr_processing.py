@@ -1,9 +1,7 @@
 import pandas as pd
-from utils import today_export
-from drive_storage import update_file
-
 
 def add_sorting_columns(df):
+    """Adds some columns used for sorting in the PBI report"""
     df['Year_Week'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.week)))
     df['Year_Month'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.month)))
     df['sorting_week'] = df['Period'].dt.year * 100 + df['Period'].dt.isocalendar().week

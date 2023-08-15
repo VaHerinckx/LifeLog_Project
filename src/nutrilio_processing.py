@@ -1,16 +1,13 @@
 import pandas as pd
-import numpy as np
 import regex as re
-import sys
 import subprocess
 import warnings
-from drive_storage import update_file, update_drive
 from pandas.errors import PerformanceWarning
 warnings.filterwarnings("ignore", message="DataFrame is highly fragmented.", category=PerformanceWarning)
 
 age = 28
 height_cm = 182
-weight_kg = 79
+weight_kg = 77
 activity_factor = 2.0  # using a PAL of 2.0 for highly active individuals
 col_unnecessary_qty = ['Places', 'Origin', 'Work - location', 'Screen before sleep', 'Sleep - waking up', 'Sleep - night time']
 dict_extract_data = {"Food" : "food",
@@ -25,7 +22,8 @@ dict_work_duration = {"0-2h" : 1, "0-4h" : 2, "2-3h" : 2.5, "3-4h" : 3.5, "4-6h"
                       "8-10h" : 9, "8h" : 8}
 
 def generate_calory_needs():
-    # Calculate the BMR using the Harris-Benedict equation
+    """Generates the calory needs of a person based on the variables declared above"""
+    #Calculate the BMR using the Harris-Benedict equation
     bmr = 88.36 + (13.4 * weight_kg) + (4.8 * height_cm) - (5.7 * age)
     # Calculate the daily calorie needs by multiplying the BMR by the activity factor
     daily_calorie_needs = round(bmr * activity_factor)
@@ -47,6 +45,7 @@ def generate_calory_needs():
     return calorie_breakdown
 
 def generate_dict_ingredients():
+    """Generates a dictionnary containing all the information about each individual ingredient in the work file"""
     meal_input_df = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
     dict_ingredients = {}
     for _, row in meal_input_df.iterrows():
@@ -59,6 +58,7 @@ def generate_dict_ingredients():
     return dict_ingredients
 
 def prompt_new_ingredients(df):
+    """Generates a ChatGPT prompt to get info's about new ingredients added in the Nutrilio app"""
     chat_gpt_prompt = ("\n\n\n" + "Please give me, for each of these ingredients below, your best assessment for the different informations:\n"
     "1. The overall healthiness of this ingredient, from 1 (worst) to 10 (best)\n"
     "2. The kcal intake for 100g of this ingredient\n"
@@ -87,6 +87,7 @@ def prompt_new_ingredients(df):
         return "NOK"
 
 def ingredient_category(df):
+    """Adds the ingredient category"""
     meal_input_df = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
     dict_ingredients = generate_dict_ingredients()
     for cat in list(meal_input_df.Category.unique()):
@@ -100,6 +101,7 @@ def ingredient_category(df):
     return df
 
 def score_meal(meal, ingredients, quantity):
+    """Gives a score on 10 for each meal made"""
     dict_ingredients = generate_dict_ingredients()
     calorie_needs = generate_calory_needs()
     total_kcal = 0
@@ -134,6 +136,7 @@ def score_meal(meal, ingredients, quantity):
     return round((10-avg_score),2), None
 
 def extract_data_count(df):
+    """Retrieves the number of time each ingredient was eaten"""
     pattern = r'([\w ]+) \((\d+)x\)'
     list_col = []
     for column, indicator in dict_extract_data.items():
@@ -163,6 +166,7 @@ def extract_data(column):
     return str(column).split('(')[0].strip()
 
 def drinks_category(drinks):
+    """Generates a ChatGPT prompt to get info's about new drinks added in the Nutrilio app"""
     df_drinks = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx')
     chat_gpt_prompt = ("\n\n\n" + "Please give me your best assessment of the category for each of the drinks below.\n"
                        "Use these 4 categories: soda/soft drinks, strong alcohol, light alcohol, healthy drinks. \n"
@@ -186,6 +190,7 @@ def drinks_category(drinks):
         answer = input("Chat GPT output integrated in work file + file saved & closed? (Y/N) \n")
 
 def generate_pbi_files(df, indicator):
+    """Generates multiple files to be ingested in PBI"""
     index_list = []
     for col in df.columns:
         if len(col.split('_')) > 1:
@@ -235,15 +240,3 @@ def process_nutrilio_export():
         generate_pbi_files(df, value)
         drive_list.append(f"files/processed_files/nutrilio_{value}_pbi_processed_file.csv")
     return drive_list
-
-#process_nutrilio_export()
-drive_list = ['files/processed_files/nutrilio_processed.csv', 'files/processed_files/nutrilio_food_pbi_processed_file.csv', 'files/processed_files/nutrilio_drinks_pbi_processed_file.csv',
-              'files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv', 'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
-              'files/processed_files/nutrilio_work_content_pbi_processed_file.csv', 'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv',
-              'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv']
-#update_drive(drive_list)
-#update_file("work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx")
-#process_nutrilio_export()
-#update_file("work_files/Objectives.xlsx")
-#process_nutrilio_export()
-#update_file('processed_files/offscreen_processed.csv')

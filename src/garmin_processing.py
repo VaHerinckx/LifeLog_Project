@@ -68,7 +68,7 @@ with open(dict_path, 'r') as f:
         dict_files = json.load(f)
 
 def row_expander_minutes(row):
-# Function to expand rows based on minute differences and return a DataFrame
+    """Function to expand rows based on minute differences and return a DataFrame"""
     minute_diff = (row['endTimeLocalSPLIT'] - row['startTimeLocalSPLIT']).total_seconds()/60
     if minute_diff <=1:
         date_df = pd.DataFrame(columns=list(dict_col.keys()))
@@ -83,7 +83,7 @@ def row_expander_minutes(row):
     return date_df
 
 def generate_to_format_columns(columns):
-# Function to generate lists of columns based on their units
+    """Function to generate lists of columns based on their units"""
     col_duration = []
     col_speed = []
     col_distance = []
@@ -100,7 +100,7 @@ def generate_to_format_columns(columns):
     return col_duration, col_speed, col_distance
 
 def rename_formatted_columns(df, col_duration, col_speed, col_distance):
-# Function to rename columns based on their units
+    """Function to rename columns based on their units"""
     for col in col_duration:
         df.rename(columns={col:f"{col.split('__')[0]}__M"}, inplace = True)
     for col in col_speed:
@@ -110,7 +110,7 @@ def rename_formatted_columns(df, col_duration, col_speed, col_distance):
     return df
 
 def formatting_garmin_df(df, columns_datetime=None, columns_duration=None, columns_speed=None, columns_distance=None):
-# Function to format specific columns in the DataFrame
+    """Function to format specific columns in the DataFrame"""
     if columns_datetime:
         for col in columns_datetime:
             df[col] = pd.to_datetime(df[col], unit = 'ms')
@@ -126,7 +126,7 @@ def formatting_garmin_df(df, columns_datetime=None, columns_duration=None, colum
     return df
 
 def activity_summary_extract(path):
-# Function to extract activity summaries from a JSON file and save to a CSV file
+    """Function to extract activity summaries from a JSON file and save to a CSV file"""
     with open(path,'r') as f:
         data = json.load(f)
     list_dict = data[0]['summarizedActivitiesExport']
@@ -148,7 +148,7 @@ def activity_summary_extract(path):
     return df
 
 def activity_splits_extract(df):
-# Function to extract activity splits from the DataFrame and save to a CSV file
+    """Function to extract activity splits from the DataFrame and save to a CSV file"""
     activity_splits_full = pd.DataFrame()
     for _, row_activity in df.iterrows():
         if row_activity['activityType'] != 'running':
@@ -190,7 +190,7 @@ def activity_splits_extract(df):
     return new_df
 
 def sleep_extract(x, key):
-# Function to extract sleep data from a JSON file
+    """Function to extract sleep data from a JSON file"""
     if isinstance(x, dict):
         if key in x.keys():
             return x[key]
@@ -198,7 +198,7 @@ def sleep_extract(x, key):
             return None
 
 def sleep_file(path):
-# Function to process sleep data from a JSON file and save to a CSV file
+    """Function to process sleep data from a JSON file and save to a CSV file"""
     df = pd.read_json(path)
     df['averageSPO2'] = df['spo2SleepSummary'].apply(lambda x : sleep_extract(x, 'averageSPO2'))
     df['averageHR'] = df['spo2SleepSummary'].apply(lambda x : sleep_extract(x, 'averageHR'))
@@ -226,7 +226,7 @@ def process_rename_sleep_file():
     df.to_csv('files/processed_files/garmin_sleep_processed.csv', sep = "|")
 
 def extract_fit_files_path():
-# Function to extract paths of all .fit files in the specified folder and its subfolders
+    """Function to extract paths of all .fit files in the specified folder and its subfolders"""
     fit_files = []
     for root, _, filenames in os.walk("files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/FitFiles"):
         for filename in fnmatch.filter(filenames, '*.fit'):
@@ -234,7 +234,7 @@ def extract_fit_files_path():
     return fit_files
 
 def stress_level_qualification(x):
-# Function to qualify stress levels based on their values
+    """Function to qualify stress levels based on their values"""
     stress_level = None
     for key, value in dict_stress_level.items():
         if x >= key:
@@ -242,7 +242,7 @@ def stress_level_qualification(x):
     return stress_level
 
 def process_stress_level():
-# Function to process stress level data from .fit files and save to a CSV file
+    """Function to process stress level data from .fit files and save to a CSV file"""
     zip_file_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip"
     if os.path.exists(zip_file_path):
         with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
@@ -302,7 +302,3 @@ def process_garmin_export():
     print("garmin_stress_level_processed.csv was generated \n")
     process_rename_sleep_file()
     print("garmin_sleep_processed.csv was generated \n")
-
-#process_garmin_export()
-#update_file('files/processed_files/garmin_activities_list_processed.csv')
-#process_training_history()

@@ -16,10 +16,8 @@ api_host = os.environ['Meteostats_API_HOST']
 ONE_MONTH = pd.Timedelta('30 days')
 
 def max_30_days_timedeltas(df: pd.DataFrame) -> pd.DataFrame:
-    '''
-    This function takes a pandas dataframe and return another one where the time difference between the start and
-    end dates is limited to 30 days or less, as the API doesn't allow requests for longer time periods.
-    '''
+    """This function takes a pandas dataframe and return another one where the time difference between the start and
+    end dates is limited to 30 days or less, as the API doesn't allow requests for longer time periods"""
     # List to store new rows
     new_rows = []
     for _, row in df.iterrows():
@@ -37,15 +35,7 @@ def max_30_days_timedeltas(df: pd.DataFrame) -> pd.DataFrame:
     return new_df
 
 def lat_long_location(location_name: str):
-    '''
-    This function takes a location name and returns its latitude and longitude coordinates using Geopy.
-
-    Parameters:
-    location_name (str): A string representing the name of a location.
-
-    Returns:
-    tuple: A tuple containing the latitude and longitude of the location.
-    '''
+    """This function takes a location name and returns its latitude and longitude coordinates using Geopy"""
     # Creating a geolocator object using Nominatim
     geolocator = Nominatim(user_agent='my_application')
     # Getting the location object
@@ -55,19 +45,8 @@ def lat_long_location(location_name: str):
     longitude = location.longitude
     return latitude, longitude
 
-
 def api_call_nearest_station(latitude: float, longitude: float):
-    '''
-    This function takes a latitude and longitude coordinates of a location and makes an API call to Meteostat API to get the
-    ID of the nearest weather station.
-
-    Parameters:
-    latitude (float): A float representing the latitude of a location.
-    longitude (float): A float representing the longitude of a location.
-
-    Returns:
-    dict: A dictionary containing the ID and name of the nearest weather station.
-    '''
+    """This function takes a latitude and longitude coordinates of a location and makes an API call to Meteostat API to get the ID of the nearest weather station"""
     # Define the API endpoint and set the query parameters
     url = "https://meteostat.p.rapidapi.com/stations/nearby"
     querystring = {"lat":latitude,"lon":longitude, "radius": 1000000}
@@ -84,24 +63,8 @@ def api_call_nearest_station(latitude: float, longitude: float):
     stations_dict = {station['id']: station['name']['en'] for station in stations}
     return stations_dict
 
-
-
 def api_call_weather_data(stations_dict: dict, start_date: str, end_date: str):
-    """
-    Calls the Meteostat API to get hourly weather data for a list of stations within a specified date range.
-
-    Args:
-    - stations_dict: A dictionary mapping station IDs to station names.
-    - start_date: A string representing the start date of the date range in 'YYYY-MM-DD' format.
-    - end_date: A string representing the end date of the date range in 'YYYY-MM-DD' format.
-
-    Returns:
-    - A tuple containing:
-        - A list of dictionaries, each representing an hour of weather data for a specific station.
-        - A string representing the ID of the station that the data corresponds to.
-        - A string representing the name of the station that the data corresponds to.
-    - None if no weather data is returned by the API.
-    """
+    """Calls the Meteostat API to get hourly weather data for a list of stations within a specified date range"""
     url = "https://meteostat.p.rapidapi.com/stations/hourly"
     with requests.Session() as session:
         for station in stations_dict.keys():
@@ -116,8 +79,6 @@ def api_call_weather_data(stations_dict: dict, start_date: str, end_date: str):
                 station_name = stations_dict[station]
                 return weather_data, station_id, station_name
 
-
-
 def dict_weather_code():
     dict_weather_code = {1:'Clear', 2:'Fair', 3:'Cloudy', 4:'Overcast', 5:'Fog', 6:'Freezing Fog', 7:'Light Rain',\
                          8:'Rain', 9:'Heavy Rain', 10:'Freezing Rain', 11:'Heavy Freezing Rain', 12:'Sleet',\
@@ -125,7 +86,6 @@ def dict_weather_code():
                          18:'Heavy Rain Shower', 19:'Sleet Shower', 20:'Heavy Sleet Shower', 21:'Snow Shower', 22:'Heavy Snow Shower',\
                          23:'Lightning', 24:'Hail', 25:'Thunderstorm', 26:'Heavy Thunderstorm', 27:'Storm'}
     return dict_weather_code
-
 
 def get_weather_data():
     # Read the location log file to obtain the start and end dates for each location

@@ -18,6 +18,7 @@ from letterboxd_processing import process_letterboxd_export
 from drive_storage import update_drive
 
 def find_unzip_folder(data_source, zip_file_path = None):
+    """Unzips the foler specified in the path"""
     download_folder = "/Users/valen/Downloads"
     # Get a list of all the zip files in the download folder
     zip_files = [f for f in os.listdir(download_folder) if f.endswith('.zip')]
@@ -45,6 +46,7 @@ def find_unzip_folder(data_source, zip_file_path = None):
         return f"No {data_source} file to unzip \n"
 
 def clean_rename_move_folder(export_folder, download_folder, folder_name, new_folder_name):
+    """Removes the folder from Download, renames them and sends them within this directory"""
     folder_path = os.path.join(download_folder, folder_name)
     if not os.path.exists(folder_path):
         print(f"Folder {folder_path} does not exist in Downloads")
@@ -61,6 +63,7 @@ def clean_rename_move_folder(export_folder, download_folder, folder_name, new_fo
     shutil.move(renamed_folder_path, export_folder_path)
 
 def clean_rename_move_file(export_folder, download_folder, file_name, new_file_name, file_number = 1):
+    """Removes the file from Download, renames them and sends them within this directory"""
     file_path = os.path.join(download_folder, file_name)
     if not os.path.exists(file_path):
         print(f"File {file_path} does not exist")
@@ -78,8 +81,8 @@ def clean_rename_move_file(export_folder, download_folder, file_name, new_file_n
     export_file_path = os.path.join(export_folder, new_file_name)
     shutil.move(renamed_file_path, export_file_path)
 
-# List of URLs to open in new tabs
 def download_web_data():
+    """Opens all the web urls in Firefox, then asks the user if each export was made, to later decide if processing is needed"""
     urls = [
         'https://www.goodreads.com/review/import',
         'https://benjaminbenben.com/lastfm-to-csv/',
@@ -96,6 +99,7 @@ def download_web_data():
     return GR, LFM, LBX
 
 def download_app_data():
+    """Asks the user if each export was made from the different apps, to later decide if processing is needed"""
     MM = input("Did Money MGR export got downloaded ? (Y/N) ")
     NUT = input("Did Nutrilio export got downloaded ? (Y/N) ")
     APH = input("Did Apple Health export got downloaded ? (Y/N) ")

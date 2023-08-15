@@ -22,14 +22,14 @@ dict_identifier = {
 }
 
 def clean_import_file():
-    # Function to clean the import file by removing certain lines
+    """Function to clean the import file by removing certain lines"""
     path = 'files/exports/apple_exports/apple_health_export/export.xml'
     new_path = 'files/exports/apple_exports/apple_health_export/cleaned_export.xml'
     command = f"sed -e '156,211d' {path} > {new_path}"
     subprocess.run(command, shell=True)
 
 def apple_df_formatting(path):
-    # Function to format the Apple export XML file into a DataFrame
+    """Function to format the Apple export XML file into a DataFrame"""
     with open(path, 'r') as xml_file:
         input_data = xmltodict.parse(xml_file.read())
     records_list = input_data['HealthData']['Record']
@@ -38,7 +38,7 @@ def apple_df_formatting(path):
     return df
 
 def select_columns(df, name_val):
-    # Function to select columns from the DataFrame based on the column name value
+    """Function to select columns from the DataFrame based on the column name value"""
     path = f'files/processed_files/apple_{name_val}.csv'
     df = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
     df["@value"] = df["@value"].astype(float)
@@ -49,7 +49,7 @@ def select_columns(df, name_val):
     return new_df
 
 def expand_df(df, name_val, aggreg_method='sum'):
-    # Function to expand the DataFrame by adding rows for each minute within the given time range
+    """Function to expand the DataFrame by adding rows for each minute within the given time range"""
     path = f'files/processed_files/apple_processed_files/apple_{name_val}.csv'
     df = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
     df["@value"] = df["@value"].astype(float)
@@ -69,7 +69,7 @@ def expand_df(df, name_val, aggreg_method='sum'):
     return new_df
 
 def row_expander_minutes(row, aggreg_method):
-    # Function to expand a single row into multiple rows, each representing a minute
+    """Function to expand a single row into multiple rows, each representing a minute"""
     minute_diff = (row['@endDate'] - row['@startDate']).total_seconds() / 60
     if minute_diff <= 1:
         date_df = pd.DataFrame(columns=['date', 'val', 'source'])
@@ -86,7 +86,7 @@ def row_expander_minutes(row, aggreg_method):
     return date_df
 
 def process_apple_export():
-    # Function to process the Apple export and generate the final processed DataFrame
+    """Function to process the Apple export and generate the final processed DataFrame"""
     path_cleaned_xml = 'files/exports/apple_exports/apple_health_export/cleaned_export.xml'
     path_csv_export = 'files/exports/apple_exports/apple_health_export/cleaned_export.csv'
     if not os.path.isfile(path_csv_export):
@@ -117,7 +117,3 @@ def process_apple_export():
         apple_df[col] = apple_df[col].astype(float)
     apple_df.sort_values('date', inplace=True)
     apple_df.to_csv('files/processed_files/apple_processed.csv', sep='|', index=False)
-
-# Uncomment the following lines to execute the code
-# process_apple_export()
-# update_file('processed_files/apple_processed.csv')

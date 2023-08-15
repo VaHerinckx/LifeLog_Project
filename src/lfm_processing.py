@@ -11,9 +11,7 @@ from utils import time_difference_correction
 load_dotenv()
 
 def authentification(client_id, client_secret):
-    """
-    Generate the access token necessary to call the Spotify API
-    """
+    """Generate the access token necessary to call the Spotify API"""
     auth_url = "https://accounts.spotify.com/api/token"
     # Encode the client ID and client secret as base64
     client_creds = f"{client_id}:{client_secret}"
@@ -26,6 +24,7 @@ def authentification(client_id, client_secret):
     return access_token
 
 def compute_completion(df):
+    """Adds a column "completion" to the df, to see what percentage of the song was listened t before skipping"""
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df['skip_next_track'] = 0
     df['completion'] = 0
@@ -51,9 +50,7 @@ def compute_completion(df):
     return df
 
 def artist_info(token, artist_names, artist_df):
-    """
-    Retrieve information about the artist genre, followers, popularity, etc.
-    """
+    """Retrieves information about the artist genre, followers, popularity, etc."""
     count = 0
     dict_artists = {}
     for _, row in artist_df.iterrows():
@@ -154,11 +151,8 @@ def track_info(token, song_keys, track_df):
     df_tracks.to_csv('files/work_files/lfm_work_files/tracks_infos.csv', sep = '|', index = False)
     return df_tracks
 
-def merge_dfs(export, artist_df, track_df):
-    """
-    Merging the export df, with the artist info and track info dfs
-    """
-    df = export
+def merge_dfs(df, artist_df, track_df):
+    """Merging the export df, with the artist info and track info dfs"""
     df_merge_artist = pd.merge(df, artist_df, how = 'left', on= 'artist_name')
     cols_to_use = list(track_df.columns.difference(df_merge_artist.columns))
     cols_to_use.append('song_key')
@@ -166,16 +160,12 @@ def merge_dfs(export, artist_df, track_df):
     return df_merge_artist_track
 
 def power_bi_processing(df):
+    """Changes some results for better display in PBI"""
     df['genre_1'].fillna('Unknown')
     df['track_duration'] = df['track_duration'].replace('No API result', '0').astype(float)
     return df
 
-
 def process_lfm_export():
-    """
-    By default, the file processed will be the export of today (if present & in good folder),\
-    but other export can be processed by giving as argument the date of the export (in format ddmmyy)
-    """
     df = pd.read_csv(f"files/exports/lfm_exports/lfm_export.csv", header = None)
     df.columns = ['artist_name', 'album_name', 'track_name', 'timestamp']
     df['timestamp'] = pd.to_datetime(df['timestamp'])
@@ -209,6 +199,3 @@ def process_lfm_export():
     df['new_recurring_track_yn'] = df['new_recurring_track_yn'].astype(int)
     df.sort_values('timestamp', ascending=False, inplace = True)
     df.to_csv('files/processed_files/lfm_processed.csv', sep = '|', index = False)
-
-#process_lfm_export()
-#update_file('processed_files/lfm_processed.csv')
