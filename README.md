@@ -1,4 +1,8 @@
 ![The Lifelog Project](images/lifelog_logo.png)
+<div align="center">
+  <img src="images/lifelog_logo.png" alt="Image Description">
+</div>
+
 
 ## Introduction
 After listening to Datacamp's Dataframed podcast episode discussing how people can use their own personal data for all sorts of things (with Gary Wolf as guest, link [here](https://www.datacamp.com/podcast/data-driven-thinking-for-the-everyday-life)), I got inspired, and decided to use my newly acquired data skills to do something with all the data that's floating around me. 
