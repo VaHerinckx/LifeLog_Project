@@ -8,8 +8,8 @@ def calculate_incremental_distance(column):
     column = column.clip(lower=0)
     return column
 
-
 def garmin_processing_summary(df):
+    """Reformats the columns to have similar structure as Garmin output"""
     #Adding new columns
     df['startTimeLocal'] = pd.to_datetime(df['Date'] + ' ' + df['Start time'])
     #Adapting units
@@ -37,6 +37,7 @@ def garmin_processing_summary(df):
     df.sort_values('startTimeLocal').to_csv('files/processed_files/polar_summary_processed.csv', sep = '|', index = False)
 
 def garmin_processing_splits(df):
+    """Reformats the columns to have similar structure as Garmin output"""
     #Adding new columns
     df['date'] = pd.to_datetime(df['Date'] + ' ' + df['Time'])
     df = df.sort_values(['Date', 'Time'])

@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_genre(title, release_year):
+    """Retrievs the genre of a movie using OMDB_API"""
     df_processed = pd.read_csv('files/processed_files/letterboxd_processed.csv', sep = '|')
     df_processed["Key"] = df_processed["Name"] + df_processed["Year"].astype(str)
     key_input = str(title) + str(release_year)
@@ -22,6 +23,7 @@ def get_genre(title, release_year):
             return 'Unknown'
 
 def get_watched_rating(path_watched, path_ratings):
+    """Merges the watched & ratings dfs"""
     df_watched = pd.read_csv(path_watched)
     df_ratings = pd.read_csv(path_ratings)
     return df_watched.merge(df_ratings[['Name', 'Year', 'Rating']], on = ['Name', 'Year'], how = 'left')

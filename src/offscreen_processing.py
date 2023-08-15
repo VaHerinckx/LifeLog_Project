@@ -1,6 +1,7 @@
 import pandas as pd
 
 def row_expander_seconds(row):
+    """Expands the dataframe to have one row per minute, to remove the aggregation in the original df"""
     lower_bound = (row['start']-pd.Timedelta(seconds = 30)).round('T')
     upper_bound = (row['end']-pd.Timedelta(seconds = 30)).round('T')
     rows_needed = (int((upper_bound-lower_bound).total_seconds()/60))+1
@@ -26,6 +27,7 @@ def row_expander_seconds(row):
     return date_df
 
 def expand_df(df):
+    """Expands the dataframe to have one row per minute, to remove the aggregation in the original df"""
     df['start'] = pd.to_datetime(df['start']) + pd.Timedelta(hours = 8)
     df['end'] = pd.to_datetime(df['end']) + pd.Timedelta(hours = 8)
     df['duration_s'] = (df.end - df.start).dt.total_seconds().astype(float)
@@ -42,6 +44,7 @@ def expand_df(df):
     return new_df
 
 def screentime_before_sleep(df):
+    """Computes the screentime in the hour before sleep"""
     df2 = pd.read_csv('files/processed_files/garmin_sleep_processed.csv', sep = '|')
     df['date'] = pd.to_datetime(df.date, utc = True).dt.tz_localize(None)
     df['sleepDate'] = df.date.apply(lambda x: x - pd.Timedelta(days = 1) if x.hour < 6 else x).dt.date

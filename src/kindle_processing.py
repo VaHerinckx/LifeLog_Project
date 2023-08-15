@@ -8,6 +8,7 @@ from selenium import webdriver
 dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
 
 def amazon_scraping_sel(gr_df):
+    """Scrapes Amazon to find the titles of Books based on their ASIN number using Selenium webdriver"""
     list_ASIN = list(gr_df['ASIN'].unique())
     dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
     gr_df['start_timestamp'] = pd.to_datetime(gr_df['start_timestamp'])
@@ -60,6 +61,7 @@ def amazon_scraping_sel(gr_df):
     driver.quit()
 
 def kindle_ratio(df):
+    """Computes the ratio of Kindle pages vs. Goodreads pages, as Kindle has a different way of calculating pages"""
     dict_path = 'files/work_files/kindle_title_ratio_dictionnary.json'
     with open(dict_path, 'r') as f:
         dict_ratio = json.load(f)
@@ -77,6 +79,7 @@ def kindle_ratio(df):
     return dict_ratio
 
 def kindle_page_ratio(gr_df):
+    """Computes the ratio of Kindle pages vs. Goodreads pages, as Kindle has a different way of calculating pages"""
     df = pd.read_csv('files/processed_files/gr_processed.csv', sep = '|')
     gr_df['uncapitalized_title'] = gr_df['Title'].apply(lambda x: str(x).lower())
     df['uncapitalized_title'] = df['Title'].apply(lambda x: x.lower())
@@ -86,6 +89,7 @@ def kindle_page_ratio(gr_df):
     return merged[['Book Id', 'Title', 'kindle_page_ratio']].drop_duplicates()
 
 def row_expander_minutes(row):
+    """Expands the rows to have one per minute, rather than aggregated per reading session"""
     minute_diff = (row['end_timestamp'] - row['start_timestamp']).total_seconds()/60
     if minute_diff <=1:
         date_df = pd.DataFrame(columns=['ASIN', 'Book Id', 'Title', 'Timestamp', 'Seconds', 'page_split'])
@@ -114,6 +118,7 @@ def row_expander_minutes(row):
     return date_df
 
 def process_kindle_export():
+    """Process the kindle export by doing all kinds of reformatting"""
     path = "files/exports/kindle_exports/Kindle.Devices.ReadingSession/Kindle.Devices.ReadingSession.csv"
     df = pd.read_csv(path)
     df = df[df['start_timestamp']!="Not Available"]
@@ -147,6 +152,3 @@ def process_kindle_export():
     new_df['page_split'] = new_df.apply(lambda x: x.page_split * dict_new_ratio[x.Title], axis = 1)
     new_df['Source'] = 'Kindle'
     new_df.sort_values('Timestamp', ascending = False).to_csv('files/processed_files/kindle_processed.csv', sep = '|', index = False)
-
-
-#process_kindle_export()
