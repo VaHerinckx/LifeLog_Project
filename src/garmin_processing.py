@@ -1,6 +1,5 @@
 import pandas as pd
 import os
-import subprocess
 import json
 from utils import time_difference_correction
 import os
@@ -8,7 +7,6 @@ import fnmatch
 import fitparse
 import re
 import zipfile
-from drive_storage import update_file
 
 dict_stress_level = {0: 'Rest', 26: 'Low', 51: 'Medium', 76: 'High'}
 dict_col = {

@@ -5,8 +5,7 @@ import numpy as np
 import os
 import math
 from dotenv import load_dotenv
-from drive_storage import update_file
-from datetime import datetime, timedelta
+from datetime import timedelta
 from utils import time_difference_correction
 load_dotenv()
 
