@@ -8,7 +8,7 @@ More information about what I actually did with all this data can be found in [t
 
 1. Open all the different url of the websites where I can retrieve my personnal data, before I manually download them
 2. Arrange the export files from the different sources in the correct places.
-3. Get the data contained in the files into dataframes containing only the data I'm interested in for my dashboard (with eventual input from the user requested in the process)
+3. Process the data contained in the files into .csv files that contain only the data I'm interested in for my dashboard (with eventual input from the user requested in the process)
 4. Upload the processed files to a Google Drive location, which is linked to my PowerBI report.
 
 For more details, please refer to the comments in the different pyton files!
