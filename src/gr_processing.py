@@ -107,13 +107,22 @@ def remove_accidental_clicks(df):
     df['Flag_remove'] = df.apply(lambda x: flag_clicks(x, gr_date_df), axis = 1)
     return df[df['Flag_remove'] == 0].drop('Flag_remove', axis = 1)
 
+def duration(df, time, title, rowNum):
+    """Computes the reading duration one time per title, making calculations in the PBI easier"""
+    max_time = df[df["Title"] == title].Timestamp.max()
+    max_row = df[(df["Title"] == title) & (df["Timestamp"] == max_time)].rowNum.min()
+    if (time == max_time) & (rowNum == max_row):
+        return df[df["Title"] == title].reading_duration.max()
+    else:
+        return np.nan
+
 def merge_gr_kindle():
     """Merges goodreads & kindle files"""
     df_gr = pd.read_csv('files/processed_files/gr_processed.csv', sep ='|')
     df_kl = pd.read_csv('files/processed_files/kindle_processed.csv', sep = '|')
     columns = list(df_gr.columns[2:-4])
     columns.append('Book Id')
-    enhanced_kl=pd.merge(df_kl, df_gr[columns], on = 'Book Id', how = 'left')
+    enhanced_kl = pd.merge(df_kl, df_gr[columns], on = 'Book Id', how = 'left')
     all_data = pd.concat([df_gr, enhanced_kl], ignore_index = True)
     gr_only_df = all_data[all_data['Book Id'].isin(gr_only_bookid(all_data))]
     kl_only_df = all_data[all_data['Source'] == 'Kindle']
@@ -121,4 +130,6 @@ def merge_gr_kindle():
     cleaned_df['Timestamp'] = pd.to_datetime(cleaned_df['Timestamp'])
     cleaned_df = remove_accidental_clicks(cleaned_df)
     cleaned_df.drop_duplicates(inplace = True)
-    cleaned_df.to_csv('files/processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')
+    cleaned_df = cleaned_df.reset_index().rename(columns = {"index" : "rowNum"})
+    cleaned_df["reading_duration"] = cleaned_df.apply(lambda x: duration(cleaned_df, x.Timestamp, x.Title, x.rowNum), axis = 1)
+    cleaned_df.drop(columns = "rowNum").to_csv('files/processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')

@@ -3,6 +3,7 @@ import datetime
 from datetime import datetime
 time_diff_excel = pd.read_excel('files/work_files/GMT_timediff.xlsx')
 
+
 def today_export():
     current_date = datetime.now()
     date_string = current_date.strftime("%d%m%y")
@@ -10,6 +11,7 @@ def today_export():
 
 def time_difference_correction(date, timezone_source='GMT'):
     """Corrects timezone differences"""
+    time_diff_excel["Date"] = pd.to_datetime(time_diff_excel["Date"], utc = True)
     for index, row_datefile in time_diff_excel.iterrows():
         if date >= row_datefile['Date']:
             continue

@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import json
 from utils import time_difference_correction
 import time
@@ -23,7 +24,7 @@ def amazon_scraping_sel(gr_df):
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome('files/other_files/chromedriver_mac64(2)/chromedriver',chrome_options=chrome_options)
+    driver = webdriver.Chrome('files/other_files/chromedriver_mac64(2)/chromedriver',options=chrome_options)
     for ASIN in new_ASIN:
         time.sleep(2)
         if ASIN in dict_ASIN.keys():
@@ -117,19 +118,45 @@ def row_expander_minutes(row):
             date_df.loc[index,'Seconds'] = 60
     return date_df
 
+def session_split(df, index):
+    """Function that splits the different reading sessions in the data"""
+    try:
+        value = int((df["Timestamp"].iloc[index] - df["Timestamp"].iloc[index + 1]).seconds > 60)
+    except IndexError:
+        value = 1
+    return value
+
+def session_duration(df, rownum):
+    """Function that computes the duration of each reading session"""
+    new_df = df[df["RowNum"] >= rownum]
+    session_duration = 0
+    if rownum == 0:
+        for _, row in new_df.iterrows():
+            if row["NewSession"] == 0:
+                session_duration += row["Seconds"]
+            else:
+                break
+    elif (df[df["RowNum"] == rownum]["NewSession"][rownum] == 0) & (df[df["RowNum"] == rownum - 1]["NewSession"][rownum - 1] == 1):
+        for _, row in new_df.iterrows():
+            if row["NewSession"] == 0:
+                session_duration += row["Seconds"]
+            else:
+                break
+    return session_duration/60 if session_duration > 0 else np.nan
+
 def process_kindle_export():
     """Process the kindle export by doing all kinds of reformatting"""
     path = "files/exports/kindle_exports/Kindle.Devices.ReadingSession/Kindle.Devices.ReadingSession.csv"
     df = pd.read_csv(path)
     df = df[df['start_timestamp']!="Not Available"]
-    df['start_timestamp'] = pd.to_datetime(df['start_timestamp'])\
-                            .apply(lambda x: x.to_pydatetime()\
-                            .replace(tzinfo=None))\
+    df['start_timestamp'] = pd.to_datetime(df['start_timestamp'], utc = True)\
                             .apply(lambda x: time_difference_correction(x,'GMT'))
-    df['end_timestamp'] = pd.to_datetime(df['end_timestamp'])\
-                            .apply(lambda x: x.to_pydatetime()\
-                            .replace(tzinfo=None))\
+                            #.apply(lambda x: x.to_pydatetime()\
+                            #.replace(tzinfo=None))\
+    df['end_timestamp'] = pd.to_datetime(df['end_timestamp'], utc = True)\
                             .apply(lambda x: time_difference_correction(x,'GMT'))
+                            #.apply(lambda x: x.to_pydatetime()\
+                            #.replace(tzinfo=None))\
     gr_df = df.groupby("ASIN").aggregate({'start_timestamp' : 'min', 'end_timestamp' : 'max', 'number_of_page_flips' : 'sum'}).reset_index()
     gr_df['start_timestamp'] = gr_df['start_timestamp'].dt.date
     amazon_scraping_sel(gr_df)
@@ -150,5 +177,12 @@ def process_kindle_export():
     for title in list(df.Title.unique()):
         dict_new_ratio[title] = df[df['Title'] == title].actual_page_flip.sum()/new_df[new_df['Title'] == title].page_split.sum()
     new_df['page_split'] = new_df.apply(lambda x: x.page_split * dict_new_ratio[x.Title], axis = 1)
+    new_df.sort_values('Timestamp', ascending = False, inplace = True)
+    new_df.reset_index(drop=True, inplace = True)
+    new_df = new_df.reset_index().rename(columns = {"index" : "RowNum"})
+    new_df['NewSession'] = new_df.apply(lambda x: session_split(new_df, x['RowNum']), axis = 1)
+    new_df['SessionDuration'] = new_df.apply(lambda x: session_duration(new_df, x['RowNum']), axis = 1)
     new_df['Source'] = 'Kindle'
-    new_df.sort_values('Timestamp', ascending = False).to_csv('files/processed_files/kindle_processed.csv', sep = '|', index = False)
+    new_df.drop(columns = "RowNum", axis = 1).to_csv('files/processed_files/kindle_processed.csv', sep = '|', index = False)
+
+process_kindle_export()
