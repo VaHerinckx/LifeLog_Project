@@ -106,7 +106,21 @@ def download_app_data():
     OFF = input("Did Offscreen export got downloaded ? (Y/N) ")
     return MM, NUT, APH, OFF
 
-if __name__=="__main__":
+def upload_files():
+    file_names = ['files/processed_files/lfm_processed.csv', 'files/processed_files/pocket_casts_processed.csv',
+                  'files/processed_files/garmin_activities_list_processed.csv', 'files/processed_files/garmin_activities_splits_processed.csv',
+                  'files/processed_files/garmin_sleep_processed.csv', 'files/processed_files/garmin_stress_level_processed.csv',
+                  'files/processed_files/garmin_training_history_processed.csv', 'files/processed_files/kindle_gr_processed.csv',
+                  'files/processed_files/moneymgr_processed.csv', 'files/processed_files/apple_processed.csv', 'files/processed_files/offscreen_processed.csv',
+                  'files/processed_files/letterboxd_processed.csv', 'files/processed_files/weather_processed.csv',
+                  'files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv', 'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
+                  'files/processed_files/nutrilio_drinks_pbi_processed_file.csv', 'files/processed_files/nutrilio_food_pbi_processed_file.csv',
+                  'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv', 'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv',
+                  'files/processed_files/nutrilio_work_content_pbi_processed_file.csv'
+                  ]
+    update_drive(file_names)
+
+def download_process_upload():
     web_download = input("Do you want to download new data from websites? (Y/N) ")
     if web_download == "Y":
         GR, LFM, LBX = download_web_data()
@@ -215,7 +229,8 @@ if __name__=="__main__":
         for f in os.listdir('/Users/valen/Downloads'):
             if re.match(csv_regex, f):
                 count_file += 1
-                clean_rename_move_file("files/exports/offscreen_exports", "/Users/valen/Downloads", f, f.split('0-')[1], count_file)
+
+                clean_rename_move_file("files/exports/offscreen_exports", "/Users/valen/Downloads", f, f.split('000-')[1], count_file)
         print("No new offscreen export to process") if count_file == 0 else None
         process_offscreen_export()
         file_names.append('files/processed_files/offscreen_processed.csv')
@@ -241,3 +256,10 @@ if __name__=="__main__":
         print('weather_processed.csv was created \n')
         print('----------------------------------------------')
     print("No file updated") if len(file_names) == 0 else update_drive(file_names)
+
+if __name__ == "__main__":
+    download = input("Do you want to download/process/upload (1) or just upload all files (2)? (1/2) ")
+    if download == "1":
+        download_process_upload()
+    else:
+        upload_files()

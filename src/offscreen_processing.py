@@ -51,7 +51,7 @@ def screentime_before_sleep(df):
     df['sleepDate'] = pd.to_datetime(df.sleepDate, utc = True).dt.tz_localize(None)
     df2['sleepDate'] = pd.to_datetime(df2.calendarDate, utc = True).dt.tz_localize(None) - pd.Timedelta(days = 1)
     merged_df = pd.merge(df, df2[['sleepDate', "sleepStartTimestampLocal"]], on='sleepDate', how='left')
-    merged_df['time_diff'] = pd.to_datetime(merged_df['sleepStartTimestampLocal']) - merged_df['date']
+    merged_df['time_diff'] = pd.to_datetime(merged_df['sleepStartTimestampLocal']).dt.tz_localize(None) - merged_df['date']
     merged_df['within_hour_before_sleep'] = merged_df['time_diff'].apply(lambda x: 1 if x <= pd.Timedelta(hours=1) else 0)
     return merged_df.drop(["sleepDate", "time_diff"], axis = 1)
 
@@ -60,3 +60,5 @@ def process_offscreen_export():
     df = expand_df(df)
     df = screentime_before_sleep(df)
     df.sort_values("date", ascending = False).to_csv('files/processed_files/offscreen_processed.csv', sep = '|', index = False)
+
+#process_offscreen_export()

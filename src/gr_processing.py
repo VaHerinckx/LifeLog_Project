@@ -94,8 +94,9 @@ def get_genre(ISBN):
 
 def flag_clicks(row, gr_date_df):
     """Add a flag to the rows where the date a book has been read is higher than what was manually input in GoodReads"""
-    if not gr_date_df.loc[gr_date_df['Title'] == row["Title"]].empty:
-        if row.Timestamp.date() > gr_date_df.loc[gr_date_df['Title'] == row["Title"], 'Date ended'].iloc[0].date():
+    gr_date_df = gr_date_df[gr_date_df["Date ended"].notna()] #Condition added because it was failing when going through books without 'Date ended'
+    if (not gr_date_df.loc[gr_date_df['Title'] == row["Title"]].empty) & (not gr_date_df.loc[gr_date_df['Title'] == row["Title"]]["Date ended"].empty):
+        if row.Timestamp.date() > gr_date_df.loc[gr_date_df['Title'] == row["Title"]]['Date ended'].iloc[0].date():
             return 1
         else:
             return 0
@@ -133,3 +134,5 @@ def merge_gr_kindle():
     cleaned_df = cleaned_df.reset_index().rename(columns = {"index" : "rowNum"})
     cleaned_df["reading_duration"] = cleaned_df.apply(lambda x: duration(cleaned_df, x.Timestamp, x.Title, x.rowNum), axis = 1)
     cleaned_df.drop(columns = "rowNum").to_csv('files/processed_files/kindle_gr_processed.csv', sep = '|', index = False, encoding = 'utf-16')
+
+#merge_gr_kindle()

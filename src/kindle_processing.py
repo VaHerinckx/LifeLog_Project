@@ -185,4 +185,4 @@ def process_kindle_export():
     new_df['Source'] = 'Kindle'
     new_df.drop(columns = "RowNum", axis = 1).to_csv('files/processed_files/kindle_processed.csv', sep = '|', index = False)
 
-process_kindle_export()
+#process_kindle_export()
