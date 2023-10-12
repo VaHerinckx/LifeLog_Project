@@ -20,7 +20,7 @@ dict_identifier = {
 }
 
 def clean_import_file():
-    """Function to clean the import file by removing certain lines"""
+    """Function to clean the import file by removing certain lines that are creating bugs"""
     path = 'files/exports/apple_exports/apple_health_export/export.xml'
     new_path = 'files/exports/apple_exports/apple_health_export/cleaned_export.xml'
     command = f"sed -e '156,211d' {path} > {new_path}"

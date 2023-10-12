@@ -172,9 +172,9 @@ def activity_splits_extract(df):
     col_duration, col_speed, col_distance = generate_to_format_columns(activity_splits_full.columns)
     df = formatting_garmin_df(activity_splits_full, col_dt, col_duration, col_speed, col_distance)
     df = rename_formatted_columns(df, col_duration, col_speed, col_distance)
-    df['startTimeLocalSPLIT'] = df['startTimeGMTSPLIT'].apply(lambda x: time_difference_correction(x, 'GMT'))
-    df['endTimeLocalSPLIT'] = df['endTimeGMTSPLIT'].apply(lambda x: time_difference_correction(x, 'GMT'))
-    df['startTimeLocalACT'] = df['startTimeGMTACT'].apply(lambda x: time_difference_correction(x, 'GMT'))
+    df['startTimeLocalSPLIT'] = pd.to_datetime(df['startTimeGMTSPLIT'], utc=True).apply(lambda x: time_difference_correction(x, 'GMT+1'))
+    df['endTimeLocalSPLIT'] = pd.to_datetime(df['endTimeGMTSPLIT'], utc=True).apply(lambda x: time_difference_correction(x, 'GMT+1'))
+    df['startTimeLocalACT'] = pd.to_datetime(df['startTimeGMTACT'], utc=True).apply(lambda x: time_difference_correction(x, 'GMT+1'))
     df = df[df['type']==17].drop(['measurements', 'startTimeGMTACT', 'startTimeGMTSPLIT', 'startTimeSource', 'endTimeSource',\
                                   'endTimeGMTSPLIT'], axis = 1).reset_index(drop=True)
     new_df = pd.DataFrame(columns=list(dict_col.keys()))
@@ -200,28 +200,38 @@ def sleep_file(path):
     df = pd.read_json(path)
     df['averageSPO2'] = df['spo2SleepSummary'].apply(lambda x : sleep_extract(x, 'averageSPO2'))
     df['averageHR'] = df['spo2SleepSummary'].apply(lambda x : sleep_extract(x, 'averageHR'))
-    df['sleepStartTimestampLocal'] = pd.to_datetime(df['sleepStartTimestampGMT']).apply(lambda x: time_difference_correction(x, 'GMT'))
-    df['sleepEndTimestampLocal'] = pd.to_datetime(df['sleepEndTimestampGMT']).apply(lambda x: time_difference_correction(x, 'GMT'))
+    df['sleepStartTimestampLocal'] = pd.to_datetime(df['sleepStartTimestampGMT'], utc=True).apply(lambda x: time_difference_correction(x, 'GMT+1'))
+    df['sleepEndTimestampLocal'] = pd.to_datetime(df['sleepEndTimestampGMT'], utc=True).apply(lambda x: time_difference_correction(x, 'GMT+1'))
     return df
 
-def process_rename_sleep_file():
+def process_sleep_files():
     folder_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Wellness"
-    filenames = []
-    file_dates = []
     file_list = os.listdir(folder_path)
+    df_sleep = pd.DataFrame()
     for file in file_list:
         if file.endswith("sleepData.json"):
-            filenames.append(file)
-    for filename in filenames:
-        date_str = filename.split("_")[1]
-        date = int(date_str.replace("-", ""))
-        file_dates.append((date, filename))
-    file_dates_sorted = sorted(file_dates, reverse=True)
-    if file_dates_sorted:
-        biggest_date_filename = file_dates_sorted[0][1]
-        biggest_date_filepath = os.path.join(folder_path, biggest_date_filename)
-    df = sleep_file(biggest_date_filepath)
-    df.to_csv('files/processed_files/garmin_sleep_processed.csv', sep = "|")
+            filepath = os.path.join(folder_path, file)
+            df_sleep = pd.concat([df_sleep, sleep_file(filepath)], ignore_index=True)
+    df_sleep.sort_values(by="calendarDate").to_csv('files/processed_files/garmin_sleep_processed.csv', sep = "|")
+
+#def process_rename_sleep_file():
+#    folder_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Wellness"
+#    filenames = []
+#    file_dates = []
+#    file_list = os.listdir(folder_path)
+#    for file in file_list:
+#        if file.endswith("sleepData.json"):
+#            filenames.append(file)
+#    for filename in filenames:
+#        date_str = filename.split("_")[1]
+#        date = int(date_str.replace("-", ""))
+#        file_dates.append((date, filename))
+#    file_dates_sorted = sorted(file_dates, reverse=True)
+#    if file_dates_sorted:
+#        biggest_date_filename = file_dates_sorted[0][1]
+#        biggest_date_filepath = os.path.join(folder_path, biggest_date_filename)
+#    df = sleep_file(biggest_date_filepath)
+#    df.to_csv('files/processed_files/garmin_sleep_processed.csv', sep = "|")
 
 def extract_fit_files_path():
     """Function to extract paths of all .fit files in the specified folder and its subfolders"""
@@ -264,7 +274,7 @@ def process_stress_level():
     if len(data) > 0:
         df = pd.DataFrame(data)
         df_stress_level = pd.concat([df_stress_level,df], ignore_index=True).reset_index(drop = True).drop_duplicates()
-        df_stress_level['stress_level_time'] = pd.to_datetime(df_stress_level['stress_level_time']).apply(lambda x: time_difference_correction(x, 'GMT'))
+        df_stress_level['stress_level_time'] = pd.to_datetime(df_stress_level['stress_level_time'], utc=True).apply(lambda x: time_difference_correction(x, 'GMT'))
         df_stress_level['stress_level'] = df_stress_level['stress_level_value'].apply(lambda x: stress_level_qualification(x))
         df_stress_level.sort_values('stress_level_time', inplace = True)
         df_stress_level.to_csv('files/processed_files/garmin_stress_level_processed.csv', sep = '|', index = False)
@@ -286,7 +296,7 @@ def process_training_history():
             df = pd.DataFrame(data)
             dataframes.append(df)
     df = pd.concat(dataframes, ignore_index=True)
-    df['timestamp'] = pd.to_datetime(df['timestamp']).apply(lambda x: time_difference_correction(x, 'GMT'))
+    df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True).apply(lambda x: time_difference_correction(x, 'GMT'))
     df.sort_values('timestamp', ascending = False).to_csv('files/processed_files/garmin_training_history_processed.csv', sep = '|', index = False)
 
 def process_garmin_export():
@@ -298,5 +308,5 @@ def process_garmin_export():
     print("garmin_training_history_processed.csv was generated \n")
     process_stress_level()
     print("garmin_stress_level_processed.csv was generated \n")
-    process_rename_sleep_file()
+    process_sleep_files()
     print("garmin_sleep_processed.csv was generated \n")
