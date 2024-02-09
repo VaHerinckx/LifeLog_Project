@@ -5,6 +5,8 @@ from utils import time_difference_correction
 import time
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.options import Options
 
 dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
 
@@ -24,7 +26,9 @@ def amazon_scraping_sel(gr_df):
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    driver = webdriver.Chrome('files/other_files/chromedriver_mac64(2)/chromedriver',options=chrome_options)
+    chrome_service = ChromeService('files/other_files/chromedriver_mac64/chromedriver')
+    driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+    #driver = webdriver.Chrome('files/other_files/chromedriver_mac64(2)/chromedriver',options=chrome_options)
     for ASIN in new_ASIN:
         time.sleep(2)
         if ASIN in dict_ASIN.keys():

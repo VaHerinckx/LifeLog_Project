@@ -161,8 +161,8 @@ def parse_table_history(table_str):
     #Turning Unix Timestamp into proper date format
     df_history['modified at'] = pd.to_datetime(df_history['modified at'], unit = 'ms')
     #Removing milliseconds and adjusting to time difference in Taiwan
-    df_history['modified at'] = df_history['modified at'].dt.floor('S').apply(lambda x: time_difference_correction(x)).sort_values()
-    df_history['published at'] = pd.to_datetime(df_history['published at'], unit = 's').apply(lambda x: time_difference_correction(x)).sort_values()
+    df_history['modified at'] = pd.to_datetime(df_history['modified at'], utc = True).dt.floor('S').apply(lambda x: time_difference_correction(x)).sort_values()
+    df_history['published at'] = pd.to_datetime(df_history['published at'], unit = 's', utc = True).apply(lambda x: time_difference_correction(x)).sort_values()
     return df_history
 
 def merge_history_episodes(df_history,df_episodes):
