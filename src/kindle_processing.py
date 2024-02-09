@@ -7,8 +7,83 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
+import os
+from dotenv import load_dotenv
+from utils import get_response
+from openai import OpenAI
+load_dotenv()
+api_key = os.environ['OpenAI_Key']
 
 dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
+
+def prompt_book_title(client, book_title):
+    """Generates a ChatGPT prompt to get correct title out of Amazon scraped """
+    system_prompt = """You are a helpful librarian that is knowledgeable on all types of books.
+    You can speak French, English and Dutch. You are very laconic and only answer the question asked and nothing else"""
+    user_prompt = f"""I am trying to retrieve book titles by scraping Amazon on their ASIN
+    numbers, but the result sometimes contains the title along with a promotional message or the edition of the book.
+    Please me to extract the book title from the result delimited by triple backticks ```{book_title}```.
+    Please just answer with only the title and nothing else.
+    Below are examples of how your answer should look like (don't include them in your answer):
+    1. Input: "Atonement, the no1 best seller" Your answer : "Atonement"
+    2. Input: "The girl with all the Gifts: The most Original thriller you will read this year" Your answer : "The girl with all the Gifts"
+    """
+    return get_response(client, system_prompt, user_prompt)
+
+def amazon_scraping_gpt_call(gr_df):
+    """Scrapes Amazon to find the titles of Books based on their ASIN number using Selenium webdriver
+    If title is not in Goodreads list, GPT 3.5 extracts it."""
+    list_ASIN = list(gr_df['ASIN'].unique())
+    dict_path = 'files/work_files/kindle_ASIN_dictionnary.json'
+    gr_df['start_timestamp'] = pd.to_datetime(gr_df['start_timestamp'])
+    goodreads_titles = list(pd.read_csv('files/processed_files/gr_processed.csv', sep = '|').Title.unique())
+    uncap_goodreads_titles = [str(t).lower() for t in goodreads_titles]
+    with open(dict_path, 'r') as f:
+        dict_ASIN = json.load(f)
+    new_ASIN = [asin for asin in list_ASIN if asin not in dict_ASIN.keys()]
+    if len(new_ASIN) == 0:
+        return "No new ASIN"
+    client = OpenAI(api_key = api_key)
+    chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_service = ChromeService('files/other_files/chromedriver_mac64/chromedriver')
+    driver = webdriver.Chrome(service=chrome_service, options=chrome_options)
+    #driver = webdriver.Chrome('files/other_files/chromedriver_mac64(2)/chromedriver',options=chrome_options)
+    for ASIN in new_ASIN:
+        time.sleep(2)
+        if ASIN in dict_ASIN.keys():
+            continue
+        else:
+            url = f"https://www.amazon.fr/s?k={ASIN}&__mk_fr_FR=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=MCGNNB0G7BY7&sprefix=b09g6wdz9j%2Caps%2C663&ref=nb_sb_noss"
+            driver.get(url)
+            time.sleep(5)
+            page_source = driver.page_source
+            soup = BeautifulSoup(page_source, 'lxml')
+            title_element = soup.find('span', class_='a-size-base-plus a-color-base a-text-normal')
+            if title_element is None:
+                print("Title element not found.")
+                continue
+            title = title_element.text.strip()
+            cleaned_title = str(title.split('(')[0].strip()).lower()
+            print(f"Amazon scraped is {cleaned_title}\n")
+            if cleaned_title in uncap_goodreads_titles:
+                cleaned_title = goodreads_titles[uncap_goodreads_titles.index(cleaned_title)]
+                dict_ASIN[ASIN] = cleaned_title
+            else:
+                new_title = prompt_book_title(client, cleaned_title)
+                cleaned_new_title = str(new_title.split('(')[0].strip()).lower()
+                if cleaned_new_title not in uncap_goodreads_titles:
+                    new_title = input(f'GPT says title is {new_title}. It is not in GR. Input the actual title: ')
+                    dict_ASIN[ASIN] = new_title
+                else:
+                    dict_ASIN[ASIN] = goodreads_titles[uncap_goodreads_titles.index(cleaned_new_title)]
+                print('\n')
+    with open(dict_path, 'w') as f:
+        json.dump(dict_ASIN, f)
+    driver.quit()
+
 
 def amazon_scraping_sel(gr_df):
     """Scrapes Amazon to find the titles of Books based on their ASIN number using Selenium webdriver"""
@@ -163,7 +238,8 @@ def process_kindle_export():
                             #.replace(tzinfo=None))\
     gr_df = df.groupby("ASIN").aggregate({'start_timestamp' : 'min', 'end_timestamp' : 'max', 'number_of_page_flips' : 'sum'}).reset_index()
     gr_df['start_timestamp'] = gr_df['start_timestamp'].dt.date
-    amazon_scraping_sel(gr_df)
+    #amazon_scraping_sel(gr_df)
+    amazon_scraping_gpt_call(gr_df)
     with open(dict_path, 'r') as f:
         dict_ASIN = json.load(f)
     df['Title'] = df['ASIN'].map(dict_ASIN)
@@ -189,4 +265,4 @@ def process_kindle_export():
     new_df['Source'] = 'Kindle'
     new_df.drop(columns = "RowNum", axis = 1).to_csv('files/processed_files/kindle_processed.csv', sep = '|', index = False)
 
-#process_kindle_export()
+process_kindle_export()
