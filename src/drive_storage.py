@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
+from utils import get_response
 load_dotenv()
 folder_id = os.environ['Drive_folder_id']
 
@@ -31,3 +32,11 @@ def update_drive(file_names):
                 file_to_update.SetContentFile(file_name)
                 file_to_update.Upload()
                 print(f"{file_name} was updated in Google Drive")
+
+def get_response(client, system_prompt, user_prompt):
+  # Assign the role and content for each message
+  messages = [{"role": "system", "content": system_prompt},
+      		  {"role": "user", "content": user_prompt}]
+  response = client.chat.completions.create(
+      model="gpt-3.5-turbo", messages= messages, temperature=0)
+  return response.choices[0].message.content

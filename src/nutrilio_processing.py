@@ -2,7 +2,13 @@ import pandas as pd
 import regex as re
 import subprocess
 import warnings
+import os
 from pandas.errors import PerformanceWarning
+from dotenv import load_dotenv
+from utils import get_response
+from openai import OpenAI
+load_dotenv()
+api_key = os.environ['OpenAI_Key']
 warnings.filterwarnings("ignore", message="DataFrame is highly fragmented.", category=PerformanceWarning)
 
 age = 28
@@ -20,6 +26,20 @@ dict_extract_data = {"Food" : "food",
 
 dict_work_duration = {"0-2h" : 1, "0-4h" : 2, "2-3h" : 2.5, "3-4h" : 3.5, "4-6h" : 5, "4h" : 4, "6-8h" : 7,
                       "8-10h" : 9, "8h" : 8}
+
+dict_kcal = {
+    'Meat': {'A little': 50, 'Medium': 100, 'A lot': 150},
+    'Vegetables': {'A little': 50, 'Medium': 100, 'A lot': 150},
+    'Fruits': {'A little': 50, 'Medium': 100, 'A lot': 150},
+    'Carbs': {'A little': 50, 'Medium': 100, 'A lot': 150},
+    'Dairy': {'A little': 50, 'Medium': 100, 'A lot': 150},
+    'Sauces/Spices': {'A little': 5, 'Medium': 10, 'A lot': 15},
+    'Veggie alternative': {'A little': 50, 'Medium': 100, 'A lot': 150},
+    'Fish': {'A little': 50, 'Medium': 100, 'A lot': 150},
+    'Meal category': {'A little': 0, 'Medium': 0, 'A lot': 0},
+    'Sweets': {'A little': 10, 'Medium': 20, 'A lot': 30}
+}
+
 
 def generate_calory_needs():
     """Generates the calory needs of a person based on the variables declared above"""
@@ -56,6 +76,78 @@ def generate_dict_ingredients():
                                                             'Medium' : row['Medium'],
                                                             'A Lot' : row['A lot']}}
     return dict_ingredients
+
+def gpt_new_ingredient(client, ingredient):
+    """Generates a ChatGPT prompt to get info's about new ingredients added in the Nutrilio app"""
+    system_prompt = """You are a helpful chat assistant with knowledge in nutrition and health,
+    that answers question on certain ingredients and their overall healthiness.
+    You are able to understand french, chinese pinyin and english alike."""
+    user_prompt = f"""Please output the following info, separated by commas, for
+    the ingredient delimited by triple backticks:
+    1. The ingredient name
+    2. The overall healthiness of this ingredient, from 1 (worst) to 10 (best), in column "Score"
+    3. The kcal intake for 100g of this ingredient
+    4. The ingredient category of the ingredient, within this list : ['Meat','Vegetables',
+    'Fruits','Carbs','Dairy','Sauces/Spices', 'Veggie alternative', 'Fish', 'Meal category',
+    'Sweets']
+    Please just answer with only the information, separated with comma.
+    Below are examples of how your answer should look like:
+    Ingredient 1: "Chocolate bar" Output: Chocolate bar, 2, 546, Sweets
+    Ingredient 2: "Fruit salad" Output: Fruit salad, 9, 63, Fruits
+    Ingredient 3: "Hot pot" Output: Hot pot, 6, 37, Meal category
+    Ingredient 4: "Baozi" Output: Baozi, 6, 275, Carbs
+    Now provide the same for the following ingredient ```{ingredient}```"""
+    return get_response(client, system_prompt, user_prompt)
+
+def gpt_new_drinks(client, drink):
+    """Generates a ChatGPT prompt to get info's about new ingredients added in the Nutrilio app"""
+    system_prompt = """You are a helpful chat assistant with knowledge in nutrition and health,
+    that answers question on certain drinks and sort them into categories.
+    You are able to understand french, chinese pinyin and english alike."""
+    user_prompt = f"""Please output the following info, separated by commas, for
+    the drinks delimited by triple backticks:
+    1. The drink name
+    2. The category the drink belongs to. Use one of these 4 categories: soda/soft drinks, strong alcohol, light alcohol, healthy drinks.
+    Please just answer with only the information, separated with comma.
+    Below are examples of how your answer should look like:
+    Drink 1: "Champagne" Output: Champagne, Light alcohol
+    Drink 2: "Milk" Output: Milk, Healthy drinks
+    Drink 3: "Rum"	Output: Rum, Strong alcohol
+    Drink 4: "Ginger beer" Output: Ginger beer, Soft drinks
+    Now provide the same for the following drink ```{drink}```"""
+    return get_response(client, system_prompt, user_prompt)
+
+def API_new_ingredients(df):
+    dict_ingredients = generate_dict_ingredients()
+    new_ingredients = []
+    for _, row in df.iterrows():
+        if (row['food_list'] != row['food_list']) | (not row['food_list']):
+            continue
+        ingredients = [ingredient.strip()[1:-1] for ingredient in row['food_list'].split(',')]
+        for ingredient in ingredients:
+            if (ingredient not in dict_ingredients.keys()) & (ingredient not in new_ingredients):
+                new_ingredients.append(ingredient)
+    if len(new_ingredients) == 0:
+        print("No new ingredients to add to the dictionnary")
+    else:
+        client = OpenAI(api_key = api_key)
+        new_rows = []
+        for new_ing in new_ingredients:
+            prompt_result = gpt_new_ingredient(client, new_ing)
+            print(f"New ingredient added to the dictionnary : {prompt_result}")
+            dict_new_ing = {"Ingredient" : prompt_result.split(',')[0].strip(),
+                            "Score" : prompt_result.split(',')[1].strip(),
+                            "kcal" : prompt_result.split(',')[2].strip(),
+                            "Category" : prompt_result.split(',')[3].strip(),
+                            "A little" : dict_kcal[prompt_result.split(',')[3].strip()]["A little"],
+                            "Medium" : dict_kcal[prompt_result.split(',')[3].strip()]["Medium"],
+                            "A lot" : dict_kcal[prompt_result.split(',')[3].strip()]["A lot"]}
+            new_rows.append(dict_new_ing)
+        print("All new ingredients were added to the dictionnary")
+        df_ingredients = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name="Sheet1")
+        df_ingredients = df_ingredients.append(new_rows, ignore_index=True)
+        df_ingredients.to_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', index = False)
+
 
 def prompt_new_ingredients(df):
     """Generates a ChatGPT prompt to get info's about new ingredients added in the Nutrilio app"""
@@ -165,6 +257,30 @@ def extract_data(column):
         return None
     return str(column).split('(')[0].strip()
 
+def API_new_drinks(drinks):
+    df_drinks = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx')
+    new_drinks_count = 0
+    new_drinks = []
+    for drink in drinks:
+        if (drink in list(df_drinks.Drink.unique())) | (drink in new_drinks) :
+            continue
+        else:
+            new_drinks.append(drink)
+    if len(new_drinks) == 0:
+        print("No new drinks to add in the file")
+    else:
+        client = OpenAI(api_key = api_key)
+        new_rows = []
+        for new_drink in new_drinks:
+            prompt_result = gpt_new_drinks(client, new_drink)
+            print(f"New drink added to the dictionnary : {prompt_result}")
+            dict_new_drinks = {"Drink" : prompt_result.split(',')[0].strip(),
+                            "Category" : prompt_result.split(',')[1].strip()}
+            new_rows.append(dict_new_drinks)
+        print("All new drinks were added to the dictionnary")
+        df_drinks = df_drinks.append(new_rows, ignore_index=True)
+        df_drinks.to_excel('files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx', index = False)
+
 def drinks_category(drinks):
     """Generates a ChatGPT prompt to get info's about new drinks added in the Nutrilio app"""
     df_drinks = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx')
@@ -204,7 +320,8 @@ def generate_pbi_files(df, indicator):
     melted_df = melted_df[melted_df['Value'] >= 1]
     melted_df.sort_values("Full Date", ascending = False).to_csv(f"files/processed_files/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False)
     if indicator == "drinks":
-        drinks_category(list(melted_df.drinks.unique()))
+        #drinks_category(list(melted_df.drinks.unique()))
+        API_new_drinks(list(melted_df.drinks.unique()))
 
 def process_nutrilio_export():
     df = pd.read_csv(f'files/exports/nutrilio_exports/nutrilio_export.csv', sep = ',')
@@ -219,10 +336,11 @@ def process_nutrilio_export():
         column = df.pop(f"{val}_list")
         columns_to_concat.append(column)
     df = pd.concat([df.copy()] + columns_to_concat, axis=1)
-    if prompt_new_ingredients(df) == "NOK":
-        answer = input("Chat GPT output integrated in work file? (Y/N) \n")
-        while answer != 'Y':
-            answer = input("Chat GPT output integrated in work file? (Y/N) \n")
+    #if prompt_new_ingredients(df) == "NOK":
+    #    answer = input("Chat GPT output integrated in work file? (Y/N) \n")
+    #    while answer != 'Y':
+    #        answer = input("Chat GPT output integrated in work file? (Y/N) \n")
+    API_new_ingredients(df)
     #Compute each meal's healthiness score
     df['Score_meal'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[0], axis = 1)
     df['Meal_data_warning'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[1], axis = 1)
@@ -240,3 +358,5 @@ def process_nutrilio_export():
         generate_pbi_files(df, value)
         drive_list.append(f"files/processed_files/nutrilio_{value}_pbi_processed_file.csv")
     return drive_list
+
+process_nutrilio_export()

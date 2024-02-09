@@ -61,7 +61,7 @@ def expand_df(df, name_val, aggreg_method='sum'):
         new_df = pd.concat([new_df, row_expander_minutes(row, aggreg_method)], ignore_index=True)
     print(f'{df.shape[0]} rows expanded for {name_val} \n')
     new_df = new_df[['date', 'val']].groupby('date').mean().rename(columns={'val': name_val}).reset_index()
-    new_df['date'] = pd.to_datetime(new_df['date'])
+    new_df['date'] = pd.to_datetime(new_df['date'], utc=True)
     new_df.drop_duplicates(inplace=True)
     new_df.to_csv(path, sep='|', index=False)
     return new_df
