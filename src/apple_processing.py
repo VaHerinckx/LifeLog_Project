@@ -16,7 +16,19 @@ dict_identifier = {
     'heart_rate': 'HKQuantityTypeIdentifierHeartRate',
     'audio_exposure': 'HKQuantityTypeIdentifierHeadphoneAudioExposure',
     'resting_energy': 'HKQuantityTypeIdentifierBasalEnergyBurned',
-    'active_energy': 'HKQuantityTypeIdentifierActiveEnergyBurned'
+    'active_energy': 'HKQuantityTypeIdentifierActiveEnergyBurned',
+    'body_weight' : 'HKQuantityTypeIdentifierBodyMass',
+    'sleep_analysis' : 'HKCategoryTypeIdentifierSleepAnalysis'
+}
+
+#Dictionary to change the values for the sleep categorization
+dict_sleep_analysis = {
+    "HKCategoryValueSleepAnalysisAsleepUnspecified" : "Unspecified",
+    "HKCategoryValueSleepAnalysisInBed" : "In bed",
+    "HKCategoryValueSleepAnalysisAsleepDeep" : "Deep sleep",
+    "HKCategoryValueSleepAnalysisAsleepREM" : "REM sleep",
+    "HKCategoryValueSleepAnalysisAsleepCore" : "Core sleep",
+    "HKCategoryValueSleepAnalysisAwake" : "Awake"
 }
 
 def clean_import_file():
@@ -35,16 +47,21 @@ def apple_df_formatting(path):
     df.to_csv('files/exports/apple_exports/apple_health_export/cleaned_export.csv', sep='|', index=False)
     return df
 
-def select_columns(df, name_val):
+def select_columns(df, name_val, data_type):
     """Function to select columns from the DataFrame based on the column name value"""
     path = f'files/processed_files/apple_{name_val}.csv'
     df = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
-    df["@value"] = df["@value"].astype(float)
+    df["@value"] = df["@value"].astype(data_type)
     df.rename(columns={'@startDate': 'date', '@sourceName': 'source', '@value': name_val}, inplace=True)
-    new_df = df[['date', name_val]].groupby('date').mean().reset_index()
-    new_df.drop_duplicates(inplace=True)
-    new_df.to_csv(path, sep='|', index=False)
-    return new_df
+    if data_type == float:
+        df = df[['date', name_val]].groupby('date').mean().reset_index()
+    elif name_val == "sleep_analysis":
+        df = df[['date', name_val]].groupby('date').max().reset_index()
+        df["sleep_analysis"] = df["sleep_analysis"].map(dict_sleep_analysis)
+    df['date'] = pd.to_datetime(df['date'], utc=True)
+    df.drop_duplicates(inplace=True)
+    df.to_csv(path, sep='|', index=False)
+    return df
 
 def expand_df(df, name_val, aggreg_method='sum'):
     """Function to expand the DataFrame by adding rows for each minute within the given time range"""
@@ -101,8 +118,10 @@ def process_apple_export():
     df_resting_energy = expand_df(df, 'resting_energy', 'sum')
     df_active_energy = expand_df(df, 'active_energy', 'sum')
     df_walking_speed = expand_df(df, 'walking_speed', 'avg')
-    df_heart_rate = select_columns(df, 'heart_rate')
     df_audio_exposure = expand_df(df, 'audio_exposure', 'avg')
+    df_heart_rate = select_columns(df, 'heart_rate', float)
+    df_body_weight = select_columns(df, 'body_weight', float)
+    df_sleep_analysis = select_columns(df, 'sleep_analysis', str)
     apple_df = df_step_count.merge(df_step_length, how='outer', on='date') \
         .merge(df_walking_dist, how='outer', on='date') \
         .merge(df_flights_climbed, how='outer', on='date') \
@@ -110,8 +129,12 @@ def process_apple_export():
         .merge(df_active_energy, how='outer', on='date') \
         .merge(df_walking_speed, how='outer', on='date') \
         .merge(df_heart_rate, how='outer', on='date') \
-        .merge(df_audio_exposure, how='outer', on='date')
-    for col in list(apple_df.columns[1:]):
+        .merge(df_body_weight, how='outer', on='date') \
+        .merge(df_audio_exposure, how='outer', on='date') \
+        .merge(df_sleep_analysis, how='outer', on='date')
+    for col in list(apple_df.columns[1:-2]):
         apple_df[col] = apple_df[col].astype(float)
     apple_df.sort_values('date', inplace=True)
     apple_df.to_csv('files/processed_files/apple_processed.csv', sep='|', index=False)
+
+#process_apple_export()

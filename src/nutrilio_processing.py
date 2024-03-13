@@ -359,4 +359,4 @@ def process_nutrilio_export():
         drive_list.append(f"files/processed_files/nutrilio_{value}_pbi_processed_file.csv")
     return drive_list
 
-process_nutrilio_export()
+#process_nutrilio_export()
