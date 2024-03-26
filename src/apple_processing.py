@@ -18,7 +18,8 @@ dict_identifier = {
     'resting_energy': 'HKQuantityTypeIdentifierBasalEnergyBurned',
     'active_energy': 'HKQuantityTypeIdentifierActiveEnergyBurned',
     'body_weight' : 'HKQuantityTypeIdentifierBodyMass',
-    'sleep_analysis' : 'HKCategoryTypeIdentifierSleepAnalysis'
+    'sleep_analysis' : 'HKCategoryTypeIdentifierSleepAnalysis',
+    'body_fat_%' : 'HKQuantityTypeIdentifierBodyFatPercentage'
 }
 
 #Dictionary to change the values for the sleep categorization
@@ -121,6 +122,7 @@ def process_apple_export():
     df_audio_exposure = expand_df(df, 'audio_exposure', 'avg')
     df_heart_rate = select_columns(df, 'heart_rate', float)
     df_body_weight = select_columns(df, 'body_weight', float)
+    df_body_fat_perc =  select_columns(df, 'body_fat_%', float)
     df_sleep_analysis = select_columns(df, 'sleep_analysis', str)
     apple_df = df_step_count.merge(df_step_length, how='outer', on='date') \
         .merge(df_walking_dist, how='outer', on='date') \
@@ -130,6 +132,7 @@ def process_apple_export():
         .merge(df_walking_speed, how='outer', on='date') \
         .merge(df_heart_rate, how='outer', on='date') \
         .merge(df_body_weight, how='outer', on='date') \
+        .merge(df_body_fat_perc, how='outer', on='date') \
         .merge(df_audio_exposure, how='outer', on='date') \
         .merge(df_sleep_analysis, how='outer', on='date')
     for col in list(apple_df.columns[1:-2]):
