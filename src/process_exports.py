@@ -116,7 +116,10 @@ def upload_files():
                   'files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv', 'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
                   'files/processed_files/nutrilio_drinks_pbi_processed_file.csv', 'files/processed_files/nutrilio_food_pbi_processed_file.csv',
                   'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv', 'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_work_content_pbi_processed_file.csv'
+                  'files/processed_files/nutrilio_work_content_pbi_processed_file.csv',
+                  'files/processed_files/nutrilio_processed.csv', 'files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx',
+                  'files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx',
+                  'files/work_files/Objectives.xlsx'
                   ]
     update_drive(file_names)
 
