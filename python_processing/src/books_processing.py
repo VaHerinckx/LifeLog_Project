@@ -45,10 +45,10 @@ def get_book_covers(df):
         time.sleep(0.5)
 
         try:
-            # Query Google Books API
+            # Query Google Books API - requesting multiple results for scoring
             query = f"{title} {author}".replace(' ', '+')
             response = requests.get(
-                f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=1"
+                f"https://www.googleapis.com/books/v1/volumes?q={query}&maxResults=5"
             )
 
             if response.status_code == 200:
@@ -56,9 +56,45 @@ def get_book_covers(df):
 
                 # Extract cover URL if available
                 if 'items' in data and len(data['items']) > 0:
-                    volume_info = data['items'][0]['volumeInfo']
-                    if 'imageLinks' in volume_info:
-                        # Get the largest available image
+                    # Score the candidates to find the best edition
+                    candidates = []
+
+                    for item in data['items']:
+                        volume_info = item.get('volumeInfo', {})
+
+                        # Skip items without image links
+                        if 'imageLinks' not in volume_info:
+                            continue
+
+                        # Create candidate with scoring
+                        candidate = {
+                            'score': 0,
+                            'volume_info': volume_info
+                        }
+
+                        # 1. English language preference (major boost)
+                        if volume_info.get('language') == 'en':
+                            candidate['score'] += 50
+
+                        # 2. Rating boost
+                        if 'averageRating' in volume_info:
+                            candidate['score'] += min(volume_info['averageRating'] * 5, 20)
+
+                        # 3. Popularity boost (number of ratings)
+                        if 'ratingsCount' in volume_info:
+                            import math
+                            candidate['score'] += min(math.log(volume_info['ratingsCount'] + 1) * 3, 20)
+
+                        # Add to candidates
+                        candidates.append(candidate)
+
+                    # Get the best candidate
+                    if candidates:
+                        candidates.sort(key=lambda x: x['score'], reverse=True)
+                        best_candidate = candidates[0]
+                        volume_info = best_candidate['volume_info']
+
+                        # Get the best image available
                         if 'large' in volume_info['imageLinks']:
                             cover_url = volume_info['imageLinks']['large']
                         elif 'medium' in volume_info['imageLinks']:
