@@ -220,4 +220,4 @@ def process_book_exports(upload = "Y"):
         print('Books processed files were created \n')
 
 
-process_book_exports("N")
+process_book_exports("Y")
