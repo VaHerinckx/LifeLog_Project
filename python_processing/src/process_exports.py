@@ -146,27 +146,27 @@ def read_csv_with_encoding(filepath):
 
 
 def make_sample_files():
-    file_paths = ['files/processed_files/lfm_processed.csv',
-                  'files/processed_files/pocket_casts_processed.csv',
-                  'files/processed_files/garmin_activities_list_processed.csv',
-                  'files/processed_files/garmin_activities_splits_processed.csv',
-                  'files/processed_files/garmin_sleep_processed.csv',
-                  'files/processed_files/garmin_stress_level_processed.csv',
-                  'files/processed_files/garmin_training_history_processed.csv',
+    file_paths = [#'files/processed_files/lfm_processed.csv',
+                  #'files/processed_files/pocket_casts_processed.csv',
+                  #'files/processed_files/garmin_activities_list_processed.csv',
+                  #'files/processed_files/garmin_activities_splits_processed.csv',
+                  #'files/processed_files/garmin_sleep_processed.csv',
+                  #'files/processed_files/garmin_stress_level_processed.csv',
+                  #'files/processed_files/garmin_training_history_processed.csv',
                   'files/processed_files/kindle_gr_processed.csv',
-                  'files/processed_files/moneymgr_processed.csv',
-                  'files/processed_files/apple_processed.csv',
-                  'files/processed_files/offscreen_processed.csv',
-                  'files/processed_files/letterboxd_processed.csv',
-                  'files/processed_files/weather_processed.csv',
-                  'files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_drinks_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_food_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_work_content_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_processed.csv',
+                  #'files/processed_files/moneymgr_processed.csv',
+                  #'files/processed_files/apple_processed.csv',
+                  #'files/processed_files/offscreen_processed.csv',
+                  #'files/processed_files/letterboxd_processed.csv',
+                  #'files/processed_files/weather_processed.csv',
+                  #'files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv',
+                  #'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
+                  #'files/processed_files/nutrilio_drinks_pbi_processed_file.csv',
+                  #'files/processed_files/nutrilio_food_pbi_processed_file.csv',
+                  #'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv',
+                  #'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv',
+                  #'files/processed_files/nutrilio_work_content_pbi_processed_file.csv',
+                  #'files/processed_files/nutrilio_processed.csv',
                   ]
 
     for file_path in file_paths:
@@ -207,4 +207,4 @@ def make_sample_files():
 #else:
 #    upload_files()
 
-#make_sample_files()
+make_sample_files()
