@@ -1,0 +1,51 @@
+2025-05-24 18:32:30,081 - INFO - Received token response with no refresh_token. Consider reauthenticating with prompt='consent'.
+2025-05-24 18:32:30,083 - INFO - Successfully retrieved access token
+2025-05-24 18:32:34,919 - INFO - Starting upload-only workflow
+2025-05-24 18:32:34,919 - INFO - Starting file upload to Google Drive
+2025-05-24 18:32:34,919 - INFO - Uploading files/processed_files/kindle_gr_processed.csv
+2025-05-24 18:32:44,009 - INFO - Uploading files/processed_files/moneymgr_processed.csv
+2025-05-24 18:32:47,026 - INFO - Uploading files/processed_files/apple_processed.csv
+2025-05-24 18:34:19,899 - INFO - Uploading files/processed_files/garmin_activities_list_processed.csv
+2025-05-24 18:34:23,789 - INFO - Uploading files/processed_files/garmin_activities_splits_processed.csv
+2025-05-24 18:34:28,958 - INFO - Uploading files/processed_files/garmin_sleep_processed.csv
+2025-05-24 18:34:31,498 - INFO - Uploading files/processed_files/garmin_stress_level_processed.csv
+2025-05-24 18:35:14,571 - INFO - Uploading files/processed_files/garmin_training_history_processed.csv
+2025-05-24 18:35:17,133 - INFO - Uploading files/processed_files/pocket_casts_processed.csv
+2025-05-24 18:35:24,095 - INFO - Uploading files/processed_files/lfm_processed.csv
+2025-05-24 18:36:14,372 - INFO - Uploading files/processed_files/letterboxd_processed.csv
+2025-05-24 18:36:16,630 - INFO - Uploading files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv
+2025-05-24 18:36:18,788 - INFO - Uploading files/processed_files/nutrilio_dreams_pbi_processed_file.csv
+2025-05-24 18:36:21,026 - INFO - Uploading files/processed_files/nutrilio_drinks_pbi_processed_file.csv
+2025-05-24 18:36:23,480 - INFO - Uploading files/processed_files/nutrilio_food_pbi_processed_file.csv
+2025-05-24 18:36:25,937 - INFO - Uploading files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv
+2025-05-24 18:36:28,148 - INFO - Uploading files/processed_files/nutrilio_social_activity_pbi_processed_file.csv
+2025-05-24 18:36:30,135 - INFO - Uploading files/processed_files/nutrilio_work_content_pbi_processed_file.csv
+2025-05-24 18:36:32,205 - INFO - Uploading files/processed_files/nutrilio_processed.csv
+2025-05-24 18:36:36,086 - INFO - Uploading files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx
+2025-05-24 18:36:38,176 - INFO - Uploading files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx
+2025-05-24 18:36:40,275 - INFO - Uploading files/processed_files/offscreen_processed.csv
+2025-05-24 18:36:51,332 - INFO - Upload summary:
+2025-05-24 18:36:51,333 - INFO - files/processed_files/kindle_gr_processed.csv: Success
+2025-05-24 18:36:51,333 - INFO - files/processed_files/moneymgr_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/apple_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/garmin_activities_list_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/garmin_activities_splits_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/garmin_sleep_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/garmin_stress_level_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/garmin_training_history_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/pocket_casts_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/lfm_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/letterboxd_processed.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/nutrilio_dreams_pbi_processed_file.csv: Success
+2025-05-24 18:36:51,334 - INFO - files/processed_files/nutrilio_drinks_pbi_processed_file.csv: Success
+2025-05-24 18:36:51,335 - INFO - files/processed_files/nutrilio_food_pbi_processed_file.csv: Success
+2025-05-24 18:36:51,335 - INFO - files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv: Success
+2025-05-24 18:36:51,335 - INFO - files/processed_files/nutrilio_social_activity_pbi_processed_file.csv: Success
+2025-05-24 18:36:51,335 - INFO - files/processed_files/nutrilio_work_content_pbi_processed_file.csv: Success
+2025-05-24 18:36:51,335 - INFO - files/processed_files/nutrilio_processed.csv: Success
+2025-05-24 18:36:51,335 - INFO - files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx: Success
+2025-05-24 18:36:51,335 - INFO - files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx: Success
+2025-05-24 18:36:51,335 - INFO - files/processed_files/offscreen_processed.csv: Success
+2025-05-24 18:36:51,335 - INFO - Upload complete. 22 files uploaded successfully, 0 failed.
+2025-05-24 18:36:51,336 - INFO - Script execution finished

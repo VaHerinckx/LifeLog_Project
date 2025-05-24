@@ -6,11 +6,15 @@ from utils import get_response
 load_dotenv()
 folder_id = os.environ['Drive_folder_id']
 
-def update_file(file_name):
-    """Function to update a single file in Google Drive"""
+def get_google_auth():
     gauth = GoogleAuth()
     gauth.LocalWebserverAuth()  # client_secrets.json need to be in the same directory as the script
     drive = GoogleDrive(gauth)
+    return drive
+
+
+def update_file(file_name, drive):
+    """Function to update a single file in Google Drive"""
     fileList = drive.ListFile({'q': f"'{folder_id}' in parents and trashed=false"}).GetList()
     for file in fileList:
         if file['title'] == file_name.split('/')[-1]:
@@ -19,11 +23,8 @@ def update_file(file_name):
             file_to_update.Upload()
             print(f"{file_name} was updated in Google Drive")
 
-def update_drive(file_names):
+def update_drive(file_names, drive):
     """Function to update multiple files in Google Drive"""
-    gauth = GoogleAuth()
-    gauth.LocalWebserverAuth()  # client_secrets.json need to be in the same directory as the script
-    drive = GoogleDrive(gauth)
     fileList = drive.ListFile({'q': f"'{folder_id}' in parents and trashed=false"}).GetList()
     for file_name in file_names:
         for file in fileList:

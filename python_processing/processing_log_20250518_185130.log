@@ -1,0 +1,16 @@
+2025-05-18 18:51:35,488 - INFO - Received token response with no refresh_token. Consider reauthenticating with prompt='consent'.
+2025-05-18 18:51:35,489 - INFO - Successfully retrieved access token
+2025-05-18 18:51:38,508 - INFO - Starting upload-only workflow
+2025-05-18 18:51:38,509 - INFO - Starting file upload to Google Drive
+2025-05-18 18:51:38,509 - INFO - Uploading files/processed_files/lfm_processed.csv
+2025-05-18 18:52:31,119 - INFO - Uploading files/processed_files/pocket_casts_processed.csv
+2025-05-18 18:52:38,179 - INFO - Uploading files/processed_files/garmin_activities_list_processed.csv
+2025-05-18 18:52:41,326 - INFO - Uploading files/processed_files/garmin_activities_splits_processed.csv
+2025-05-18 18:52:46,781 - INFO - Uploading files/processed_files/garmin_sleep_processed.csv
+2025-05-18 18:52:49,426 - INFO - Uploading files/processed_files/garmin_stress_level_processed.csv
+2025-05-18 18:53:35,015 - INFO - Uploading files/processed_files/garmin_training_history_processed.csv
+2025-05-18 18:53:37,571 - INFO - Uploading files/processed_files/kindle_gr_processed.csv
+2025-05-18 18:53:47,096 - INFO - Uploading files/processed_files/moneymgr_processed.csv
+2025-05-18 18:53:49,901 - INFO - Uploading files/processed_files/apple_processed.csv
+2025-05-18 18:54:48,344 - INFO - Process interrupted by user
+2025-05-18 18:54:48,346 - INFO - Script execution finished

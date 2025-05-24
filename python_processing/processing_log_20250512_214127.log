@@ -1,0 +1,64 @@
+2025-05-12 21:41:35,755 - INFO - Starting download, process, and upload workflow
+2025-05-12 21:42:01,707 - INFO - Starting Goodreads processing
+2025-05-12 21:42:02,182 - INFO - Completed Goodreads processing
+2025-05-12 21:42:02,182 - INFO - Starting Last.fm processing
+2025-05-12 21:44:36,184 - INFO - Completed Last.fm processing
+2025-05-12 21:44:36,185 - INFO - Starting Books processing
+2025-05-12 21:47:32,101 - INFO - Completed Books processing
+2025-05-12 21:47:32,101 - INFO - Starting Money Manager processing
+2025-05-12 21:47:32,465 - INFO - Completed Money Manager processing
+2025-05-12 21:47:32,465 - INFO - Starting Nutrilio processing
+2025-05-12 21:47:38,368 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-12 21:47:38,834 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-12 21:47:39,366 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-12 21:47:39,875 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-12 21:47:40,326 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-12 21:47:40,825 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-12 21:47:41,415 - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-12 21:47:47,908 - ERROR - Error during Nutrilio processing: 'Hallumi'
+2025-05-12 21:47:47,931 - ERROR - Traceback (most recent call last):
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/process_exports.py", line 170, in run_process
+    process_function(*args, **kwargs)
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/nutrilio_processing.py", line 370, in process_nutrilio_export
+    nutrilio_files = create_nutrilio_files()
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/nutrilio_processing.py", line 348, in create_nutrilio_files
+    df['Score_meal'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[0], axis = 1)
+  File "/Users/valen/.pyenv/versions/3.8.13/envs/lewagon/lib/python3.8/site-packages/pandas/core/frame.py", line 8740, in apply
+    return op.apply()
+  File "/Users/valen/.pyenv/versions/3.8.13/envs/lewagon/lib/python3.8/site-packages/pandas/core/apply.py", line 688, in apply
+    return self.apply_standard()
+  File "/Users/valen/.pyenv/versions/3.8.13/envs/lewagon/lib/python3.8/site-packages/pandas/core/apply.py", line 812, in apply_standard
+    results, res_index = self.apply_series_generator()
+  File "/Users/valen/.pyenv/versions/3.8.13/envs/lewagon/lib/python3.8/site-packages/pandas/core/apply.py", line 828, in apply_series_generator
+    results[i] = self.f(v)
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/nutrilio_processing.py", line 348, in <lambda>
+    df['Score_meal'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[0], axis = 1)
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/nutrilio_processing.py", line 211, in score_meal
+    if dict_ingredients[ingredient]["Category"] == "Meal category":
+KeyError: 'Hallumi'
+
+2025-05-12 21:47:47,949 - INFO - Starting Apple Health processing
+2025-05-12 22:20:27,008 - INFO - Completed Apple Health processing
+2025-05-12 22:20:27,009 - INFO - Starting Offscreen processing
+2025-05-12 22:22:52,012 - INFO - Completed Offscreen processing
+2025-05-12 22:22:52,012 - INFO - Starting Letterboxd processing
+2025-05-12 22:22:52,770 - ERROR - Error during Letterboxd processing: maximum recursion depth exceeded while calling a Python object
+2025-05-12 22:22:52,775 - ERROR - Traceback (most recent call last):
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/process_exports.py", line 170, in run_process
+    logging.info(f"Starting {process_name} processing")
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/letterboxd_processing.py", line 50, in process_letterboxd_export
+    process_letterboxd_export()
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/letterboxd_processing.py", line 50, in process_letterboxd_export
+    process_letterboxd_export()
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/letterboxd_processing.py", line 50, in process_letterboxd_export
+    process_letterboxd_export()
+  [Previous line repeated 989 more times]
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/letterboxd_processing.py", line 47, in process_letterboxd_export
+    if re.match(csv_regex, f):
+  File "/Users/valen/.pyenv/versions/3.8.13/lib/python3.8/re.py", line 191, in match
+    return _compile(pattern, flags).match(string)
+  File "/Users/valen/.pyenv/versions/3.8.13/lib/python3.8/re.py", line 291, in _compile
+    if isinstance(flags, RegexFlag):
+RecursionError: maximum recursion depth exceeded while calling a Python object
+
+2025-05-12 22:22:52,775 - WARNING - The following processing steps failed: Nutrilio, Letterboxd

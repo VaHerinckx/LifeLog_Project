@@ -6,6 +6,7 @@ import json
 import os
 import time
 from pathlib import Path
+from drive_storage import update_drive, get_google_auth, update_file
 
 def get_book_covers(df):
     """
@@ -211,13 +212,14 @@ def produce_book_file():
 def process_book_exports(upload = "Y"):
     file_names = []
     print('Merging the Kindle & Goodreads processed files \n')
+    drive = get_google_auth()
     produce_book_file()
     file_names.append('files/processed_files/kindle_gr_processed.csv')
     if upload == "Y":
-        update_drive(file_names)
+        update_drive(file_names, drive)
         print('Books processed files were created and uploaded to the Drive \n')
     else:
         print('Books processed files were created \n')
 
 
-process_book_exports("Y")
+#process_book_exports("Y")

@@ -1,0 +1,16 @@
+2025-05-18 18:33:10,079 - INFO - Received token response with no refresh_token. Consider reauthenticating with prompt='consent'.
+2025-05-18 18:33:10,081 - INFO - Successfully retrieved access token
+2025-05-18 18:33:16,704 - INFO - Starting download, process, and upload workflow
+2025-05-18 18:33:40,968 - INFO - Starting Goodreads processing
+2025-05-18 18:33:41,412 - INFO - Completed Goodreads processing
+2025-05-18 18:33:41,412 - INFO - 
+
+2025-05-18 18:33:41,413 - ERROR - Unexpected error in main process: update_file() missing 2 required positional arguments: 'file_name' and 'drive'
+2025-05-18 18:33:41,413 - ERROR - Traceback (most recent call last):
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/process_exports.py", line 311, in <module>
+    download_process_upload()
+  File "/Users/valen/code/VaHerinckx/LifeLog_Project/python_processing/src/process_exports.py", line 219, in download_process_upload
+    update_file()
+TypeError: update_file() missing 2 required positional arguments: 'file_name' and 'drive'
+
+2025-05-18 18:33:41,413 - INFO - Script execution finished
