@@ -93,3 +93,6 @@ def process_gr_export():
     clean_rename_move_file("files/exports/goodreads_exports", "/Users/valen/Downloads", "goodreads_library_export.csv", "gr_export.csv")
     create_gr_file()
     print('gr_processed.csv was created \n')
+
+
+#process_gr_export()

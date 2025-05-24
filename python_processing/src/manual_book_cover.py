@@ -251,4 +251,5 @@ def manually_change_book_cover(title_input=None, author_only=None):
     except Exception as e:
         print(f"Error: {str(e)}")
 
-manually_change_book_cover()
+
+#manually_change_book_cover()

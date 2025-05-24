@@ -1,0 +1,4 @@
+2025-05-24 22:01:14,465 - INFO - Received token response with no refresh_token. Consider reauthenticating with prompt='consent'.
+2025-05-24 22:01:14,466 - INFO - Successfully retrieved access token
+2025-05-24 22:01:23,898 - INFO - Creating sample files
+2025-05-24 22:01:32,396 - INFO - Script execution finished
