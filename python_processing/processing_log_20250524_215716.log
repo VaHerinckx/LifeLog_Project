@@ -1,7 +1,0 @@
-2025-05-24 21:57:26,347 - INFO - Received token response with no refresh_token. Consider reauthenticating with prompt='consent'.
-2025-05-24 21:57:26,348 - INFO - Successfully retrieved access token
-2025-05-24 21:57:43,071 - INFO - Creating sample files
-2025-05-24 21:57:43,080 - INFO - Creating sample file for kindle_gr_processed
-2025-05-24 21:57:43,101 - WARNING - Warning: files/processed_files/kindle_gr_processed.csv might have a different encoding
-2025-05-24 21:57:43,302 - INFO - Successfully created sample file: files/sample_files/kindle_gr_processed_sample.csv
-2025-05-24 21:57:43,303 - INFO - Script execution finished
