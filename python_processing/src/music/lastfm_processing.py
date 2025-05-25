@@ -6,8 +6,8 @@ import os
 import math
 from dotenv import load_dotenv
 from datetime import timedelta
-from utils import time_difference_correction, clean_rename_move_file
-from drive_storage import update_drive
+from src.utils.utils_functions import time_difference_correction, clean_rename_move_file
+from src.utils.drive_storage import update_drive
 load_dotenv()
 
 def add_spotify_legacy(df):

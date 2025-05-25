@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import json
-from utils import time_difference_correction
+from src.utils.utils_functions import time_difference_correction
 
 folder_path = 'files/exports/spotify_exports/'
 artist_names = []

@@ -4,7 +4,7 @@ import unidecode
 import os
 import json
 from dotenv import load_dotenv
-from utils import time_difference_correction, get_response, clean_rename_move_folder, find_unzip_folder
+from src.utils.utils_functions import time_difference_correction, get_response, clean_rename_move_folder, find_unzip_folder
 from lingua import Language, LanguageDetectorBuilder
 from deep_translator import GoogleTranslator
 from nltk.tokenize import word_tokenize
@@ -13,7 +13,7 @@ from nltk.stem import WordNetLemmatizer
 #from langdetect import detect
 #from googletrans import Translator
 from openai import OpenAI
-from drive_storage import update_drive
+from src.utils.drive_storage import update_drive
 import requests
 import time
 load_dotenv()

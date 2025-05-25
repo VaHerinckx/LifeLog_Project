@@ -1,0 +1,4 @@
+2025-05-25 15:48:40,020 - INFO - Received token response with no refresh_token. Consider reauthenticating with prompt='consent'.
+2025-05-25 15:48:40,021 - INFO - Successfully retrieved access token
+2025-05-25 16:11:09,108 - INFO - Process interrupted by user
+2025-05-25 16:11:09,111 - INFO - Script execution finished
