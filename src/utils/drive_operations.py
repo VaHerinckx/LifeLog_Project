@@ -1,7 +1,7 @@
 # This file simply imports the existing drive_storage.py functions
 # Your drive_storage.py already handles authentication, error handling, and uploading perfectly
 
-from drive_storage import update_file, update_drive, check_credentials_status, test_drive_connection
+from src.utils.drive_storage import update_file, update_drive, check_credentials_status, test_drive_connection
 import os
 
 

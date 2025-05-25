@@ -1,9 +1,9 @@
 import pandas as pd
 import os
 from datetime import date
-from utils.file_operations import clean_rename_move_file, check_file_exists
-from utils.web_operations import open_web_urls, prompt_user_download_status
-from utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.file_operations import clean_rename_move_file, check_file_exists
+from src.utils.web_operations import open_web_urls, prompt_user_download_status
+from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 
 
 def add_sorting_columns(df):
@@ -83,7 +83,7 @@ def move_moneymgr_files():
     return success
 
 
-def process_moneymgr_export():
+def create_moneymgr_file():
     """
     Main processing logic for Money Manager data.
     Reads the Excel file, processes it, and saves as CSV.
@@ -92,7 +92,7 @@ def process_moneymgr_export():
     print("⚙️  Processing Money Manager data...")
 
     input_file = "files/exports/moneymgr_exports/moneymgr_export.xlsx"
-    output_file = "files/processed_files/moneymgr_processed.csv"
+    output_file = "files/processed_files/finance/moneymgr_processed.csv"
 
     try:
         # Check if input file exists
@@ -135,12 +135,7 @@ def upload_moneymgr_results():
     """
     print("☁️  Uploading Money Manager results to Google Drive...")
 
-    files_to_upload = [
-        'files/processed_files/moneymgr_processed.csv',
-        'files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx',  # Related file
-        'files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx',  # Related file
-        'files/work_files/Objectives.xlsx'  # Related file
-    ]
+    files_to_upload = ['files/processed_files/finance/moneymgr_processed.csv']
 
     # Filter to only existing files
     existing_files = [f for f in files_to_upload if os.path.exists(f)]
@@ -160,13 +155,24 @@ def upload_moneymgr_results():
     return success
 
 
+def process_moneymgr_export(upload="Y"):
+    """
+    Legacy function for backward compatibility.
+    This maintains the original interface while using the new pipeline.
+    """
+    if upload == "Y":
+        return full_moneymgr_pipeline(auto_full=True)
+    else:
+        return create_moneymgr_file()
+
+
 def full_moneymgr_pipeline(auto_full=False):
     """
     Complete Money Manager pipeline with 4 options.
 
     Options:
     1. Full pipeline (download → move → process → upload)
-    2. Download data only (open app instructions + move files)
+    2. Download data only (get files from app)
     3. Process existing file only (just processing)
     4. Process existing file and upload (process → upload)
 
@@ -209,10 +215,10 @@ def full_moneymgr_pipeline(auto_full=False):
 
         # Step 3: Process (fallback to option 3 if no new files)
         if move_success:
-            process_success = process_moneymgr_export()
+            process_success = create_moneymgr_file()
         else:
             print("⚠️  No new files found, attempting to process existing files...")
-            process_success = process_moneymgr_export()
+            process_success = create_moneymgr_file()
 
         # Step 4: Upload
         if process_success:
@@ -232,11 +238,11 @@ def full_moneymgr_pipeline(auto_full=False):
 
     elif choice == "3":
         print("\n⚙️  Processing existing Money Manager file only...")
-        success = process_moneymgr_export()
+        success = create_moneymgr_file()
 
     elif choice == "4":
         print("\n⚙️  Processing existing file and uploading...")
-        process_success = process_moneymgr_export()
+        process_success = create_moneymgr_file()
         if process_success:
             success = upload_moneymgr_results()
         else:
