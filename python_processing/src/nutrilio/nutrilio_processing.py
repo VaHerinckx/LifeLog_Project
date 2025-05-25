@@ -6,10 +6,10 @@ import os
 from datetime import date
 from pandas.errors import PerformanceWarning
 from dotenv import load_dotenv
-from utils import get_response
+from src.utils.utils_functions import get_response
 from openai import OpenAI
-from utils import clean_rename_move_file
-from drive_storage import update_drive
+from src.utils.utils_functions import clean_rename_move_file
+from src.utils.drive_storage import update_drive
 load_dotenv()
 api_key = os.environ['OpenAI_Key']
 warnings.filterwarnings("ignore", message="DataFrame is highly fragmented.", category=PerformanceWarning)

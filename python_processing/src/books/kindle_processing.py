@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import json
-from utils import time_difference_correction, find_unzip_folder, clean_rename_move_folder
+from src.utils.utils_functions import time_difference_correction, find_unzip_folder, clean_rename_move_folder
 import time
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.chrome.options import Options
 import os
 from dotenv import load_dotenv
-from utils import get_response
+from src.utils.utils_functions import get_response
 from openai import OpenAI
 load_dotenv()
 api_key = os.environ['OpenAI_Key']

@@ -1,13 +1,13 @@
 import pandas as pd
 import os
 import json
-from utils import time_difference_correction, find_unzip_folder, clean_rename_move_folder
+from src.utils.utils_functions import time_difference_correction, find_unzip_folder, clean_rename_move_folder
 import os
 import fnmatch
 import fitparse
 import re
 import zipfile
-from drive_storage import update_drive
+from src.utils.drive_storage import update_drive
 
 dict_stress_level = {0: 'Rest', 26: 'Low', 51: 'Medium', 76: 'High'}
 dict_col = {

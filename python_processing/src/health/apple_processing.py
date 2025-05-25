@@ -2,8 +2,8 @@ import pandas as pd
 import os
 import xmltodict
 import subprocess
-from utils import clean_rename_move_folder, find_unzip_folder
-from drive_storage import update_drive
+from src.utils.utils_functions import clean_rename_move_folder, find_unzip_folder
+from src.utils.drive_storage import update_drive
 
 # Disable pandas warning about chained assignment
 pd.options.mode.chained_assignment = None  # default='warn'

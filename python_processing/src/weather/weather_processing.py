@@ -4,8 +4,8 @@ from geopy.geocoders import Nominatim
 from dotenv import load_dotenv
 import os
 import pandas as pd
-from utils import time_difference_correction
-from drive_storage import update_drive
+from src.utils.utils_functions import time_difference_correction
+from src.utils.drive_storage import update_drive
 
 load_dotenv()
 

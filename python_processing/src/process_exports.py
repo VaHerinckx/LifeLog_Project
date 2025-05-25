@@ -5,20 +5,25 @@ import sys
 import traceback
 import logging
 from datetime import datetime
-from lastfm_processing import process_lfm_export
-from goodreads_processing import process_gr_export
-from books_processing import process_book_exports
-from pocket_casts_processing import process_pocket_casts_export
-from garmin_processing import process_garmin_export
-from kindle_processing import process_kindle_export
-from moneymgr_processing import process_moneymgr_export
-from nutrilio_processing import process_nutrilio_export
-from apple_processing import process_apple_export
-from offscreen_processing import process_offscreen_export
-from weather_processing import get_weather_data
-from letterboxd_processing import process_letterboxd_export
-from drive_storage import update_drive, get_google_auth, update_file
+from src.music.lastfm_processing import process_lfm_export
+from src.books.goodreads_processing import process_gr_export
+from src.books.books_processing import process_book_exports
+from src.books.kindle_processing import process_kindle_export
+from src.podcasts.pocket_casts_processing import process_pocket_casts_export
+from src.sport.garmin_processing import process_garmin_export
+from src.finance.moneymgr_processing import process_moneymgr_export
+from src.nutrilio.nutrilio_processing import process_nutrilio_export
+from src.health.apple_processing import process_apple_export
+from src.screentime.offscreen_processing import process_offscreen_export
+from src.weather.weather_processing import get_weather_data
+from src.movies.letterboxd_processing import process_letterboxd_export
 
+# Updated imports for enhanced authentication
+from src.utils.drive_storage import (
+    update_drive,
+    check_credentials_status,
+    test_drive_connection,
+)
 
 # Set up logging
 logging.basicConfig(
@@ -30,8 +35,36 @@ logging.basicConfig(
     ]
 )
 
-drive = get_google_auth()
+# Initialize Drive connection at startup
+def initialize_drive_connection():
+    """Initialize and test Google Drive connection with enhanced authentication"""
+    print("🔗 Initializing Google Drive connection...")
+    print("=" * 60)
 
+    # Check current credential status
+    print("📋 Checking credential status...")
+    check_credentials_status()
+
+    # Test the connection
+    print("\n🧪 Testing Drive connection...")
+    connection_success = test_drive_connection()
+
+    if connection_success:
+        print("✅ Google Drive initialization successful!")
+        print("=" * 60)
+        return True
+    else:
+        print("❌ Google Drive initialization failed!")
+        print("=" * 60)
+        return False
+
+# Initialize connection once at startup
+DRIVE_INITIALIZED = initialize_drive_connection()
+if not DRIVE_INITIALIZED:
+    print("❌ Cannot proceed without Google Drive connection. Exiting.")
+    sys.exit(1)
+
+# File organization
 reading_files = ['files/processed_files/kindle_gr_processed.csv']
 finance_files = ['files/processed_files/moneymgr_processed.csv']
 health_files = ['files/processed_files/apple_processed.csv', 'files/processed_files/garmin_activities_list_processed.csv',
@@ -47,7 +80,7 @@ nutrilio_files = ['files/processed_files/nutrilio_body_sensations_pbi_processed_
                   'files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', 'files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx',]
 screentime_files = ['files/processed_files/offscreen_processed.csv']
 weather_files = ['files/processed_files/weather_processed.csv']
-all_files = reading_files + finance_files+ health_files + podcast_files + music_files + movies_files + nutrilio_files + screentime_files
+all_files = reading_files + finance_files+ health_files + podcast_files + music_files + movies_files + nutrilio_files + screentime_files + weather_files
 
 dict_upload = {
     "podcast" : podcast_files,
@@ -96,40 +129,46 @@ def download_app_data():
 
 
 def upload_files():
-    """Upload processed files to Google Drive"""
+    """Upload processed files to Google Drive using enhanced authentication"""
     logging.info("Starting file upload to Google Drive")
     file_names = all_files
 
-    # Track which files were successfully uploaded
-    upload_results = []
+    print(f"\n📤 Starting upload of {len(file_names)} files...")
+    print("=" * 50)
 
-    for file_name in file_names:
-        try:
-            logging.info(f"Uploading {file_name}")
-            update_drive([file_name], drive)
-            upload_results.append((file_name, "Success"))
-        except Exception as e:
-            error_msg = f"Failed to upload {file_name}: {str(e)}"
-            logging.error(error_msg)
-            upload_results.append((file_name, f"Failed: {str(e)}"))
+    # Use the enhanced update_drive function
+    success = update_drive(file_names)
 
-    # Log summary of upload results
-    logging.info("Upload summary:")
-    for file_name, result in upload_results:
-        logging.info(f"{file_name}: {result}")
+    if success:
+        print("🎉 All files uploaded successfully!")
+        logging.info("All files uploaded successfully")
+    else:
+        print("⚠️  Some files failed to upload. Check the log above for details.")
+        logging.warning("Some files failed to upload")
 
-    # Count successes and failures
-    successes = sum(1 for _, result in upload_results if result == "Success")
-    failures = len(upload_results) - successes
+    print("=" * 50)
+    return success
 
-    logging.info(f"Upload complete. {successes} files uploaded successfully, {failures} failed.")
-    print(f"Upload complete. {successes} files uploaded successfully, {failures} failed.")
 
-    if failures > 0:
-        print("The following files failed to upload:")
-        for file_name, result in upload_results:
-            if result != "Success":
-                print(f"  - {file_name}")
+def upload_file_list(file_list):
+    """Upload a specific list of files to Google Drive"""
+    logging.info(f"Starting upload of {len(file_list)} files")
+
+    print(f"\n📤 Starting upload of {len(file_list)} files...")
+    print("=" * 40)
+
+    # Use the enhanced update_drive function
+    success = update_drive(file_list)
+
+    if success:
+        print("✅ Files uploaded successfully!")
+        logging.info("Files uploaded successfully")
+    else:
+        print("⚠️  Some files failed to upload. Check the log above for details.")
+        logging.warning("Some files failed to upload")
+
+    print("=" * 40)
+    return success
 
 
 def download_process_upload():
@@ -181,7 +220,9 @@ def download_process_upload():
             try:
                 logging.info(f"Starting {process_name} processing")
                 print('----------------------------------------------')
+                print(f'Starting the processing of the {process_name} export')
                 process_function(*args, **kwargs)
+                print(f'✅ {process_name} processing completed successfully')
                 print('----------------------------------------------')
                 logging.info(f"Completed {process_name} processing")
                 logging.info(f"\n")
@@ -190,7 +231,7 @@ def download_process_upload():
                 error_msg = f"Error during {process_name} processing: {str(e)}"
                 logging.error(error_msg)
                 logging.error(traceback.format_exc())
-                print(f"ERROR: {error_msg}")
+                print(f"❌ ERROR: {error_msg}")
                 print("Continuing with next step...")
                 print('----------------------------------------------')
                 logging.info(f"\n")
@@ -201,65 +242,80 @@ def download_process_upload():
     # Run each process with error handling
     gr_success = run_process(GR, process_gr_export, "Goodreads")
     kin_success = run_process(KIN, process_kindle_export, "Kindle")
-    update_drive(reading_files, drive)
 
+    # Upload reading files if either Goodreads or Kindle was processed
+    if gr_success or kin_success:
+        upload_file_list(reading_files)
 
     # For steps that depend on other steps being successful
     if (KIN == "Y" or GR == 'Y') and (kin_success is not False or gr_success is not False):
         try:
             logging.info("Starting Books processing")
             print('----------------------------------------------')
+            print('Starting the processing of the Books export (combining Goodreads + Kindle)')
             process_book_exports(upload="N")
+            print('✅ Books processing completed successfully')
             print('----------------------------------------------')
             logging.info("Completed Books processing")
+            upload_file_list(reading_files)
         except Exception as e:
             error_msg = f"Error during Books processing: {str(e)}"
             logging.error(error_msg)
             logging.error(traceback.format_exc())
-            print(f"ERROR: {error_msg}")
+            print(f"❌ ERROR: {error_msg}")
             print("Continuing with next step...")
             print('----------------------------------------------')
             failed_steps.append("Books")
 
     # Continue with independent processes
-    run_process(LFM, process_lfm_export, "Last.fm", upload="N")
-    run_process(PCC, process_pocket_casts_export, "Pocket Casts", upload="N")
-    run_process(GAR, process_garmin_export, "Garmin", upload="N")
-    run_process(MM, process_moneymgr_export, "Money Manager", upload="N")
-    run_process(NUT, process_nutrilio_export, "Nutrilio", upload="N")
-    run_process(APH, process_apple_export, "Apple Health", upload="N")
-    run_process(OFF, process_offscreen_export, "Offscreen", upload="N")
-    run_process(LBX, process_letterboxd_export, "Letterboxd", upload="N")
-    run_process(WEA, get_weather_data, "Weather", upload="N")
+    if run_process(LFM, process_lfm_export, "Last.fm", upload="N"):
+        upload_file_list(music_files)
+
+    if run_process(PCC, process_pocket_casts_export, "Pocket Casts", upload="N"):
+        upload_file_list(podcast_files)
+
+    if run_process(GAR, process_garmin_export, "Garmin", upload="N"):
+        upload_file_list(health_files)
+
+    if run_process(MM, process_moneymgr_export, "Money Manager", upload="N"):
+        upload_file_list(finance_files)
+
+    if run_process(NUT, process_nutrilio_export, "Nutrilio", upload="N"):
+        upload_file_list(nutrilio_files)
+
+    if run_process(APH, process_apple_export, "Apple Health", upload="N"):
+        upload_file_list(health_files)
+
+    if run_process(OFF, process_offscreen_export, "Offscreen", upload="N"):
+        upload_file_list(screentime_files)
+
+    if run_process(LBX, process_letterboxd_export, "Letterboxd", upload="N"):
+        upload_file_list(movies_files)
+
+    if run_process(WEA, get_weather_data, "Weather", upload="N"):
+        upload_file_list(weather_files)
 
     # Report on any failures
     if failed_steps:
         logging.warning(f"The following processing steps failed: {', '.join(failed_steps)}")
-        print("\nWARNING: The following steps had errors:")
+        print(f"\n⚠️  WARNING: The following steps had errors:")
         for step in failed_steps:
             print(f"  - {step}")
         print("\nCheck the log file for details.")
-
-        proceed = input("\nSome steps failed. Do you still want to upload the files? (Y/N) ")
-        if proceed.upper() != 'Y':
-            logging.info("Upload canceled by user after processing failures")
-            return
-
-    # Upload files regardless of individual processing failures
-    try:
-        logging.info("Starting file upload")
-        upload_files()
-        logging.info("Completed file upload")
-    except Exception as e:
-        logging.error(f"Error during file upload: {str(e)}")
-        logging.error(traceback.format_exc())
-        print(f"ERROR during upload: {str(e)}")
+    else:
+        print("\n🎉 All processing steps completed successfully!")
 
 
 def make_sample_files():
     """Create sample files for testing or documentation"""
     file_paths = [
         'files/processed_files/kindle_gr_processed.csv',
+        'files/processed_files/pocket_casts_processed.csv',
+        'files/processed_files/lfm_processed.csv',
+        'files/processed_files/garmin_activities_list_processed.csv',
+        'files/processed_files/letterboxd_processed.csv',
+        'files/processed_files/moneymgr_processed.csv',
+        'files/processed_files/nutrilio_processed.csv',
         # Add other file paths as needed
     ]
 
@@ -267,7 +323,7 @@ def make_sample_files():
         try:
             file_name = file_path.split('/')[2].split(".")[0]
             logging.info(f"Creating sample file for {file_name}")
-            print(file_name)
+            print(f"📝 Creating sample for {file_name}")
 
             try:
                 df = pd.read_csv(file_path, sep='|')
@@ -281,68 +337,107 @@ def make_sample_files():
             sample_path = f"files/sample_files/{file_name}_sample.csv"
             df.head(20).to_csv(sample_path, sep="|", encoding='utf-16', index=False)
             logging.info(f"Successfully created sample file: {sample_path}")
+            print(f"✅ Sample created: {sample_path}")
         except Exception as e:
             logging.error(f"Error creating sample file for {file_path}: {str(e)}")
             logging.error(traceback.format_exc())
-            print(f"ERROR creating sample for {file_path}: {str(e)}")
+            print(f"❌ ERROR creating sample for {file_path}: {str(e)}")
 
 
 def upload_single_file():
-    print("-------------------------------------------------")
-    print("Choose the data you want to upload from this list")
-    for key in dict_upload.keys():
-        print(key)
-    print("-------------------------------------------------")
-    choice = input("Your choice : ")
+    """Upload files for a specific data category"""
+    print("-" * 60)
+    print("📤 Choose the data category you want to upload from this list:")
+    for i, key in enumerate(dict_upload.keys(), 1):
+        print(f"  {i}. {key.title()}")
+    print("-" * 60)
+
+    choice = input("Your choice (name or number): ").lower().strip()
+
+    # Handle both numeric and text input
+    if choice.isdigit():
+        choices = list(dict_upload.keys())
+        choice_index = int(choice) - 1
+        if 0 <= choice_index < len(choices):
+            choice = choices[choice_index]
+        else:
+            logging.warning(f"Invalid numeric option selected: {choice}")
+            print("❌ Invalid option. Please run the script again and select a valid option")
+            return
+
     if choice in dict_upload.keys():
-        update_drive(dict_upload[choice], drive)
+        print(f"📤 Uploading {choice} files...")
+        success = upload_file_list(dict_upload[choice])
+        if success:
+            print(f"✅ {choice.title()} files uploaded successfully!")
+        else:
+            print(f"⚠️  Some {choice} files failed to upload.")
     else:
         logging.warning(f"Invalid option selected: {choice}")
-        print("Invalid option. Please run the script again and select a valid option")
+        print("❌ Invalid option. Please run the script again and select a valid option")
 
 
 # Main execution block
-try:
-    download = input("""Do you want to download/process/upload (1), just upload all files (2), create sample files (3), or upload one file (4)? (1/2/3/4) """)
+def main():
+    """Main execution function with enhanced error handling"""
+    try:
+        print("\n🚀 LifeLog Data Processing System")
+        print("=" * 60)
 
-    if download == "1":
-        logging.info("Starting download, process, and upload workflow")
-        download_process_upload()
-    elif download == "2":
-        logging.info("Starting upload-only workflow")
-        try:
-            upload_files()
-        except Exception as e:
-            logging.error(f"Error during file upload: {str(e)}")
-            logging.error(traceback.format_exc())
-            print(f"ERROR during upload: {str(e)}")
-    if download == "3":
-        logging.info("Creating sample files")
-        try:
-            make_sample_files()
-        except Exception as e:
-            logging.error(f"Error creating sample files: {str(e)}")
-            logging.error(traceback.format_exc())
-            print(f"ERROR creating sample files: {str(e)}")
-    if download == "4":
-        logging.info("Creating sample files")
-        try:
-            upload_single_file()
-        except Exception as e:
-            logging.error(f"Error uploading files: {str(e)}")
-            logging.error(traceback.format_exc())
-            print(f"ERROR uploading files: {str(e)}")
-    else:
-        logging.warning(f"Invalid option selected: {download}")
-        print("Invalid option. Please run the script again and select 1, 2, or 3.")
+        download = input("""Choose an option:
+1. Download/process/upload all data
+2. Upload all existing files
+3. Create sample files for testing
+4. Upload files for specific category
 
-except KeyboardInterrupt:
-    print("\nProcess interrupted by user.")
-    logging.info("Process interrupted by user")
-except Exception as e:
-    logging.error(f"Unexpected error in main process: {str(e)}")
-    logging.error(traceback.format_exc())
-    print(f"CRITICAL ERROR: {str(e)}")
-finally:
-    print("\nProcessing complete. Check log file for details.")
-    logging.info("Script execution finished")
+Your choice (1/2/3/4): """)
+
+        if download == "1":
+            logging.info("Starting download, process, and upload workflow")
+            print("\n📋 Starting complete data processing workflow...")
+            download_process_upload()
+        elif download == "2":
+            logging.info("Starting upload-only workflow")
+            print("\n📤 Starting upload of all processed files...")
+            try:
+                upload_files()
+            except Exception as e:
+                logging.error(f"Error during file upload: {str(e)}")
+                logging.error(traceback.format_exc())
+                print(f"❌ ERROR during upload: {str(e)}")
+        elif download == "3":
+            logging.info("Creating sample files")
+            print("\n📝 Creating sample files for testing...")
+            try:
+                make_sample_files()
+            except Exception as e:
+                logging.error(f"Error creating sample files: {str(e)}")
+                logging.error(traceback.format_exc())
+                print(f"❌ ERROR creating sample files: {str(e)}")
+        elif download == "4":
+            logging.info("Starting single category upload")
+            print("\n📤 Starting category-specific upload...")
+            try:
+                upload_single_file()
+            except Exception as e:
+                logging.error(f"Error uploading files: {str(e)}")
+                logging.error(traceback.format_exc())
+                print(f"❌ ERROR uploading files: {str(e)}")
+        else:
+            logging.warning(f"Invalid option selected: {download}")
+            print("❌ Invalid option. Please run the script again and select 1, 2, 3, or 4.")
+
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Process interrupted by user.")
+        logging.info("Process interrupted by user")
+    except Exception as e:
+        logging.error(f"Unexpected error in main process: {str(e)}")
+        logging.error(traceback.format_exc())
+        print(f"💥 CRITICAL ERROR: {str(e)}")
+    finally:
+        print(f"\n📋 Processing complete. Check log file for details.")
+        logging.info("Script execution finished")
+
+
+if __name__ == "__main__":
+    main()

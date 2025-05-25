@@ -3,7 +3,7 @@ import numpy as np
 import subprocess
 import requests
 import time
-from utils import clean_rename_move_file
+from src.utils.utils_functions import clean_rename_move_file
 
 fiction_genres = ['drama', 'horror', 'thriller']
 
