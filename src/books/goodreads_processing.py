@@ -603,6 +603,9 @@ def create_goodreads_file():
         if 'Title' in expanded_df.columns:
             expanded_df['Title'] = expanded_df['Title'].apply(lambda x: str(x).strip())
 
+        # Sort the df by dates
+        expanded_df = expanded_df.sort_values(by="Timestamp", ascending=False)
+
         # Save processed file
         output_path = 'files/processed_files/books/gr_processed.csv'
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -766,8 +769,6 @@ def full_goodreads_pipeline(auto_full=False):
     print("="*60)
 
     return success
-
-
 
 
 
