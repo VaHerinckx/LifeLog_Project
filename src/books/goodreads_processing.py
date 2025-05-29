@@ -1,9 +1,10 @@
-# Enhanced goodreads_processing.py with automated scraping pipeline
 import pandas as pd
 import numpy as np
 import requests
 import time
 import os
+import json
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -15,28 +16,91 @@ from src.utils.drive_operations import upload_multiple_files, verify_drive_conne
 fiction_genres = ['drama', 'horror', 'thriller']
 
 
-def load_existing_books():
-    """Load books that are already processed to avoid duplicates during scraping"""
+def load_reading_dates_json():
+    """Load reading dates from JSON file"""
+    json_path = 'files/work_files/gr_work_files/reading_dates.json'
+
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, 'r') as f:
+                dates_data = json.load(f)
+            print(f"📚 Loaded {len(dates_data)} book dates from JSON")
+            return dates_data
+        except Exception as e:
+            print(f"⚠️  Error loading JSON file: {e}")
+            return {}
+    else:
+        print("📚 No existing reading dates JSON found - creating new one")
+        return {}
+
+
+def save_reading_dates_json(dates_data):
+    """Save reading dates to JSON file"""
+    json_path = 'files/work_files/gr_work_files/reading_dates.json'
+    os.makedirs(os.path.dirname(json_path), exist_ok=True)
+
     try:
-        # Check if the processed file exists
-        if os.path.exists('files/processed_files/books/gr_processed.csv'):
-            df = pd.read_csv('files/processed_files/books/gr_processed.csv', sep='|')
-            existing_titles = set(df['Title'].str.strip().str.lower())
-            print(f"📚 Found {len(existing_titles)} existing books in processed file")
-            return existing_titles
-        else:
-            print("📚 No existing processed file found - will process all books")
-            return set()
+        with open(json_path, 'w') as f:
+            json.dump(dates_data, f, indent=2, default=str)
+        print(f"💾 Saved {len(dates_data)} book dates to JSON")
+        return True
     except Exception as e:
-        print(f"⚠️  Error reading existing books: {e}")
-        return set()
+        print(f"❌ Error saving JSON file: {e}")
+        return False
+
+
+def migrate_excel_to_json():
+    """One-time migration from Excel file to JSON format"""
+    print("🔄 Checking for Excel to JSON migration...")
+
+    excel_path = 'files/work_files/gr_work_files/gr_dates_input.xlsx'
+    json_path = 'files/work_files/gr_work_files/reading_dates.json'
+
+    # If JSON already exists, skip migration
+    if os.path.exists(json_path):
+        print("✅ JSON file already exists, skipping migration")
+        return True
+
+    # If Excel doesn't exist, nothing to migrate
+    if not os.path.exists(excel_path):
+        print("ℹ️  No Excel file found to migrate")
+        return True
+
+    try:
+        print("📊 Migrating Excel data to JSON...")
+        df_excel = pd.read_excel(excel_path)
+
+        dates_data = {}
+        migrated_count = 0
+
+        for _, row in df_excel.iterrows():
+            book_id = str(row.get('Book Id', ''))
+            title = row.get('Title', '')
+
+            if book_id and book_id != 'nan' and book_id != '0':
+                dates_data[book_id] = {
+                    'title': title,
+                    'date_started': row.get('Date started', ''),
+                    'date_ended': row.get('Date ended', ''),
+                    'cover_url': row.get('cover_url', ''),
+                    'check_status': row.get('Check', ''),
+                    'migrated_from_excel': True
+                }
+                migrated_count += 1
+
+        if save_reading_dates_json(dates_data):
+            print(f"✅ Successfully migrated {migrated_count} books from Excel to JSON")
+            return True
+        else:
+            return False
+
+    except Exception as e:
+        print(f"❌ Error during migration: {e}")
+        return False
 
 
 def download_goodreads_data():
-    """
-    Opens Goodreads export page and prompts user to download data.
-    Returns True if user confirms download, False otherwise.
-    """
+    """Opens Goodreads export page and prompts user to download data"""
     print("📚 Starting Goodreads data download...")
 
     urls = ['https://www.goodreads.com/review/import']
@@ -53,10 +117,7 @@ def download_goodreads_data():
 
 
 def move_goodreads_files():
-    """
-    Moves the downloaded Goodreads file from Downloads to the correct export folder.
-    Returns True if successful, False otherwise.
-    """
+    """Moves the downloaded Goodreads file from Downloads to the correct export folder"""
     print("📁 Moving Goodreads files...")
 
     success = clean_rename_move_file(
@@ -75,9 +136,7 @@ def move_goodreads_files():
 
 
 def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
-    """
-    Click on a view link and extract Start/End reading dates AND book cover URL from the detailed view
-    """
+    """Click on a view link and extract Start/End reading dates AND book cover URL"""
     try:
         print(f"    🔍 Extracting data for '{book_title}'...")
 
@@ -108,13 +167,11 @@ def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
             time.sleep(1)
             view_link.click()
             click_successful = True
-            print(f"    ✅ Navigation successful")
         except Exception as e1:
             # Method 2: JavaScript click
             try:
                 driver.execute_script("arguments[0].click();", view_link)
                 click_successful = True
-                print(f"    ✅ JavaScript click successful")
             except Exception as e2:
                 # Method 3: Navigate directly to the URL
                 try:
@@ -122,9 +179,8 @@ def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
                     if view_url:
                         driver.get(view_url)
                         click_successful = True
-                        print(f"    ✅ Direct navigation successful")
                 except Exception as e3:
-                    print(f"    ❌ All navigation methods failed")
+                    pass
 
         if not click_successful:
             print(f"    ❌ Could not access detailed view for '{book_title}'")
@@ -169,16 +225,16 @@ def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
                     if "Started Reading" in text:
                         date_part = text.replace("Started Reading", "").replace("–", "").strip()
                         if date_part:
-                            result['start_date'] = date_part
+                            result['date_started'] = date_part
                             print(f"    📅 Found start date: {date_part}")
 
                     elif "Finished Reading" in text:
                         date_part = text.replace("Finished Reading", "").replace("–", "").strip()
                         if date_part:
-                            result['end_date'] = date_part
+                            result['date_ended'] = date_part
                             print(f"    📅 Found end date: {date_part}")
 
-                except Exception as e:
+                except Exception:
                     continue
 
             # Fallback: search entire page text for dates
@@ -192,11 +248,11 @@ def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
                         if "Started Reading" in line:
                             date_part = line.replace("Started Reading", "").replace("–", "").strip()
                             if date_part:
-                                result['start_date'] = date_part
+                                result['date_started'] = date_part
                         elif "Finished Reading" in line:
                             date_part = line.replace("Finished Reading", "").replace("–", "").strip()
                             if date_part:
-                                result['end_date'] = date_part
+                                result['date_ended'] = date_part
                 except:
                     pass
 
@@ -205,7 +261,6 @@ def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
 
         # Extract book cover URL
         try:
-            # Look for book cover image
             cover_selectors = [
                 "img[id*='coverImage']",
                 ".BookCover img",
@@ -225,11 +280,10 @@ def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
                     if cover_url and ('book' in cover_url.lower() or 'cover' in cover_url.lower()):
                         # Try to get higher resolution version
                         if '_SX' in cover_url or '_SY' in cover_url:
-                            # Replace with higher resolution
                             cover_url = cover_url.replace('_SX50_', '_SX500_').replace('_SY75_', '_SY500_')
 
                         result['cover_url'] = cover_url
-                        print(f"    🖼️  Found cover URL: {cover_url[:60]}...")
+                        print(f"    🖼️  Found cover URL")
                         break
                 except:
                     continue
@@ -244,15 +298,13 @@ def extract_detailed_reading_dates_and_cover(driver, view_link, book_title):
         return {}
 
 
-def scrape_goodreads_reading_data():
-    """
-    Automated scraping of Goodreads reading dates and book covers
-    Returns a list of books with extracted data
-    """
-    print("🤖 Starting automated Goodreads scraping...")
+def scrape_missing_reading_dates(books_needing_dates):
+    """Scrape reading dates for books that don't have them in the JSON file"""
+    if not books_needing_dates:
+        print("✅ No books need date scraping")
+        return {}
 
-    # Load existing books to avoid duplicates
-    existing_books = load_existing_books()
+    print(f"🤖 Starting scraping for {len(books_needing_dates)} books...")
 
     # Setup Chrome with persistent session
     chrome_options = Options()
@@ -263,13 +315,12 @@ def scrape_goodreads_reading_data():
     # chrome_options.add_argument("--headless")
 
     driver = webdriver.Chrome(options=chrome_options)
+    scraped_data = {}
 
     try:
         # Navigate to reading list
         print("🔍 Opening Goodreads reading list...")
         driver.get("https://www.goodreads.com/review/list/143865509?shelf=read&sort=date_read&order=d")
-
-        # Wait a bit for page to load
         time.sleep(5)
 
         # Check if we need to log in
@@ -277,7 +328,6 @@ def scrape_goodreads_reading_data():
             print("🔐 Please log into Goodreads...")
             print("⏳ Waiting for login... (you have 60 seconds)")
 
-            # Wait for user to log in (max 60 seconds)
             start_time = time.time()
             while time.time() - start_time < 60:
                 if "Sign in" not in driver.title and "sign_in" not in driver.current_url:
@@ -287,21 +337,18 @@ def scrape_goodreads_reading_data():
             else:
                 print("❌ Login timeout - continuing anyway")
 
-        print("🎯 Looking for books that need data extraction...")
-
         # Find all book rows
         book_rows = driver.find_elements(By.CSS_SELECTOR, "tr[id*='review_'], tr.bookalike")
         if not book_rows:
             book_rows = driver.find_elements(By.CSS_SELECTOR, "table tr")
             book_rows = [row for row in book_rows if row.find_elements(By.CSS_SELECTOR, "td")]
 
-        print(f"Found {len(book_rows)} total book rows")
+        print(f"Found {len(book_rows)} total book rows on page")
 
-        extracted_books = []
-
-        for i, row in enumerate(book_rows[:20]):  # Limit to first 20 books for testing
+        books_found = 0
+        for i, row in enumerate(book_rows):
             try:
-                # Extract book title
+                # Extract book title and find matching book
                 title_element = None
                 title_selectors = ["a[class*='bookTitle']", ".title a", "td.title a", "a[href*='/book/show/']"]
 
@@ -316,12 +363,18 @@ def scrape_goodreads_reading_data():
                     continue
 
                 title = title_element.text.strip()
-                book_url = title_element.get_attribute('href')
 
-                # Check if this book is already processed
-                if title.lower() in existing_books:
-                    print(f"⏭️  Skipping '{title}' (already processed)")
+                # Check if this is one of the books we need to scrape
+                matching_book_id = None
+                for book_id, book_info in books_needing_dates.items():
+                    if book_info['title'].lower().strip() == title.lower().strip():
+                        matching_book_id = book_id
+                        break
+
+                if not matching_book_id:
                     continue
+
+                print(f"📖 Found book needing dates: '{title}' (ID: {matching_book_id})")
 
                 # Look for "view" link in this row
                 view_link = None
@@ -334,245 +387,201 @@ def scrape_goodreads_reading_data():
                         pass
 
                 if view_link:
-                    print(f"📖 Processing: '{title}'...")
+                    # Extract detailed data
+                    scraped_info = extract_detailed_reading_dates_and_cover(driver, view_link, title)
 
-                    # Extract detailed data (dates + cover)
-                    book_data = extract_detailed_reading_dates_and_cover(driver, view_link, title)
-
-                    if book_data:
-                        book_data['title'] = title
-                        book_data['book_url'] = book_url
-                        extracted_books.append(book_data)
-                        print(f"  ✅ Extracted data for '{title}'")
+                    if scraped_info:
+                        scraped_data[matching_book_id] = {
+                            'title': title,
+                            'date_started': scraped_info.get('date_started', ''),
+                            'date_ended': scraped_info.get('date_ended', ''),
+                            'cover_url': scraped_info.get('cover_url', ''),
+                            'scraped_at': datetime.now().isoformat()
+                        }
+                        books_found += 1
+                        print(f"  ✅ Scraped data for '{title}'")
                     else:
                         print(f"  ❌ Could not extract data for '{title}'")
-                else:
-                    print(f"📖 '{title}' - no 'view' link found")
 
-                # Add delay and return to main list
-                time.sleep(2)
-                driver.get("https://www.goodreads.com/review/list/143865509?shelf=read&sort=date_read&order=d")
-                time.sleep(2)
+                    # Return to main list
+                    time.sleep(2)
+                    driver.get("https://www.goodreads.com/review/list/143865509?shelf=read&sort=date_read&order=d")
+                    time.sleep(2)
+
+                    # Stop if we found all books we were looking for
+                    if books_found >= len(books_needing_dates):
+                        print("✅ Found all books we were looking for!")
+                        break
 
             except Exception as e:
                 print(f"Error processing row {i}: {e}")
                 continue
 
-        return extracted_books
+        print(f"🎯 Successfully scraped {len(scraped_data)} out of {len(books_needing_dates)} books")
+        return scraped_data
 
     except Exception as e:
         print(f"❌ Scraping failed: {e}")
-        return []
+        return {}
 
     finally:
         driver.quit()
 
 
-def update_excel_with_scraped_data(scraped_books):
-    """
-    Update the Excel file with scraped reading dates and cover URLs
-    """
-    print("📝 Updating Excel file with scraped data...")
-
-    excel_path = 'files/work_files/gr_work_files/gr_dates_input.xlsx'
-
-    try:
-        # Load existing Excel file
-        if os.path.exists(excel_path):
-            df_dates = pd.read_excel(excel_path)
-        else:
-            # Create new DataFrame if file doesn't exist
-            df_dates = pd.DataFrame(columns=['Book Id', 'Title', 'Date started', 'Date ended', 'Check', 'cover_url'])
-
-        # Load the main Goodreads export to get Book IDs
-        df_gr = pd.read_csv("files/exports/goodreads_exports/gr_export.csv")
-
-        updates_made = 0
-
-        for book in scraped_books:
-            title = book['title']
-
-            # Find Book ID from main export
-            matching_books = df_gr[df_gr['Title'].str.lower() == title.lower()]
-            if matching_books.empty:
-                print(f"⚠️  Could not find Book ID for '{title}' in main export")
-                continue
-
-            book_id = matching_books.iloc[0]['Book Id']
-
-            # Check if this book is already in Excel file
-            existing_row = df_dates[df_dates['Book Id'] == book_id]
-
-            if existing_row.empty:
-                # Add new row
-                new_row = {
-                    'Book Id': book_id,
-                    'Title': title,
-                    'Date started': pd.to_datetime(book.get('start_date'), errors='coerce') if book.get('start_date') else None,
-                    'Date ended': pd.to_datetime(book.get('end_date'), errors='coerce') if book.get('end_date') else None,
-                    'Check': 'OK' if (book.get('start_date') and book.get('end_date')) else 'Partial',
-                    'cover_url': book.get('cover_url', '')
-                }
-
-                df_dates = pd.concat([df_dates, pd.DataFrame([new_row])], ignore_index=True)
-                updates_made += 1
-                print(f"  ✅ Added new entry for '{title}'")
-
-            else:
-                # Update existing row
-                row_index = existing_row.index[0]
-                updated = False
-
-                if book.get('start_date') and pd.isna(df_dates.loc[row_index, 'Date started']):
-                    df_dates.loc[row_index, 'Date started'] = pd.to_datetime(book.get('start_date'), errors='coerce')
-                    updated = True
-
-                if book.get('end_date') and pd.isna(df_dates.loc[row_index, 'Date ended']):
-                    df_dates.loc[row_index, 'Date ended'] = pd.to_datetime(book.get('end_date'), errors='coerce')
-                    updated = True
-
-                if book.get('cover_url') and not df_dates.loc[row_index, 'cover_url']:
-                    df_dates.loc[row_index, 'cover_url'] = book.get('cover_url', '')
-                    updated = True
-
-                if updated:
-                    df_dates.loc[row_index, 'Check'] = 'OK'
-                    updates_made += 1
-                    print(f"  ✅ Updated existing entry for '{title}'")
-
-        # Save updated Excel file
-        os.makedirs(os.path.dirname(excel_path), exist_ok=True)
-        df_dates.to_excel(excel_path, index=False)
-        print(f"💾 Updated Excel file with {updates_made} changes")
-
-        return updates_made > 0
-
-    except Exception as e:
-        print(f"❌ Error updating Excel file: {e}")
-        return False
-
-
-def add_dates_read_from_excel():
-    """Load Goodreads export and Excel files - enhanced with cover URLs"""
-    df = pd.read_csv("files/exports/goodreads_exports/gr_export.csv")
-
-    excel_path = 'files/work_files/gr_work_files/gr_dates_input.xlsx'
-    if os.path.exists(excel_path):
-        df2 = pd.read_excel(excel_path)
-    else:
-        print("⚠️  No Excel file found - creating empty one")
-        df2 = pd.DataFrame(columns=['Book Id', 'Title', 'Date started', 'Date ended', 'Check', 'cover_url'])
-
-    # Fill missing Book IDs
-    df2["Book Id"].fillna(0, inplace=True)
-
-    # Merge with main export
-    d = pd.merge(df, df2, on="Book Id", how='left')
-    d = d[(d['Exclusive Shelf'] == 'read') & (d['Check'].isna())].reset_index(drop=True)
-
-    return df, df2
-
-
 def expand_gr_reading_split(row, columns, col):
-    """Splits the rows to have one row per day, with a division of the total pages in the book by the number of days to read it"""
+    """Splits the rows to have one row per day, with page division"""
     # Handle missing dates
-    if (pd.isna(row['Date started'])) | (pd.isna(row['Date ended'])):
+    if pd.isna(row.get('Date started')) or pd.isna(row.get('Date ended')):
         date_df = pd.DataFrame(columns=col)
-        # Create single row with available data
         new_row = {}
         for column in columns:
-            if column not in ['Date started', 'Date ended', 'cover_url']:
+            if column not in ['Date started', 'Date ended']:
                 new_row[column] = row.get(column, None)
         new_row['Timestamp'] = row.get('Date started', pd.NaT)
         new_row['page_split'] = row.get('Number of Pages', 0)
-        new_row['cover_url'] = row.get('cover_url', '')
 
         date_df = pd.concat([date_df, pd.DataFrame([new_row])], ignore_index=True)
         return date_df
 
     # Create date range
-    dates = pd.date_range(row['Date started'], row['Date ended'], freq='D')
-    date_df = pd.DataFrame({'Timestamp': dates})
+    try:
+        dates = pd.date_range(row['Date started'], row['Date ended'], freq='D')
+        date_df = pd.DataFrame({'Timestamp': dates})
 
-    # Add all other columns except dates and cover_url
-    for column in columns:
-        if column not in ['Date started', 'Date ended', 'cover_url']:
-            date_df[column] = row.get(column, None)
+        # Add all other columns except dates
+        for column in columns:
+            if column not in ['Date started', 'Date ended']:
+                date_df[column] = row.get(column, None)
 
-    # Calculate page split
-    num_pages = row.get('Number of Pages', 0)
-    if pd.notna(num_pages) and num_pages > 0:
-        date_df['page_split'] = num_pages / len(dates)
-    else:
-        date_df['page_split'] = 0
+        # Calculate page split
+        num_pages = row.get('Number of Pages', 0)
+        if pd.notna(num_pages) and num_pages > 0:
+            date_df['page_split'] = num_pages / len(dates)
+        else:
+            date_df['page_split'] = 0
 
-    # Add cover URL to all rows
-    date_df['cover_url'] = row.get('cover_url', '')
+        return date_df
+    except Exception as e:
+        print(f"    ⚠️  Error expanding dates for book: {e}")
+        # Return single row with available data
+        date_df = pd.DataFrame(columns=col)
+        new_row = {}
+        for column in columns:
+            if column not in ['Date started', 'Date ended']:
+                new_row[column] = row.get(column, None)
+        new_row['Timestamp'] = row.get('Date started', pd.NaT)
+        new_row['page_split'] = row.get('Number of Pages', 0)
 
-    return date_df
+        date_df = pd.concat([date_df, pd.DataFrame([new_row])], ignore_index=True)
+        return date_df
 
 
 def create_goodreads_file():
-    """
-    Main processing logic for Goodreads data with cover URLs from scraping
-    Returns True if successful, False otherwise.
-    """
-    print("⚙️  Processing Goodreads data...")
+    """Main processing logic using JSON-based reading dates"""
+    print("⚙️  Processing Goodreads data with JSON-based dates...")
 
     try:
-        df, df2 = add_dates_read_from_excel()
+        # Load Goodreads export
+        df = pd.read_csv("files/exports/goodreads_exports/gr_export.csv")
+        print(f"📊 Loaded {len(df)} books from Goodreads export")
 
-        # Ensure cover_url column exists in df2
-        if 'cover_url' not in df2.columns:
-            df2['cover_url'] = ''
+        # Load existing reading dates from JSON
+        dates_data = load_reading_dates_json()
 
-        # Merge with dates and cover URLs
-        merge_columns = ['Title', 'Book Id', 'Date started', 'Date ended', 'Check', 'cover_url']
-        # Only use columns that exist
-        available_columns = [col for col in merge_columns if col in df2.columns]
+        # Filter to only 'read' books
+        read_books = df[df['Exclusive Shelf'] == 'read'].copy()
+        print(f"📚 Found {len(read_books)} books marked as 'read'")
 
-        df3 = pd.merge(df2[available_columns],
-                      df, on='Book Id', how='left') \
-                .rename(columns={'Title_x': 'Title', 'Bookshelves': 'Genre'})
+        # Identify books that need date scraping
+        books_needing_dates = {}
+        books_with_dates = {}
 
-        # Handle case where Title_x doesn't exist (no merge conflict)
-        if 'Title_x' not in df3.columns and 'Title_y' in df3.columns:
-            df3 = df3.rename(columns={'Title_y': 'Title'})
+        for _, book in read_books.iterrows():
+            book_id = str(book['Book Id'])
+            title = str(book['Title']).strip()
 
-        # Calculate reading duration
-        df3['reading_duration'] = (pd.to_datetime(df3['Date ended']) - pd.to_datetime(df3['Date started'])).dt.days + 1
-        df3['Fiction_yn'] = df3['Genre'].apply(lambda x: "fiction" if str(x).lower() in fiction_genres else "non-fiction")
+            if book_id in dates_data and dates_data[book_id].get('date_started') and dates_data[book_id].get('date_ended'):
+                # We have complete data for this book
+                books_with_dates[book_id] = dates_data[book_id]
+            else:
+                # We need to scrape dates for this book
+                books_needing_dates[book_id] = {
+                    'title': title,
+                    'book_data': book
+                }
 
-        # Define columns for processing
+        print(f"✅ {len(books_with_dates)} books already have dates")
+        print(f"🔍 {len(books_needing_dates)} books need date scraping")
+
+        # Scrape missing dates if needed
+        if books_needing_dates:
+            should_scrape = input(f"Would you like to scrape dates for {len(books_needing_dates)} books? (y/N): ").lower()
+
+            if should_scrape == 'y':
+                scraped_data = scrape_missing_reading_dates(books_needing_dates)
+
+                # Merge scraped data into main dates_data
+                for book_id, scraped_info in scraped_data.items():
+                    dates_data[book_id] = scraped_info
+                    books_with_dates[book_id] = scraped_info
+
+                # Save updated JSON
+                save_reading_dates_json(dates_data)
+                print(f"✅ Updated JSON with {len(scraped_data)} newly scraped books")
+            else:
+                print("⏭️  Skipping scraping, processing with available data...")
+
+        # Now process all books with available dates
+        processed_books = []
+
+        for _, book in read_books.iterrows():
+            book_id = str(book['Book Id'])
+
+            if book_id in books_with_dates:
+                # Add date information to book data
+                date_info = books_with_dates[book_id]
+
+                book_with_dates = book.copy()
+                book_with_dates['Date started'] = pd.to_datetime(date_info.get('date_started'), errors='coerce')
+                book_with_dates['Date ended'] = pd.to_datetime(date_info.get('date_ended'), errors='coerce')
+                book_with_dates['cover_url'] = date_info.get('cover_url', '')
+
+                processed_books.append(book_with_dates)
+            else:
+                # No dates available, add with NaT dates
+                book_without_dates = book.copy()
+                book_without_dates['Date started'] = pd.NaT
+                book_without_dates['Date ended'] = pd.NaT
+                book_without_dates['cover_url'] = ''
+
+                processed_books.append(book_without_dates)
+
+        # Convert to DataFrame
+        df_with_dates = pd.DataFrame(processed_books)
+
+        # Calculate reading duration and fiction classification
+        df_with_dates['reading_duration'] = (df_with_dates['Date ended'] - df_with_dates['Date started']).dt.days + 1
+        df_with_dates['Fiction_yn'] = df_with_dates['Bookshelves'].apply(
+            lambda x: "fiction" if str(x).lower() in fiction_genres else "non-fiction"
+        )
+
+        # Prepare for expansion
         base_columns = ['Book Id', 'Title', 'Author', 'Original Publication Year', 'My Rating',
-                       'Average Rating', 'Genre', 'Fiction_yn', 'reading_duration', 'Number of Pages']
+                       'Average Rating', 'Bookshelves', 'Fiction_yn', 'reading_duration',
+                       'Number of Pages', 'Date started', 'Date ended', 'cover_url']
 
-        # Add date and cover columns if they exist
-        if 'Date started' in df3.columns:
-            base_columns.append('Date started')
-        if 'Date ended' in df3.columns:
-            base_columns.append('Date ended')
-        if 'cover_url' in df3.columns:
-            base_columns.append('cover_url')
+        # Only keep existing columns
+        existing_columns = [col for col in base_columns if col in df_with_dates.columns]
+        df_limited = df_with_dates[existing_columns]
 
-        # Filter to only read books
-        df_limited = df3[(df3['Exclusive Shelf'] == 'read') | (df3['Check'] == 'OK')]
-
-        # Only keep columns that exist
-        existing_columns = [col for col in base_columns if col in df_limited.columns]
-        df_limited = df_limited[existing_columns]
-
-        print(f"📊 Processing {len(df_limited)} books...")
-
-        # Prepare columns for expanded dataframe
+        # Prepare final columns
         final_columns = [col for col in existing_columns if col not in ['Date started', 'Date ended']]
         final_columns.extend(['Timestamp', 'page_split'])
 
-        # Ensure cover_url is in final columns
-        if 'cover_url' not in final_columns:
-            final_columns.append('cover_url')
-
+        # Expand each book into daily reading records
         expanded_df = pd.DataFrame(columns=final_columns)
+
+        print(f"📖 Expanding {len(df_limited)} books into daily reading records...")
 
         for _, row in df_limited.iterrows():
             try:
@@ -582,23 +591,27 @@ def create_goodreads_file():
                 print(f"⚠️  Error processing book '{row.get('Title', 'Unknown')}': {e}")
                 continue
 
-        # Add remaining required columns
+        # Add final required columns
         expanded_df['Seconds'] = np.nan
-        if 'Fiction_yn' not in expanded_df.columns:
-            expanded_df['Fiction_yn'] = expanded_df.get('Genre', '').apply(lambda x: "fiction" if str(x).lower() in fiction_genres else "non-fiction")
         expanded_df['Source'] = 'GoodReads'
+
+        # Clean up genre column name
+        if 'Bookshelves' in expanded_df.columns:
+            expanded_df = expanded_df.rename(columns={'Bookshelves': 'Genre'})
 
         # Clean up title column
         if 'Title' in expanded_df.columns:
             expanded_df['Title'] = expanded_df['Title'].apply(lambda x: str(x).strip())
 
-        # Save to the new location
+        # Save processed file
         output_path = 'files/processed_files/books/gr_processed.csv'
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         expanded_df.to_csv(output_path, sep='|', index=False)
 
         print(f"✅ Successfully processed {len(expanded_df)} reading records")
-        print(f"📖 Columns in final file: {list(expanded_df.columns)}")
+        print(f"📊 Final columns: {list(expanded_df.columns)}")
+        print(f"📚 Books with complete dates: {len(books_with_dates)}")
+        print(f"📈 Books processed: {len(processed_books)}")
 
         return True
 
@@ -610,15 +623,12 @@ def create_goodreads_file():
 
 
 def upload_goodreads_results():
-    """
-    Uploads the processed Goodreads files to Google Drive.
-    Returns True if successful, False otherwise.
-    """
+    """Upload the processed Goodreads files to Google Drive"""
     print("☁️  Uploading Goodreads results to Google Drive...")
 
     files_to_upload = [
         'files/processed_files/books/gr_processed.csv',
-        'files/work_files/gr_work_files/gr_dates_input.xlsx'
+        'files/work_files/gr_work_files/reading_dates.json'
     ]
 
     # Filter to only existing files
@@ -640,10 +650,7 @@ def upload_goodreads_results():
 
 
 def process_goodreads_export(upload="Y"):
-    """
-    Legacy function for backward compatibility.
-    This maintains the original interface while using the new pipeline.
-    """
+    """Legacy function for backward compatibility"""
     if upload == "Y":
         return full_goodreads_pipeline(auto_full=True)
     else:
@@ -651,34 +658,24 @@ def process_goodreads_export(upload="Y"):
 
 
 def full_goodreads_pipeline(auto_full=False):
-    """
-    Complete Goodreads pipeline with 3 options.
-
-    Options:
-    1. Full pipeline (download → scrape → process → upload)
-    2. Process and upload (process existing data → upload)
-    3. Scrape → process → upload (scrape missing data → process → upload)
-
-    Args:
-        auto_full (bool): If True, automatically runs option 1 without user input
-
-    Returns:
-        bool: True if pipeline completed successfully, False otherwise
-    """
+    """Complete Goodreads pipeline with JSON-based processing"""
     print("\n" + "="*60)
-    print("📚 GOODREADS DATA PIPELINE")
+    print("📚 GOODREADS DATA PIPELINE (JSON-BASED)")
     print("="*60)
+
+    # First, migrate any existing Excel data to JSON
+    migrate_excel_to_json()
 
     if auto_full:
         print("🤖 Auto mode: Running full pipeline...")
         choice = "1"
     else:
         print("\nSelect an option:")
-        print("1. Full pipeline (download → scrape → process → upload)")
-        print("2. Process and upload (use existing data)")
-        print("3. Scrape → process → upload (scrape missing data first)")
+        print("1. Full pipeline (download → process → upload)")
+        print("2. Process only (use existing data)")
+        print("3. Scrape dates only (for books missing dates)")
 
-        choice = input("\nEnter your choice (1/5/6): ").strip()
+        choice = input("\nEnter your choice (1-3): ").strip()
 
     success = False
 
@@ -688,79 +685,76 @@ def full_goodreads_pipeline(auto_full=False):
         # Step 1: Download
         download_success = download_goodreads_data()
 
-        # Step 2: Move files (even if download wasn't confirmed, maybe file exists)
+        # Step 2: Move files
         if download_success:
             move_success = move_goodreads_files()
         else:
-            print("⚠️  Download not confirmed, but checking for existing files...")
+            print("⚠️  Download not confirmed, checking for existing files...")
             move_success = move_goodreads_files()
 
-        # Step 3: Scrape missing data
-        if move_success:
-            scraped_books = scrape_goodreads_reading_data()
-            if scraped_books:
-                scrape_success = update_excel_with_scraped_data(scraped_books)
-                print(f"✅ Scraped data for {len(scraped_books)} books")
-            else:
-                print("⚠️  No new books found to scrape")
-                scrape_success = True  # Continue anyway
-        else:
-            print("⚠️  Using existing files, attempting to scrape...")
-            scraped_books = scrape_goodreads_reading_data()
-            scrape_success = update_excel_with_scraped_data(scraped_books) if scraped_books else True
-
-        # Step 4: Process
-        if scrape_success:
+        # Step 3: Process (includes scraping if needed)
+        if move_success or os.path.exists("files/exports/goodreads_exports/gr_export.csv"):
             process_success = create_goodreads_file()
         else:
-            print("⚠️  Scraping had issues, attempting to process anyway...")
-            process_success = create_goodreads_file()
+            print("❌ No Goodreads export file found")
+            process_success = False
 
-        # Step 5: Upload
+        # Step 4: Upload
         if process_success:
-            upload_success = upload_goodreads_results()
-            success = upload_success
+            success = upload_goodreads_results()
         else:
             print("❌ Processing failed, skipping upload")
             success = False
 
     elif choice == "2":
-        print("\n⚙️  Processing existing data and uploading...")
+        print("\n⚙️  Processing existing data...")
         process_success = create_goodreads_file()
         if process_success:
             success = upload_goodreads_results()
         else:
-            print("❌ Processing failed, skipping upload")
+            print("❌ Processing failed")
             success = False
 
     elif choice == "3":
-        print("\n🤖 Scraping → processing → uploading...")
+        print("\n🔍 Scraping dates for books missing dates...")
 
-        # Step 1: Scrape
-        scraped_books = scrape_goodreads_reading_data()
-        if scraped_books:
-            scrape_success = update_excel_with_scraped_data(scraped_books)
-            print(f"✅ Scraped data for {len(scraped_books)} books")
-        else:
-            print("⚠️  No new books found to scrape, continuing with existing data...")
-            scrape_success = True
+        # Load current data to identify missing dates
+        try:
+            df = pd.read_csv("files/exports/goodreads_exports/gr_export.csv")
+            dates_data = load_reading_dates_json()
+            read_books = df[df['Exclusive Shelf'] == 'read']
 
-        # Step 2: Process
-        if scrape_success:
-            process_success = create_goodreads_file()
-        else:
-            print("⚠️  Scraping had issues, attempting to process anyway...")
-            process_success = create_goodreads_file()
+            books_needing_dates = {}
+            for _, book in read_books.iterrows():
+                book_id = str(book['Book Id'])
+                title = str(book['Title']).strip()
 
-        # Step 3: Upload
-        if process_success:
-            success = upload_goodreads_results()
-        else:
-            print("❌ Processing failed, skipping upload")
+                if book_id not in dates_data or not dates_data[book_id].get('date_started'):
+                    books_needing_dates[book_id] = {
+                        'title': title,
+                        'book_data': book
+                    }
+
+            if books_needing_dates:
+                scraped_data = scrape_missing_reading_dates(books_needing_dates)
+
+                # Update JSON with scraped data
+                for book_id, scraped_info in scraped_data.items():
+                    dates_data[book_id] = scraped_info
+
+                success = save_reading_dates_json(dates_data)
+                if success:
+                    print(f"✅ Updated {len(scraped_data)} books with scraped dates")
+            else:
+                print("✅ No books need date scraping")
+                success = True
+
+        except Exception as e:
+            print(f"❌ Error during scraping: {e}")
             success = False
 
     else:
-        print("❌ Invalid choice. Please select 1, 2, or 3.")
+        print("❌ Invalid choice. Please select 1-3.")
         return False
 
     # Final status
@@ -772,6 +766,9 @@ def full_goodreads_pipeline(auto_full=False):
     print("="*60)
 
     return success
+
+
+
 
 
 if __name__ == "__main__":
