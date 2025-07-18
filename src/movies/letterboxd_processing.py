@@ -40,7 +40,7 @@ def get_tmdb_movie_info(title, release_year):
         pass
 
     # Get TMDB API key from environment
-    api_key = os.environ.get('TMDB_API_KEY')
+    api_key = os.environ.get('TMDB_Key')
     if not api_key:
         print("TMDB_API_KEY not found in environment variables")
         return {
