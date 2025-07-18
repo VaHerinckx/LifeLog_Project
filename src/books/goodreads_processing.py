@@ -337,85 +337,100 @@ def scrape_missing_reading_dates(books_needing_dates):
             else:
                 print("❌ Login timeout - continuing anyway")
 
-        # Find all book rows
-        book_rows = driver.find_elements(By.CSS_SELECTOR, "tr[id*='review_'], tr.bookalike")
-        if not book_rows:
-            book_rows = driver.find_elements(By.CSS_SELECTOR, "table tr")
-            book_rows = [row for row in book_rows if row.find_elements(By.CSS_SELECTOR, "td")]
-
-        print(f"Found {len(book_rows)} total book rows on page")
-
         books_found = 0
-        for i, row in enumerate(book_rows):
-            try:
-                # Extract book title and find matching book
-                title_element = None
-                title_selectors = ["a[class*='bookTitle']", ".title a", "td.title a", "a[href*='/book/show/']"]
+        processed_books = set()  # Track which books we've already processed to avoid duplicates
+        
+        while books_found < len(books_needing_dates):
+            # Find all book rows on current page
+            book_rows = driver.find_elements(By.CSS_SELECTOR, "tr[id*='review_'], tr.bookalike")
+            if not book_rows:
+                book_rows = driver.find_elements(By.CSS_SELECTOR, "table tr")
+                book_rows = [row for row in book_rows if row.find_elements(By.CSS_SELECTOR, "td")]
 
-                for selector in title_selectors:
-                    try:
-                        title_element = row.find_element(By.CSS_SELECTOR, selector)
-                        break
-                    except:
+            print(f"Found {len(book_rows)} total book rows on page")
+
+            books_found_this_pass = 0
+            for i, row in enumerate(book_rows):
+                try:
+                    # Extract book title and find matching book
+                    title_element = None
+                    title_selectors = ["a[class*='bookTitle']", ".title a", "td.title a", "a[href*='/book/show/']"]
+
+                    for selector in title_selectors:
+                        try:
+                            title_element = row.find_element(By.CSS_SELECTOR, selector)
+                            break
+                        except:
+                            continue
+
+                    if not title_element:
                         continue
 
-                if not title_element:
-                    continue
+                    title = title_element.text.strip()
 
-                title = title_element.text.strip()
+                    # Check if this is one of the books we need to scrape
+                    matching_book_id = None
+                    for book_id, book_info in books_needing_dates.items():
+                        if book_info['title'].lower().strip() == title.lower().strip():
+                            matching_book_id = book_id
+                            break
 
-                # Check if this is one of the books we need to scrape
-                matching_book_id = None
-                for book_id, book_info in books_needing_dates.items():
-                    if book_info['title'].lower().strip() == title.lower().strip():
-                        matching_book_id = book_id
-                        break
+                    if not matching_book_id or matching_book_id in processed_books:
+                        continue
 
-                if not matching_book_id:
-                    continue
+                    print(f"📖 Found book needing dates: '{title}' (ID: {matching_book_id})")
 
-                print(f"📖 Found book needing dates: '{title}' (ID: {matching_book_id})")
-
-                # Look for "view" link in this row
-                view_link = None
-                try:
-                    view_link = row.find_element(By.CSS_SELECTOR, "a[href*='#review_']")
-                except:
+                    # Look for "view" link in this row
+                    view_link = None
                     try:
-                        view_link = row.find_element(By.XPATH, ".//a[contains(text(), 'view')]")
+                        view_link = row.find_element(By.CSS_SELECTOR, "a[href*='#review_']")
                     except:
-                        pass
+                        try:
+                            view_link = row.find_element(By.XPATH, ".//a[contains(text(), 'view')]")
+                        except:
+                            pass
 
-                if view_link:
-                    # Extract detailed data
-                    scraped_info = extract_detailed_reading_dates_and_cover(driver, view_link, title)
+                    if view_link:
+                        # Extract detailed data
+                        scraped_info = extract_detailed_reading_dates_and_cover(driver, view_link, title)
 
-                    if scraped_info:
-                        scraped_data[matching_book_id] = {
-                            'title': title,
-                            'date_started': scraped_info.get('date_started', ''),
-                            'date_ended': scraped_info.get('date_ended', ''),
-                            'cover_url': scraped_info.get('cover_url', ''),
-                            'scraped_at': datetime.now().isoformat()
-                        }
-                        books_found += 1
-                        print(f"  ✅ Scraped data for '{title}'")
-                    else:
-                        print(f"  ❌ Could not extract data for '{title}'")
+                        if scraped_info:
+                            scraped_data[matching_book_id] = {
+                                'title': title,
+                                'date_started': scraped_info.get('date_started', ''),
+                                'date_ended': scraped_info.get('date_ended', ''),
+                                'cover_url': scraped_info.get('cover_url', ''),
+                                'scraped_at': datetime.now().isoformat()
+                            }
+                            books_found += 1
+                            books_found_this_pass += 1
+                            processed_books.add(matching_book_id)
+                            print(f"  ✅ Scraped data for '{title}'")
+                        else:
+                            print(f"  ❌ Could not extract data for '{title}'")
+                            processed_books.add(matching_book_id)  # Mark as processed even if failed
 
-                    # Return to main list
-                    time.sleep(2)
-                    driver.get("https://www.goodreads.com/review/list/143865509?shelf=read&sort=date_read&order=d")
-                    time.sleep(2)
+                        # Return to main list
+                        time.sleep(2)
+                        driver.get("https://www.goodreads.com/review/list/143865509?shelf=read&sort=date_read&order=d")
+                        time.sleep(2)
 
-                    # Stop if we found all books we were looking for
-                    if books_found >= len(books_needing_dates):
-                        print("✅ Found all books we were looking for!")
+                        # Break from current row loop to re-find book rows
                         break
 
-            except Exception as e:
-                print(f"Error processing row {i}: {e}")
-                continue
+                except Exception as e:
+                    print(f"Error processing row {i}: {e}")
+                    continue
+            
+            # If we didn't find any new books this pass, break to avoid infinite loop
+            if books_found_this_pass == 0:
+                print(f"⚠️  No new books found in this pass. Stopping with {books_found} books processed.")
+                break
+                
+            # Stop if we found all books we were looking for
+            if books_found >= len(books_needing_dates):
+                print("✅ Found all books we were looking for!")
+                break
 
         print(f"🎯 Successfully scraped {len(scraped_data)} out of {len(books_needing_dates)} books")
         return scraped_data
