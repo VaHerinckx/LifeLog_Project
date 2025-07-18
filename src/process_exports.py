@@ -17,6 +17,7 @@ from src.health.apple_processing import process_apple_export
 from src.screentime.offscreen_processing import process_offscreen_export
 from src.weather.weather_processing import get_weather_data
 from src.movies.letterboxd_processing import process_letterboxd_export
+from src.movies.trakt_processing import create_trakt_processed_file
 
 # Updated imports for enhanced authentication
 from src.utils.drive_storage import (
@@ -63,7 +64,7 @@ health_files = ['files/processed_files/apple_processed.csv', 'files/processed_fi
                 'files/processed_files/garmin_stress_level_processed.csv', 'files/processed_files/garmin_training_history_processed.csv']
 podcast_files = ['files/processed_files/pocket_casts_processed.csv']
 music_files = ['files/processed_files/lfm_processed.csv']
-movies_files = ['files/processed_files/letterboxd_processed.csv']
+movies_files = ['files/processed_files/letterboxd_processed.csv', 'files/processed_files/movies/trakt_processed.csv']
 nutrilio_files = ['files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv', 'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
                   'files/processed_files/nutrilio_drinks_pbi_processed_file.csv', 'files/processed_files/nutrilio_food_pbi_processed_file.csv',
                   'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv', 'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv',
@@ -188,6 +189,7 @@ def download_process_upload():
     PCC = input("New Pocket Cast file? (Y/N) ")
     GAR = input("New Garmin file? (Y/N) ")
     KIN = input("New Kindle file? (Y/N) ")
+    TRK = input("New Trakt file? (Y/N) ")
     WEA = input("Use API to download latest weather data? (Y/N) ")
 
     file_names = []
@@ -263,6 +265,9 @@ def download_process_upload():
         upload_file_list(screentime_files)
 
     if run_process(LBX, process_letterboxd_export, "Letterboxd", upload="N"):
+        upload_file_list(movies_files)
+
+    if run_process(TRK, create_trakt_processed_file, "Trakt", upload="N"):
         upload_file_list(movies_files)
 
     if run_process(WEA, get_weather_data, "Weather", upload="N"):
