@@ -142,6 +142,7 @@ def flag_clicks(row, gr_date_df):
     """
     Add a flag to the rows where the date a book has been read is higher than
     what was officially recorded in Goodreads (indicating accidental clicks).
+    Uses Book ID for precise matching to avoid title collisions.
 
     Args:
         row: DataFrame row from combined dataset
@@ -163,13 +164,13 @@ def flag_clicks(row, gr_date_df):
     if gr_date_df_valid.empty:
         return 0
 
-    # Look for this book's official end date by Title
-    book_title = row.get("Title", "")
-    if not book_title:
+    # Look for this book's official end date by Book ID
+    book_id = row.get("Book Id", "")
+    if not book_id:
         return 0
 
-    # Find matching title in Goodreads data
-    matching_books = gr_date_df_valid[gr_date_df_valid['Title'] == book_title]
+    # Find matching Book ID in Goodreads data
+    matching_books = gr_date_df_valid[gr_date_df_valid['Book Id'] == book_id]
 
     if matching_books.empty:
         return 0
@@ -193,7 +194,7 @@ def flag_clicks(row, gr_date_df):
             return 0
 
     except Exception as e:
-        print(f"⚠️  Error comparing dates for book '{book_title}': {e}")
+        print(f"⚠️  Error comparing dates for Book ID '{book_id}': {e}")
         return 0
 
 
@@ -577,6 +578,125 @@ def upload_books_results():
     return success
 
 
+def update_cover_url():
+    """
+    Simple function to update book cover URLs.
+    Allows user to search by partial title, select books, and update multiple cover URLs before uploading.
+    """
+    print("\n" + "="*50)
+    print("📖 UPDATE BOOK COVER URLs")
+    print("="*50)
+    
+    # Load the CSV file
+    csv_path = 'files/processed_files/books/kindle_gr_processed.csv'
+    try:
+        df = pd.read_csv(csv_path, sep='|')
+        print(f"✅ Loaded {len(df)} books from database")
+    except FileNotFoundError:
+        print(f"❌ File not found: {csv_path}")
+        print("Run the books pipeline first to create the database.")
+        return False
+    except Exception as e:
+        print(f"❌ Error loading file: {e}")
+        return False
+    
+    updated_books = []
+    
+    # Loop to allow multiple cover updates
+    while True:
+        # Get search term from user
+        search_term = input("\nEnter part of book title to search (or 'quit' to finish): ").strip()
+        if not search_term or search_term.lower() == 'quit':
+            break
+        
+        # Find matching books (case-insensitive)
+        matches = df[df['Title'].str.lower().str.contains(search_term.lower(), na=False)]
+        
+        if matches.empty:
+            print(f"❌ No books found containing '{search_term}'")
+            continue
+        
+        # Deduplicate by Title + Author to show unique books only
+        unique_matches = matches.drop_duplicates(subset=['Title', 'Author'], keep='first')
+        
+        print(f"\n📚 Found {len(unique_matches)} unique books:")
+        print("-" * 50)
+        
+        # Display unique matches with numbers
+        for i, (_, row) in enumerate(unique_matches.iterrows(), 1):
+            current_url = row.get('cover_url', 'No cover URL')
+            if len(str(current_url)) > 60:
+                current_url = str(current_url)[:60] + "..."
+            print(f"{i}. {row['Title']} by {row['Author']}")
+            print(f"   Current cover: {current_url}")
+            print()
+        
+        # Get user selection
+        try:
+            choice = int(input(f"Select book (1-{len(unique_matches)}): "))
+            if choice < 1 or choice > len(unique_matches):
+                print(f"❌ Invalid choice. Please select 1-{len(unique_matches)}")
+                continue
+        except ValueError:
+            print("❌ Invalid input. Please enter a number.")
+            continue
+        
+        # Get the selected book info from unique matches
+        selected_unique_book = unique_matches.iloc[choice - 1]
+        selected_title = selected_unique_book['Title']
+        selected_author = selected_unique_book['Author']
+        
+        print(f"\n✅ Selected: {selected_title} by {selected_author}")
+        print(f"Current cover URL: {selected_unique_book.get('cover_url', 'None')}")
+        
+        # Get new URL
+        new_url = input("\nEnter new cover URL: ").strip()
+        if not new_url:
+            print("❌ No URL provided, skipping this book")
+            continue
+        
+        # Update ALL rows for this book (Title + Author combination)
+        book_mask = (df['Title'] == selected_title) & (df['Author'] == selected_author)
+        rows_updated = df.loc[book_mask].shape[0]
+        df.loc[book_mask, 'cover_url'] = new_url
+        
+        print(f"✅ Updated cover URL for '{selected_title}' ({rows_updated} records)")
+        updated_books.append(selected_title)
+        
+        # Ask if user wants to continue
+        continue_choice = input("\nUpdate another book cover? (y/n): ").strip().lower()
+        if continue_choice not in ['y', 'yes']:
+            break
+    
+    # If no books were updated, exit
+    if not updated_books:
+        print("❌ No books were updated")
+        return False
+    
+    # Save the updated CSV
+    try:
+        df.to_csv(csv_path, sep='|', index=False)
+        print(f"\n✅ Updated local CSV file with {len(updated_books)} books")
+    except Exception as e:
+        print(f"❌ Error saving CSV: {e}")
+        return False
+    
+    # Upload to Google Drive
+    try:
+        print("📤 Uploading to Google Drive...")
+        upload_success = upload_multiple_files([csv_path])
+        if upload_success:
+            print("✅ Successfully uploaded to Google Drive!")
+            print(f"🎉 Cover URLs updated for: {', '.join(updated_books)}")
+            return True
+        else:
+            print("⚠️  CSV updated locally but failed to upload to Google Drive")
+            return False
+    except Exception as e:
+        print(f"❌ Error uploading to Google Drive: {e}")
+        return False
+
+
 def full_books_pipeline(auto_full=False):
     """
     Complete books processing pipeline that orchestrates Goodreads and Kindle processing.
@@ -607,8 +727,9 @@ def full_books_pipeline(auto_full=False):
         print("2. Process with existing files only (merge existing processed files)")
         print("3. Force refresh all data (re-run both pipelines + merge)")
         print("4. Merge only (create books file from existing processed files)")
+        print("5. Update book cover URL")
 
-        choice = input("\nEnter your choice (1-4): ").strip()
+        choice = input("\nEnter your choice (1-5): ").strip()
 
     success = False
 
@@ -704,8 +825,12 @@ def full_books_pipeline(auto_full=False):
         print("\n🔗 Merge only: Creating books file from existing data...")
         success = create_books_file()
 
+    elif choice == "5":
+        print("\n📖 Update cover URL...")
+        success = update_cover_url()
+
     else:
-        print("❌ Invalid choice. Please select 1-4.")
+        print("❌ Invalid choice. Please select 1-5.")
         return False
 
     # Final status

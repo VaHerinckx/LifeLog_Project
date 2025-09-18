@@ -1,7 +1,9 @@
 import pandas as pd
+import numpy as np
 import os
 import xmltodict
 import subprocess
+import time
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
@@ -53,7 +55,9 @@ def apple_df_formatting(path):
 
 def select_columns(df, name_val, data_type):
     """Function to select columns from the DataFrame based on the column name value"""
-    path = f'files/processed_files/apple_{name_val}.csv'
+    path = f'files/processed_files/apple/apple_{name_val}.csv'
+
+    print(f"🔄 Processing {name_val} using select_columns method...")
     df = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
     df["@value"] = df["@value"].astype(data_type)
     df.rename(columns={'@startDate': 'date', '@sourceName': 'source', '@value': name_val}, inplace=True)
@@ -103,6 +107,126 @@ def row_expander_minutes(row, aggreg_method):
         date_df['val'] = row["@value"]
     date_df['source'] = row['@sourceName']
     return date_df
+
+
+def row_expander_vectorized(row, aggreg_method):
+    """Optimized function to expand a single row into multiple rows, each representing a minute"""
+    minute_diff = (row['@endDate'] - row['@startDate']).total_seconds() / 60
+
+    if minute_diff <= 1:
+        # Single minute case - return simple DataFrame
+        return pd.DataFrame({
+            'date': [row['@startDate']],
+            'val': [row["@value"]],
+            'source': [row['@sourceName']]
+        })
+
+    # Vectorized approach for multiple minutes
+    dates = pd.date_range(
+        row['@startDate'],
+        row['@endDate'] - pd.Timedelta(minutes=1),
+        freq='T'
+    )
+
+    # Pre-calculate values using numpy
+    if aggreg_method == 'sum':
+        values = np.full(len(dates), row["@value"] / minute_diff)
+    elif aggreg_method == 'avg':
+        values = np.full(len(dates), row["@value"])
+    else:
+        values = np.full(len(dates), row["@value"])
+
+    # Create DataFrame efficiently in one operation
+    return pd.DataFrame({
+        'date': dates,
+        'val': values,
+        'source': row['@sourceName']
+    })
+
+
+def expand_df_vectorized(df, name_val, aggreg_method='sum'):
+    """Optimized function to expand the DataFrame by adding rows for each minute within the given time range"""
+    print(f"🚀 Starting optimized expansion for {name_val}...")
+    start_time = time.time()
+
+    path = f'files/processed_files/apple/apple_{name_val}.csv'
+
+    # Filter and prepare data
+    df_filtered = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
+    df_filtered["@value"] = df_filtered["@value"].astype(float)
+
+    # Read existing data once
+    try:
+        old_df = pd.read_csv(path, sep='|').rename(columns={name_val: 'val'})
+        old_df['date'] = pd.to_datetime(old_df['date'])
+
+        # Filter to only new data
+        max_old_date = old_df['date'].max()
+        df_filtered = df_filtered[df_filtered["@startDate"] > max_old_date].reset_index(drop=True)
+
+        print(f"📊 {len(df_filtered)} new rows to expand for {name_val}")
+
+        if len(df_filtered) == 0:
+            print(f"✅ No new data for {name_val}, using existing processed data")
+            return old_df.rename(columns={'val': name_val})
+
+    except FileNotFoundError:
+        print(f"📊 {len(df_filtered)} total rows to expand for {name_val} (new file)")
+        old_df = pd.DataFrame(columns=['date', 'val', 'source'])
+
+    if len(df_filtered) == 0:
+        return old_df.rename(columns={'val': name_val})
+
+    # Vectorized processing using list comprehension + concat
+    print(f"⚡ Expanding {len(df_filtered)} rows using vectorized operations...")
+
+    # Process rows in batches to show progress and avoid memory issues
+    batch_size = 1000
+    expanded_dfs = []
+
+    for i in range(0, len(df_filtered), batch_size):
+        batch = df_filtered.iloc[i:i+batch_size]
+
+        # Use list comprehension for vectorized processing
+        batch_expanded = [
+            row_expander_vectorized(row, aggreg_method)
+            for _, row in batch.iterrows()
+        ]
+
+        # Concatenate batch results efficiently
+        if batch_expanded:
+            expanded_dfs.extend(batch_expanded)
+
+        # Progress indicator
+        if len(df_filtered) > batch_size:
+            progress = min(i + batch_size, len(df_filtered))
+            print(f"📈 Progress: {progress}/{len(df_filtered)} rows processed")
+
+    # Combine all expanded DataFrames at once
+    if expanded_dfs:
+        new_expanded_df = pd.concat(expanded_dfs, ignore_index=True)
+
+        # Combine with existing data
+        combined_df = pd.concat([old_df, new_expanded_df], ignore_index=True)
+    else:
+        combined_df = old_df
+
+    # Final aggregation and cleanup
+    result_df = combined_df[['date', 'val']].groupby('date').mean().rename(columns={'val': name_val}).reset_index()
+    result_df['date'] = pd.to_datetime(result_df['date'], utc=True)
+    result_df.drop_duplicates(inplace=True)
+
+    # Save to CSV
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    result_df.to_csv(path, sep='|', index=False)
+
+    # Performance summary
+    elapsed_time = time.time() - start_time
+    print(f"✅ {name_val} expansion completed in {elapsed_time:.2f} seconds")
+    print(f"💾 Final dataset: {len(result_df)} aggregated daily records\n")
+
+    return result_df
+
 
 def download_apple_data():
     """
@@ -164,16 +288,21 @@ def create_apple_files():
             clean_import_file()
         apple_df_formatting(path_cleaned_xml)
     df = pd.read_csv(path_csv_export, sep='|', low_memory=False)
+    print("🔄 Preparing timestamp data...")
     df['@startDate'] = pd.to_datetime(df['@startDate']).dt.floor("T")
     df['@endDate'] = pd.to_datetime(df['@endDate']).dt.floor("T")
-    df_step_count = expand_df(df, 'step_count', 'sum')
-    df_step_length = expand_df(df, 'step_length', 'sum')
-    df_walking_dist = expand_df(df, 'walking_dist', 'sum')
-    df_flights_climbed = expand_df(df, 'flights_climbed', 'sum')
-    df_resting_energy = expand_df(df, 'resting_energy', 'sum')
-    df_active_energy = expand_df(df, 'active_energy', 'sum')
-    df_walking_speed = expand_df(df, 'walking_speed', 'avg')
-    df_audio_exposure = expand_df(df, 'audio_exposure', 'avg')
+
+    print("⚡ Using optimized vectorized processing for metrics expansion...")
+    start_total_time = time.time()
+
+    df_step_count = expand_df_vectorized(df, 'step_count', 'sum')
+    df_step_length = expand_df_vectorized(df, 'step_length', 'sum')
+    df_walking_dist = expand_df_vectorized(df, 'walking_dist', 'sum')
+    df_flights_climbed = expand_df_vectorized(df, 'flights_climbed', 'sum')
+    df_resting_energy = expand_df_vectorized(df, 'resting_energy', 'sum')
+    df_active_energy = expand_df_vectorized(df, 'active_energy', 'sum')
+    df_walking_speed = expand_df_vectorized(df, 'walking_speed', 'avg')
+    df_audio_exposure = expand_df_vectorized(df, 'audio_exposure', 'avg')
     df_heart_rate = select_columns(df, 'heart_rate', float)
     df_body_weight = select_columns(df, 'body_weight', float)
     df_body_fat_perc =  select_columns(df, 'body_fat_%', float)
@@ -189,10 +318,20 @@ def create_apple_files():
         .merge(df_body_fat_perc, how='outer', on='date') \
         .merge(df_audio_exposure, how='outer', on='date') \
         .merge(df_sleep_analysis, how='outer', on='date')
+    # Final data processing and merge performance summary
+    total_elapsed = time.time() - start_total_time
+    print(f"🔄 Merging all metrics datasets...")
+
     for col in list(apple_df.columns[1:-2]):
         apple_df[col] = apple_df[col].astype(float)
     apple_df.sort_values('date', inplace=True)
-    apple_df.to_csv('files/processed_files/apple_processed.csv', sep='|', index=False)
+    apple_df.to_csv('files/processed_files/apple/apple_processed.csv', sep='|', index=False)
+
+    print(f"\n🎉 Apple Health processing completed!")
+    print(f"⏱️  Total vectorized processing time: {total_elapsed:.2f} seconds")
+    print(f"📊 Final merged dataset: {len(apple_df)} daily records")
+    print(f"📅 Date range: {apple_df['date'].min()} to {apple_df['date'].max()}")
+    print("=" * 60)
 
 
 def create_apple_file():
@@ -227,7 +366,7 @@ def upload_apple_results():
     """
     print("☁️  Uploading Apple Health results to Google Drive...")
 
-    files_to_upload = ['files/processed_files/apple_processed.csv']
+    files_to_upload = ['files/processed_files/apple/apple_processed.csv']
 
     # Filter to only existing files
     existing_files = [f for f in files_to_upload if os.path.exists(f)]
