@@ -291,6 +291,74 @@ def add_usda_meal_scoring_legacy(df, use_usda_scoring=False):
     return df
 
 
+def add_usda_drink_scoring_efficient(df, use_usda_scoring=True):
+    """
+    Add USDA-based drink scoring using efficient drink-first approach.
+    
+    Args:
+        df (DataFrame): Input dataframe with drink data
+        use_usda_scoring (bool): Whether to enable USDA scoring
+        
+    Returns:
+        DataFrame: Dataframe with USDA drink scores added (if enabled)
+    """
+    if not use_usda_scoring:
+        print("ℹ️  USDA drink scoring disabled (use_usda_scoring=False)")
+        return df
+    
+    print("🍹 Starting efficient USDA-based drink scoring...")
+    
+    # Check if we have the drinks_list column (created by extract_data_count)
+    if 'drinks_list' not in df.columns:
+        print("ℹ️  No 'drinks_list' column found for USDA drink scoring")
+        return df
+    
+    try:
+        # Import the new efficient functions
+        try:
+            from src.nutrilio.usda_drink_scoring import (
+                extract_unique_drinks_from_dataframe,
+                score_all_drinks_efficient
+            )
+        except ImportError:
+            try:
+                from .usda_drink_scoring import (
+                    extract_unique_drinks_from_dataframe,
+                    score_all_drinks_efficient
+                )
+            except ImportError:
+                import sys
+                import os
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                sys.path.insert(0, current_dir)
+                from usda_drink_scoring import (
+                    extract_unique_drinks_from_dataframe,
+                    score_all_drinks_efficient
+                )
+        
+        # Phase 1: Extract unique drinks
+        unique_drinks = extract_unique_drinks_from_dataframe(df)
+        
+        if not unique_drinks:
+            print("ℹ️  No drinks found in dataset")
+            return df
+            
+        print(f"📋 Extracted {len(unique_drinks)} unique drinks from dataset")
+        
+        # Phase 2: Score all unique drinks once
+        drink_scores = score_all_drinks_efficient(unique_drinks)
+        
+        # Phase 3: Drink scores are now in the database for Power BI export
+        print(f"✅ Drink scoring complete - {len(drink_scores)} drinks processed")
+        
+        return df
+        
+    except Exception as e:
+        print(f"❌ Error in efficient USDA drink scoring: {e}")
+        print("🔄 Continuing without drink scoring...")
+        return df
+
+
 # Meal scoring functions have been removed for faster processing
 # Historical scores are preserved in JSON format
 # USDA-based scoring available as optional alternative (see add_usda_meal_scoring function)
@@ -395,8 +463,7 @@ def generate_pbi_files(df, indicator):
     melted_df = sliced_df.melt(id_vars='Full Date', value_vars=sliced_df.columns[1:], var_name=indicator, value_name='Value')
     melted_df = melted_df[melted_df['Value'] >= 1]
     melted_df.sort_values("Full Date", ascending = False).to_csv(f"files/processed_files/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False)
-    if indicator == "drinks":
-        check_new_drinks(list(melted_df.drinks.unique()))
+    # Note: Drink scoring is now handled automatically in the main pipeline via USDA scoring
 
 def create_optimized_nutrition_file(df):
     """Create optimized nutrition-only CSV for faster frontend performance"""
@@ -490,6 +557,10 @@ def create_nutrilio_files():
     print("🥗 Enabling efficient USDA-based meal scoring...")
     df = add_usda_meal_scoring_efficient(df, use_usda_scoring=True)
     
+    # USDA drink scoring enabled - automated drink categorization and health scoring
+    print("🍹 Enabling efficient USDA-based drink scoring...")
+    df = add_usda_drink_scoring_efficient(df, use_usda_scoring=True)
+    
     print("⚙️  Finalizing data processing...")
     df['Work_duration_est'] = df["Work - duration_text"].apply(lambda x: dict_work_duration[x] if x in dict_work_duration.keys() else None)
     df['Work - good day_text'] = df['Work - good day_text'].apply(lambda x: "Average" if x =="Ok" else x)
@@ -503,9 +574,10 @@ def create_nutrilio_files():
     print("📊 Generating Power BI files...")
     drive_list = ["files/processed_files/nutrilio_processed.csv",
                   optimized_nutrition_file,
-                  "files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx",
                   "files/work_files/nutrilio_work_files/ingredient_scores_database.json",
-                  "files/work_files/nutrilio_work_files/flagged_default_ingredients.json"]
+                  "files/work_files/nutrilio_work_files/flagged_default_ingredients.json",
+                  "files/work_files/nutrilio_work_files/drink_scores_database.json",
+                  "files/work_files/nutrilio_work_files/flagged_default_drinks.json"]
     
     for _, value in dict_extract_data.items():
         generate_pbi_files(df, value)
@@ -598,9 +670,10 @@ def upload_nutrilio_results():
     files_to_upload = [
         "files/processed_files/nutrilio_processed.csv",
         "files/processed_files/nutrilio/nutrilio_meals_optimized.csv",
-        "files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx",
         "files/work_files/nutrilio_work_files/ingredient_scores_database.json",
         "files/work_files/nutrilio_work_files/flagged_default_ingredients.json",
+        "files/work_files/nutrilio_work_files/drink_scores_database.json",
+        "files/work_files/nutrilio_work_files/flagged_default_drinks.json",
         "files/processed_files/nutrilio_food_pbi_processed_file.csv",
         "files/processed_files/nutrilio_drinks_pbi_processed_file.csv",
         "files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv",
