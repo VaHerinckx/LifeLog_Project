@@ -3,21 +3,33 @@ import regex as re
 import subprocess
 import warnings
 import os
+import json
 from datetime import date
 from pandas.errors import PerformanceWarning
 from dotenv import load_dotenv
-from src.utils.utils_functions import get_response
-from openai import OpenAI
-from src.utils.utils_functions import clean_rename_move_file
-from src.utils.drive_storage import update_drive
+from src.utils.file_operations import clean_rename_move_file
+from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.web_operations import open_web_urls, prompt_user_download_status
 load_dotenv()
-api_key = os.environ['OpenAI_Key']
 warnings.filterwarnings("ignore", message="DataFrame is highly fragmented.", category=PerformanceWarning)
 
-age = 28
-height_cm = 182
-weight_kg = 77
-activity_factor = 2.0  # using a PAL of 2.0 for highly active individuals
+def load_user_config():
+    """
+    Load user configuration from environment variables with defaults.
+    
+    Returns:
+        dict: Configuration dictionary with user parameters
+    """
+    return {
+        'age': int(os.environ.get('NUTRILIO_USER_AGE', '28')),
+        'height_cm': int(os.environ.get('NUTRILIO_USER_HEIGHT_CM', '182')),
+        'weight_kg': int(os.environ.get('NUTRILIO_USER_WEIGHT_KG', '77')),
+        'activity_factor': float(os.environ.get('NUTRILIO_USER_ACTIVITY_FACTOR', '2.0'))
+    }
+
+
+# Legacy meal score preservation functions removed
+# All meal scoring is now handled by the USDA pipeline only
 col_unnecessary_qty = ['Places', 'Origin', 'Work - location', 'Screen before sleep', 'Sleep - waking up', 'Sleep - night time']
 dict_extract_data = {"Food" : "food",
                      "Drinks" : "drinks",
@@ -44,8 +56,24 @@ dict_kcal = {
 }
 
 
-def generate_calory_needs():
-    """Generates the calory needs of a person based on the variables declared above"""
+def generate_calory_needs(config=None):
+    """
+    Generates the calory needs of a person based on user configuration.
+    
+    Args:
+        config (dict): User configuration dictionary. If None, loads from environment.
+        
+    Returns:
+        dict: Calorie breakdown by meal type
+    """
+    if config is None:
+        config = load_user_config()
+    
+    age = config['age']
+    height_cm = config['height_cm'] 
+    weight_kg = config['weight_kg']
+    activity_factor = config['activity_factor']
+    
     #Calculate the BMR using the Harris-Benedict equation
     bmr = 88.36 + (13.4 * weight_kg) + (4.8 * height_cm) - (5.7 * age)
     # Calculate the daily calorie needs by multiplying the BMR by the activity factor
@@ -67,168 +95,205 @@ def generate_calory_needs():
         'Night snack': night_snack_calories}
     return calorie_breakdown
 
-def generate_dict_ingredients():
-    """Generates a dictionnary containing all the information about each individual ingredient in the work file"""
-    meal_input_df = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
-    dict_ingredients = {}
-    for _, row in meal_input_df.iterrows():
-        dict_ingredients[row['Ingredient']] = {'Score' : row['Score'],
-                                               'kcal' : row['kcal'],
-                                               'Category' : row['Category'],
-                                               'Quantity': {'A Little' : row['A little'],
-                                                            'Medium' : row['Medium'],
-                                                            'A Lot' : row['A lot']}}
-    return dict_ingredients
+# Legacy ingredient categorization functions removed
+# All ingredient scoring is now handled by the USDA pipeline
 
-def gpt_new_ingredient(client, ingredient):
-    """Generates a ChatGPT prompt to get info's about new ingredients added in the Nutrilio app"""
-    system_prompt = """You are a helpful chat assistant with knowledge in nutrition and health,
-    that answers question on certain ingredients and their overall healthiness.
-    You are able to understand french, chinese pinyin and english alike."""
-    user_prompt = f"""Please output the following info, separated by commas, for
-    the ingredient delimited by triple backticks:
-    1. The ingredient name
-    2. The overall healthiness of this ingredient, from 1 (worst) to 10 (best), in column "Score"
-    3. The kcal intake for 100g of this ingredient
-    4. The ingredient category of the ingredient, within this list : ['Meat','Vegetables',
-    'Fruits','Carbs','Dairy','Sauces/Spices', 'Veggie alternative', 'Fish', 'Meal category',
-    'Sweets']
-    Please just answer with only the information, separated with comma.
-    Below are examples of how your answer should look like:
-    Ingredient 1: "Chocolate bar" Output: Chocolate bar, 2, 546, Sweets
-    Ingredient 2: "Fruit salad" Output: Fruit salad, 9, 63, Fruits
-    Ingredient 3: "Hot pot" Output: Hot pot, 6, 37, Meal category
-    Ingredient 4: "Baozi" Output: Baozi, 6, 275, Carbs
-    Now provide the same for the following ingredient ```{ingredient}```"""
-    return get_response(client, system_prompt, user_prompt)
-
-def gpt_new_drinks(client, drink):
-    """Generates a ChatGPT prompt to get info's about new ingredients added in the Nutrilio app"""
-    system_prompt = """You are a helpful chat assistant with knowledge in nutrition and health,
-    that answers question on certain drinks and sort them into categories.
-    You are able to understand french, chinese pinyin and english alike."""
-    user_prompt = f"""Please output the following info, separated by commas, for
-    the drinks delimited by triple backticks:
-    1. The drink name
-    2. The category the drink belongs to. Use one of these 4 categories: soda/soft drinks, strong alcohol, light alcohol, healthy drinks.
-    Please just answer with only the information, separated with comma.
-    Below are examples of how your answer should look like:
-    Drink 1: "Champagne" Output: Champagne, Light alcohol
-    Drink 2: "Milk" Output: Milk, Healthy drinks
-    Drink 3: "Rum"	Output: Rum, Strong alcohol
-    Drink 4: "Ginger beer" Output: Ginger beer, Soft drinks
-    Now provide the same for the following drink ```{drink}```"""
-    return get_response(client, system_prompt, user_prompt)
-
-def API_new_ingredients(df):
-    dict_ingredients = generate_dict_ingredients()
-    new_ingredients = []
-    for _, row in df.iterrows():
-        if (row['food_list'] != row['food_list']) | (not row['food_list']):
-            continue
-        ingredients = [ingredient.strip()[1:-1] for ingredient in row['food_list'].split(',')]
+def score_meal_with_usda(ingredient_list, quantity="medium", use_usda=False):
+    """
+    Score a meal using USDA nutrition data as an alternative to OpenAI.
+    
+    Args:
+        ingredient_list (str): Comma-separated list of ingredients
+        quantity (str): Quantity description (not used in USDA scoring currently)
+        use_usda (bool): Whether to use USDA scoring (default False for compatibility)
+        
+    Returns:
+        float: Meal score from 1-10, or None if scoring disabled
+    """
+    if not use_usda:
+        return None
+    
+    if pd.isna(ingredient_list) or not ingredient_list:
+        return None
+    
+    try:
+        # Import USDA scorer - try multiple import paths
+        try:
+            from src.nutrilio.usda_nutrition_scoring import create_usda_nutrition_scorer
+        except ImportError:
+            try:
+                from .usda_nutrition_scoring import create_usda_nutrition_scorer
+            except ImportError:
+                import sys
+                import os
+                # Add current directory to path
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                sys.path.insert(0, current_dir)
+                from usda_nutrition_scoring import create_usda_nutrition_scorer
+        
+        # Create scorer instance
+        scorer = create_usda_nutrition_scorer()
+        
+        # Parse ingredients
+        if ',' in ingredient_list:
+            if "'" in ingredient_list or '"' in ingredient_list:
+                # Format with quotes: "'ingredient1', 'ingredient2'"
+                ingredients = [ingredient.strip()[1:-1] for ingredient in ingredient_list.split(',')]
+            else:
+                # Format without quotes: "ingredient1, ingredient2"
+                ingredients = [ingredient.strip() for ingredient in ingredient_list.split(',')]
+        else:
+            ingredients = [ingredient_list.strip()]
+        
+        # Score each ingredient and calculate weighted average
+        ingredient_scores = []
+        sources = []
+        
         for ingredient in ingredients:
-            if (ingredient not in dict_ingredients.keys()) & (ingredient not in new_ingredients):
-                new_ingredients.append(ingredient)
-    if len(new_ingredients) == 0:
-        print("No new ingredients to add to the dictionnary")
-    else:
-        client = OpenAI(api_key = api_key)
-        new_rows = []
-        for new_ing in new_ingredients:
-            prompt_result = gpt_new_ingredient(client, new_ing)
-            print(f"New ingredient added to the dictionnary : {prompt_result}")
-            dict_new_ing = {"Ingredient" : prompt_result.split(',')[0].strip(),
-                            "Score" : prompt_result.split(',')[1].strip(),
-                            "kcal" : prompt_result.split(',')[2].strip(),
-                            "Category" : prompt_result.split(',')[3].strip(),
-                            "A little" : dict_kcal[prompt_result.split(',')[3].strip()]["A little"],
-                            "Medium" : dict_kcal[prompt_result.split(',')[3].strip()]["Medium"],
-                            "A lot" : dict_kcal[prompt_result.split(',')[3].strip()]["A lot"]}
-            new_rows.append(dict_new_ing)
-        print("All new ingredients were added to the dictionnary")
-        df_ingredients = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name="Sheet1")
-        df_ingredients = df_ingredients.append(new_rows, ignore_index=True)
-        df_ingredients.to_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', index = False)
+            if ingredient.strip():
+                score, source = scorer.get_ingredient_score(ingredient.strip())
+                ingredient_scores.append(score)
+                sources.append(source)
+        
+        if not ingredient_scores:
+            return None
+        
+        # Calculate weighted average (simple average for now)
+        meal_score = sum(ingredient_scores) / len(ingredient_scores)
+        
+        # Log scoring info for debugging
+        usda_count = sources.count('usda')
+        fallback_count = sources.count('fallback')
+        category_count = sources.count('category')
+        default_count = sources.count('default')
+        
+        score_info = f"USDA:{usda_count}, Fallback:{fallback_count}, Category:{category_count}, Default:{default_count}"
+        
+        return round(meal_score, 2)
+        
+    except Exception as e:
+        print(f"⚠️  Error in USDA meal scoring: {e}")
+        return None
 
 
-def prompt_new_ingredients(df):
-    """Generates a ChatGPT prompt to get info's about new ingredients added in the Nutrilio app"""
-    chat_gpt_prompt = ("\n\n\n" + "Please give me, for each of these ingredients below, your best assessment for the different informations:\n"
-    "1. The overall healthiness of this ingredient, from 1 (worst) to 10 (best)\n"
-    "2. The kcal intake for 100g of this ingredient\n"
-    "3. The ingredient category of the ingredient, within this list : ['Meat','Vegetables','Fruits','Carbs','Dairy','Sauces/Spices',"
-    "'Veggie alternative', 'Fish', 'Meal category', 'Sweets']\n"
-    "Please just give me the output and nothing else, and in the format of an excel table, with 4 columns 'Ingredient', 'Score', 'kcal' and 'Category'\n"
-    "Here are the ingredients: \n")
-    new_ingredients = ""
-    dict_ingredients = generate_dict_ingredients()
-    dict_new_ingredients = {}
-    for _, row in df.iterrows():
-        if (row['food_list'] != row['food_list']) | (not row['food_list']):
-            continue
-        ingredients = [ingredient.strip()[1:-1] for ingredient in row['food_list'].split(',')]
-        for ingredient in ingredients:
-            if ingredient not in dict_ingredients.keys():
-                dict_new_ingredients[ingredient] = 1
-    new_ingredients_counter = len(dict_new_ingredients)
-    for ing in dict_new_ingredients.keys():
-        new_ingredients += f"{ing} \n"
-    if new_ingredients_counter == 0:
-        return "OK"
-    else:
-        print(chat_gpt_prompt + new_ingredients)
-        subprocess.Popen(['open', 'files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx'])
-        return "NOK"
+def add_usda_meal_scoring_efficient(df, use_usda_scoring=False):
+    """
+    Add USDA-based meal scoring using efficient ingredient-first approach.
+    
+    Args:
+        df (DataFrame): Input dataframe with meal data
+        use_usda_scoring (bool): Whether to enable USDA scoring
+        
+    Returns:
+        DataFrame: Dataframe with USDA scores added (if enabled)
+    """
+    if not use_usda_scoring:
+        print("ℹ️  USDA meal scoring disabled (use_usda_scoring=False)")
+        return df
+    
+    print("🥗 Starting efficient USDA-based meal scoring...")
+    
+    meal_rows = df[df['Meal'].notna() & (df['Meal'] != '')].copy()
+    
+    if len(meal_rows) == 0:
+        print("ℹ️  No meal data found for USDA scoring")
+        return df
+    
+    try:
+        # Import the new efficient functions
+        try:
+            from src.nutrilio.usda_nutrition_scoring import (
+                extract_unique_ingredients_from_dataframe,
+                score_all_ingredients,
+                calculate_meal_scores_from_ingredients
+            )
+        except ImportError:
+            try:
+                from .usda_nutrition_scoring import (
+                    extract_unique_ingredients_from_dataframe,
+                    score_all_ingredients,
+                    calculate_meal_scores_from_ingredients
+                )
+            except ImportError:
+                import sys
+                import os
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                sys.path.insert(0, current_dir)
+                from usda_nutrition_scoring import (
+                    extract_unique_ingredients_from_dataframe,
+                    score_all_ingredients,
+                    calculate_meal_scores_from_ingredients
+                )
+        
+        # Phase 1: Extract unique ingredients
+        print(f"📊 Found {len(meal_rows)} meal entries to analyze")
+        unique_ingredients = extract_unique_ingredients_from_dataframe(df)
+        print(f"📋 Extracted {len(unique_ingredients)} unique ingredients from dataset")
+        
+        # Phase 2: Score all unique ingredients once
+        ingredient_scores = score_all_ingredients(unique_ingredients)
+        
+        # Phase 3: Calculate meal scores using pre-computed ingredient scores
+        df = calculate_meal_scores_from_ingredients(df, ingredient_scores)
+        
+        return df
+        
+    except Exception as e:
+        print(f"❌ Error in efficient USDA meal scoring: {e}")
+        print("🔄 Falling back to original method...")
+        return add_usda_meal_scoring_legacy(df, use_usda_scoring=True)
 
-def ingredient_category(df):
-    """Adds the ingredient category"""
-    meal_input_df = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', sheet_name='Sheet1')
-    dict_ingredients = generate_dict_ingredients()
-    for cat in list(meal_input_df.Category.unique()):
-        df[cat] = 0
-    for index,row in df.iterrows():
-        if (row['food_list'] != row['food_list']) | (row['food_list'] == "") :
-            continue
-        ingredients = [ingredient.strip()[1:-1] for ingredient in row['food_list'].split(',')]
-        for ingredient in ingredients:
-            df.loc[index, dict_ingredients[ingredient]["Category"]] +=1
+
+def add_usda_meal_scoring_legacy(df, use_usda_scoring=False):
+    """
+    Legacy USDA meal scoring method (kept as fallback).
+    
+    Args:
+        df (DataFrame): Input dataframe with meal data
+        use_usda_scoring (bool): Whether to enable USDA scoring
+        
+    Returns:
+        DataFrame: Dataframe with USDA scores added (if enabled)
+    """
+    if not use_usda_scoring:
+        return df
+    
+    print("🥗 Using legacy USDA meal scoring method...")
+    
+    meal_rows = df[df['Meal'].notna() & (df['Meal'] != '')].copy()
+    
+    if len(meal_rows) == 0:
+        return df
+    
+    # Add USDA scores
+    df['usda_meal_score'] = None
+    
+    scored_count = 0
+    total_meals = len(meal_rows)
+    
+    for idx, row in meal_rows.iterrows():
+        usda_score = score_meal_with_usda(
+            row.get('food_list', ''),
+            row.get('Amount_text', 'medium'),
+            use_usda=True
+        )
+        
+        if usda_score is not None:
+            df.loc[idx, 'usda_meal_score'] = usda_score
+            scored_count += 1
+        
+        # Progress indicator for large datasets
+        if (scored_count + 1) % 50 == 0:
+            print(f"   Processed {scored_count + 1}/{total_meals} meals...")
+    
+    print(f"✅ Legacy USDA scoring complete: {scored_count}/{total_meals} meals scored ({scored_count/total_meals*100:.1f}%)")
+    
     return df
 
-def score_meal(meal, ingredients, quantity):
-    """Gives a score on 10 for each meal made"""
-    dict_ingredients = generate_dict_ingredients()
-    calorie_needs = generate_calory_needs()
-    total_kcal = 0
-    total_score = 0
-    if (ingredients != ingredients) | (not ingredients):
-        return None, None
-    if meal not in calorie_needs.keys():
-        return None, "Meal info missing"
-    qty_divider = 1
-    ingredients = [ingredient.strip()[1:-1] for ingredient in ingredients.split(',')]
-    for ingredient in ingredients:
-        if dict_ingredients[ingredient]["Category"] == "Meal category":
-            qty_divider = 2
-            continue
-        if meal[-5:] == "snack":
-            ing_quantity = dict_ingredients[ingredient]["Quantity"]["Medium"] / 2
-        elif quantity != quantity:
-            ing_quantity = dict_ingredients[ingredient]["Quantity"]["Medium"]
-        else:
-            ing_quantity = dict_ingredients[ingredient]["Quantity"][quantity]
-        ing_kcal = dict_ingredients[ingredient]["kcal"]
-        ing_score = dict_ingredients[ingredient]["Score"]
-        total_kcal += ing_quantity/100 * ing_kcal
-        total_score += (10 - ing_score) * (ing_quantity)/100 * ing_kcal
-    if total_kcal == 0:
-        return None, "missing data"
-    avg_score = total_score / total_kcal
-    total_kcal = total_kcal/qty_divider
-    if total_kcal > calorie_needs[meal]:
-        penalty = (total_kcal - calorie_needs[meal])
-        avg_score = avg_score - penalty/1000
-    return round((10-avg_score),2), None
+
+# Meal scoring functions have been removed for faster processing
+# Historical scores are preserved in JSON format
+# USDA-based scoring available as optional alternative (see add_usda_meal_scoring function)
 
 def extract_data_count(df):
     """Retrieves the number of time each ingredient was eaten"""
@@ -260,29 +325,37 @@ def extract_data(column):
         return None
     return str(column).split('(')[0].strip()
 
-def API_new_drinks(drinks):
+def check_new_drinks(drinks):
+    """
+    Check for new drinks that are not in the database.
+    
+    Args:
+        drinks (list): List of drink names to check
+        
+    Returns:
+        list: List of new drinks found
+    """
     df_drinks = pd.read_excel('files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx')
-    new_drinks_count = 0
     new_drinks = []
+    
     for drink in drinks:
-        if (drink in list(df_drinks.Drink.unique())) | (drink in new_drinks) :
+        if (drink in list(df_drinks.Drink.unique())) | (drink in new_drinks):
             continue
         else:
             new_drinks.append(drink)
+    
     if len(new_drinks) == 0:
-        print("No new drinks to add in the file")
+        print("✅ No new drinks found")
     else:
-        client = OpenAI(api_key = api_key)
-        new_rows = []
-        for new_drink in new_drinks:
-            prompt_result = gpt_new_drinks(client, new_drink)
-            print(f"New drink added to the dictionnary : {prompt_result}")
-            dict_new_drinks = {"Drink" : prompt_result.split(',')[0].strip(),
-                            "Category" : prompt_result.split(',')[1].strip()}
-            new_rows.append(dict_new_drinks)
-        print("All new drinks were added to the dictionnary")
-        df_drinks = df_drinks.append(new_rows, ignore_index=True)
-        df_drinks.to_excel('files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx', index = False)
+        print(f"🍹 Found {len(new_drinks)} new drinks:")
+        for drink in new_drinks[:10]:  # Show first 10
+            print(f"   • {drink}")
+        if len(new_drinks) > 10:
+            print(f"   ... and {len(new_drinks) - 10} more")
+        print("ℹ️  Note: New drinks need to be manually categorized in the drinks database")
+        print("    File: files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx")
+    
+    return new_drinks
 
 def drinks_category(drinks):
     """Generates a ChatGPT prompt to get info's about new drinks added in the Nutrilio app"""
@@ -323,8 +396,64 @@ def generate_pbi_files(df, indicator):
     melted_df = melted_df[melted_df['Value'] >= 1]
     melted_df.sort_values("Full Date", ascending = False).to_csv(f"files/processed_files/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False)
     if indicator == "drinks":
-        #drinks_category(list(melted_df.drinks.unique()))
-        API_new_drinks(list(melted_df.drinks.unique()))
+        check_new_drinks(list(melted_df.drinks.unique()))
+
+def create_optimized_nutrition_file(df):
+    """Create optimized nutrition-only CSV for faster frontend performance"""
+    print("Creating optimized nutrition file...")
+    
+    # Filter only meal entries (exclude Daylio and non-meal data)
+    meal_df = df[df['Meal'].notna() & (df['Meal'] != '')].copy()
+    print(f"Filtered to {len(meal_df)} meal entries from {len(df)} total rows")
+    
+    # Select only nutrition-relevant columns
+    nutrition_cols = [
+        'Full Date', 'Time', 'Meal', 'Amount_text', 'food_list', 'Source'
+    ]
+    
+    # Add USDA score column if it exists
+    if 'usda_meal_score' in df.columns:
+        nutrition_cols.append('usda_meal_score')
+    
+    meal_df = meal_df[nutrition_cols].copy()
+    
+    # Create proper timestamp from Full Date and Time
+    meal_df['timestamp'] = pd.to_datetime(meal_df['Full Date'] + ' ' + meal_df['Time'], 
+                                         format='%Y-%m-%d %H:%M', errors='coerce')
+    meal_df['timestamp'] = meal_df['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S')
+    
+    # Clean food_list - remove quotes and extra spaces
+    meal_df['food_items'] = meal_df['food_list'].str.replace("'", "").str.replace('"', '').str.strip()
+    
+    # Rename columns for frontend consistency
+    meal_df.rename(columns={
+        'Meal': 'meal_type',
+        'Amount_text': 'amount_text'
+    }, inplace=True)
+    
+    # Select final columns in optimized order
+    final_cols = [
+        'timestamp', 'meal_type', 'amount_text', 'food_items', 'Source'
+    ]
+    
+    # Add USDA score column if it exists
+    if 'usda_meal_score' in meal_df.columns:
+        final_cols.insert(2, 'usda_meal_score')  # Insert after meal_type
+    
+    meal_df = meal_df[final_cols]
+    
+    # Ensure the directory exists
+    os.makedirs("files/processed_files/nutrilio", exist_ok=True)
+    
+    # Save optimized file
+    output_path = "files/processed_files/nutrilio/nutrilio_meals_optimized.csv"
+    meal_df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
+    
+    print(f"✅ Created optimized nutrition file: {output_path}")
+    print(f"📊 Optimized file contains {len(meal_df)} meal entries")
+    print(f"📊 Reduced from {len(nutrition_cols)} to {len(final_cols)} columns")
+    
+    return output_path
 
 def create_nutrilio_files():
     df = pd.read_csv(f'files/exports/nutrilio_exports/nutrilio_export.csv', sep = ',')
@@ -339,43 +468,287 @@ def create_nutrilio_files():
         column = df.pop(f"{val}_list")
         columns_to_concat.append(column)
     df = pd.concat([df.copy()] + columns_to_concat, axis=1)
-    #if prompt_new_ingredients(df) == "NOK":
-    #    answer = input("Chat GPT output integrated in work file? (Y/N) \n")
-    #    while answer != 'Y':
-    #        answer = input("Chat GPT output integrated in work file? (Y/N) \n")
-    API_new_ingredients(df)
-    #Compute each meal's healthiness score
-    df['Score_meal'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[0], axis = 1)
-    df['Meal_data_warning'] = df.apply(lambda x : score_meal(x.Meal, x.food_list, x.Amount_text)[1], axis = 1)
+    # Legacy ingredient checking and meal score migration removed
+    # All scoring is now handled by the USDA pipeline
     df['Source'] = 'Nutrilio'
-    df_daylio = pd.read_csv('files/processed_files/daylio_processed.csv', sep = '|')
-    df = pd.concat([df, df_daylio], ignore_index=True).sort_values('Full Date')
-    df = ingredient_category(df)
+    
+    print("📅 Merging with Daylio data...")
+    try:
+        df_daylio = pd.read_csv('files/processed_files/daylio_processed.csv', sep = '|')
+        df = pd.concat([df, df_daylio], ignore_index=True).sort_values('Full Date')
+        print(f"✅ Successfully merged with {len(df_daylio)} Daylio records")
+    except FileNotFoundError:
+        print("ℹ️  Daylio processed file not found, continuing without merging")
+        print("   (This is normal if Daylio data hasn't been processed yet)")
+    except Exception as e:
+        print(f"⚠️  Error reading Daylio data: {e}")
+        print("   Continuing without Daylio merge...")
+    
+    # Legacy ingredient categorization removed - now handled by USDA pipeline
+    
+    # USDA meal scoring enabled - provides free alternative to OpenAI scoring
+    print("🥗 Enabling efficient USDA-based meal scoring...")
+    df = add_usda_meal_scoring_efficient(df, use_usda_scoring=True)
+    
+    print("⚙️  Finalizing data processing...")
     df['Work_duration_est'] = df["Work - duration_text"].apply(lambda x: dict_work_duration[x] if x in dict_work_duration.keys() else None)
     df['Work - good day_text'] = df['Work - good day_text'].apply(lambda x: "Average" if x =="Ok" else x)
+    
+    print("💾 Saving main processed file...")
     df.drop(list_col, axis = 1).to_csv("files/processed_files/nutrilio_processed.csv", sep = '|', index = False)
+    
+    # Create optimized nutrition file for frontend performance
+    optimized_nutrition_file = create_optimized_nutrition_file(df)
+    
+    print("📊 Generating Power BI files...")
     drive_list = ["files/processed_files/nutrilio_processed.csv",
-                  "files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx",
-                  "files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx"]
+                  optimized_nutrition_file,
+                  "files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx",
+                  "files/work_files/nutrilio_work_files/ingredient_scores_database.json",
+                  "files/work_files/nutrilio_work_files/flagged_default_ingredients.json"]
+    
     for _, value in dict_extract_data.items():
         generate_pbi_files(df, value)
         drive_list.append(f"files/processed_files/nutrilio_{value}_pbi_processed_file.csv")
+    
+    print(f"✅ Processing complete! Generated {len(drive_list)} files.")
     return drive_list
 
-def process_nutrilio_export(upload="Y"):
-    file_names = []
-    print('Starting the processing of the Nutrilio export \n')
-    clean_rename_move_file("files/exports/nutrilio_exports", "/Users/valen/Downloads",\
-                          f"Nutrilio-export-{date.today().strftime('%Y-%m-%d')}.csv", "nutrilio_export.csv")
-    nutrilio_files = create_nutrilio_files()
-    for file in nutrilio_files:
-        file_names.append(file)
-    if upload == "Y":
-        update_drive(file_names)
-        print('Nutrilio processed files were created and uploaded to the Drive \n')
+
+
+def download_nutrilio_data():
+    """
+    Opens Nutrilio export instructions and prompts user to download data.
+    Returns True if user confirms download, False otherwise.
+    """
+    print("🥗 Starting Nutrilio data download...")
+    
+    print("📝 Instructions:")
+    print("   1. Open the Nutrilio app on your phone")
+    print("   2. Go to Settings → Export Data")
+    print("   3. Select 'Export to CSV'")
+    print("   4. Choose email or share the file")
+    print("   5. Save the file to your Downloads folder")
+    print(f"   6. Rename the file to: Nutrilio-export-{date.today().strftime('%Y-%m-%d')}.csv")
+    
+    response = prompt_user_download_status("Nutrilio")
+    return response
+
+
+def move_nutrilio_files():
+    """
+    Moves the downloaded Nutrilio file from Downloads to the correct export folder.
+    Returns True if successful, False otherwise.
+    """
+    print("📁 Moving Nutrilio files...")
+    
+    move_success = clean_rename_move_file(
+        export_folder="files/exports/nutrilio_exports",
+        download_folder="/Users/valen/Downloads", 
+        file_name=f"Nutrilio-export-{date.today().strftime('%Y-%m-%d')}.csv",
+        new_file_name="nutrilio_export.csv"
+    )
+    
+    if move_success:
+        print("✅ Successfully moved Nutrilio file to exports folder")
     else:
-        print('Nutrilio processed files were created \n')
+        print("❌ Failed to move Nutrilio file")
+    
+    return move_success
 
 
-#df = pd.read_csv("files/processed_files/nutrilio_processed.csv", sep = '|')
-#df[df["Notes about today"].notna()][["Full Date", "Notes about today"]].tail(365).to_csv("nutrilio_simplified.csv", sep = '|', index = False)
+def create_nutrilio_processed_files():
+    """
+    Main processing function that processes the Nutrilio data.
+    Returns True if successful, False otherwise.
+    """
+    print("⚙️ Processing Nutrilio data...")
+    
+    input_path = "files/exports/nutrilio_exports/nutrilio_export.csv"
+    
+    try:
+        # Check if input file exists
+        if not os.path.exists(input_path):
+            print(f"❌ Nutrilio file not found: {input_path}")
+            return False
+        
+        # Process the files using the existing function
+        nutrilio_files = create_nutrilio_files()
+        
+        print(f"✅ Successfully processed {len(nutrilio_files)} Nutrilio files")
+        print("📊 Generated files:")
+        for file_path in nutrilio_files:
+            print(f"   • {file_path}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error processing Nutrilio data: {e}")
+        return False
+
+
+def upload_nutrilio_results():
+    """
+    Uploads the processed Nutrilio files to Google Drive.
+    Returns True if successful, False otherwise.
+    """
+    print("☁️ Uploading Nutrilio results to Google Drive...")
+    
+    # Define expected output files
+    files_to_upload = [
+        "files/processed_files/nutrilio_processed.csv",
+        "files/processed_files/nutrilio/nutrilio_meals_optimized.csv",
+        "files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx",
+        "files/work_files/nutrilio_work_files/ingredient_scores_database.json",
+        "files/work_files/nutrilio_work_files/flagged_default_ingredients.json",
+        "files/processed_files/nutrilio_food_pbi_processed_file.csv",
+        "files/processed_files/nutrilio_drinks_pbi_processed_file.csv",
+        "files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv",
+        "files/processed_files/nutrilio_dreams_pbi_processed_file.csv",
+        "files/processed_files/nutrilio_work_content_pbi_processed_file.csv",
+        "files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv",
+        "files/processed_files/nutrilio_social_activity_pbi_processed_file.csv"
+    ]
+    
+    # Filter to only existing files
+    existing_files = [f for f in files_to_upload if os.path.exists(f)]
+    
+    if not existing_files:
+        print("❌ No files found to upload")
+        return False
+    
+    print(f"📤 Uploading {len(existing_files)} files...")
+    success = upload_multiple_files(existing_files)
+    
+    if success:
+        print("✅ Nutrilio results uploaded successfully!")
+    else:
+        print("❌ Some files failed to upload")
+    
+    return success
+
+
+def full_nutrilio_pipeline(auto_full=False):
+    """
+    Complete Nutrilio pipeline with user choice options.
+    
+    Options:
+    1. Full pipeline (download → move → process → upload)
+    2. Download data only (instructions + move files)
+    3. Process existing file only
+    4. Process existing file and upload to Drive
+    
+    Args:
+        auto_full (bool): If True, automatically runs option 1 without user input
+        
+    Returns:
+        bool: True if pipeline completed successfully, False otherwise
+    """
+    print("\n" + "="*60)
+    print("🥗 NUTRILIO DATA PIPELINE")
+    print("="*60)
+    
+    if auto_full:
+        print("🤖 Auto mode: Running full pipeline...")
+        choice = "1"
+    else:
+        print("\nSelect an option:")
+        print("1. Full pipeline (download → move → process → upload)")
+        print("2. Download data only (instructions + move files)")
+        print("3. Process existing file only")
+        print("4. Process existing file and upload to Drive")
+        
+        choice = input("\nEnter your choice (1-4): ").strip()
+    
+    success = False
+    
+    if choice == "1":
+        print("\n🚀 Starting full Nutrilio pipeline...")
+        
+        # Step 1: Download
+        download_success = download_nutrilio_data()
+        
+        # Step 2: Move files (even if download wasn't confirmed, maybe file exists)
+        if download_success:
+            move_success = move_nutrilio_files()
+        else:
+            print("⚠️ Download not confirmed, but checking for existing files...")
+            move_success = move_nutrilio_files()
+        
+        # Step 3: Process (fallback to option 3 if no new files)
+        if move_success:
+            process_success = create_nutrilio_processed_files()
+        else:
+            print("⚠️ No new files found, attempting to process existing files...")
+            process_success = create_nutrilio_processed_files()
+        
+        # Step 4: Upload
+        if process_success:
+            upload_success = upload_nutrilio_results()
+            success = upload_success
+        else:
+            print("❌ Processing failed, skipping upload")
+            success = False
+    
+    elif choice == "2":
+        print("\n📥 Download Nutrilio data only...")
+        download_success = download_nutrilio_data()
+        if download_success:
+            success = move_nutrilio_files()
+        else:
+            success = False
+    
+    elif choice == "3":
+        print("\n⚙️ Processing existing Nutrilio file only...")
+        success = create_nutrilio_processed_files()
+    
+    elif choice == "4":
+        print("\n⚙️ Processing existing file and uploading...")
+        process_success = create_nutrilio_processed_files()
+        if process_success:
+            success = upload_nutrilio_results()
+        else:
+            print("❌ Processing failed, skipping upload")
+            success = False
+    
+    else:
+        print("❌ Invalid choice. Please select 1-4.")
+        return False
+    
+    # Final status
+    print("\n" + "="*60)
+    if success:
+        print("✅ Nutrilio pipeline completed successfully!")
+    else:
+        print("❌ Nutrilio pipeline failed")
+    print("="*60)
+    
+    return success
+
+
+# Legacy function for backward compatibility
+def process_nutrilio_export(upload="Y"):
+    """
+    Legacy function for backward compatibility.
+    This maintains the original interface while using the new pipeline.
+    """
+    if upload == "Y":
+        return full_nutrilio_pipeline(auto_full=True)
+    else:
+        return create_nutrilio_processed_files()
+
+
+if __name__ == "__main__":
+    # Allow running this file directly
+    print("🥗 Nutrilio Processing Tool")
+    print("This tool downloads, processes, and uploads Nutrilio data.")
+    
+    # Test drive connection first
+    if not verify_drive_connection():
+        print("⚠️ Warning: Google Drive connection issues detected")
+        proceed = input("Continue anyway? (Y/N): ").upper() == 'Y'
+        if not proceed:
+            exit()
+    
+    # Run the pipeline
+    full_nutrilio_pipeline(auto_full=False)
