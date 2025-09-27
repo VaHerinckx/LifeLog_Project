@@ -22,7 +22,6 @@ import sys
 import base64
 import math
 import numpy as np
-import yaml
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -39,28 +38,23 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def load_settings(settings_path="credentials/settings.yaml"):
-    """Load settings from YAML file."""
-    try:
-        with open(settings_path, 'r') as file:
-            settings = yaml.safe_load(file)
-        return settings
-    except FileNotFoundError:
-        print(f"Settings file not found: {settings_path}")
-        raise
-    except Exception as e:
-        print(f"Error loading settings: {e}")
-        raise
 
 
 class LastFmAPIProcessor:
     """Handles Last.fm API data processing and incremental updates."""
     
-    def __init__(self, settings_path="credentials/settings.yaml"):
-        """Initialize the processor with API credentials."""
-        self.settings = load_settings(settings_path)
-        self.api_key = self.settings['lastfm']['api_key']
-        self.username = self.settings['lastfm']['username']
+    def __init__(self):
+        """Initialize the processor with API credentials from environment variables."""
+        # Load LastFM credentials from environment variables
+        self.api_key = os.environ.get('LAST_FM_API_KEY')
+        self.api_secret = os.environ.get('LAST_FM_API_SECRET')  # Available if needed for write operations
+        self.username = os.environ.get('LAST_FM_API_USERNAME')
+        
+        if not self.api_key:
+            raise ValueError("LAST_FM_API_KEY environment variable is required")
+        if not self.username:
+            raise ValueError("LAST_FM_API_USERNAME environment variable is required")
+            
         self.base_url = "http://ws.audioscrobbler.com/2.0/"
         
         # File paths
@@ -1009,6 +1003,9 @@ def full_lastfm_pipeline(auto_full=False):
     print("\n" + "="*60)
     if success:
         print("✅ Last.fm pipeline completed successfully!")
+        # Record successful run
+        from src.utils.utils_functions import record_successful_run
+        record_successful_run('music_lastfm', 'active')
     else:
         print("❌ Last.fm pipeline failed")
     print("="*60)
@@ -1060,6 +1057,10 @@ def full_lastfm_api_pipeline(upload_to_drive=True):
         print("\n" + "="*60)
         print("✅ Last.fm API pipeline completed successfully!")
         print("="*60)
+        
+        # Record successful run
+        from src.utils.utils_functions import record_successful_run
+        record_successful_run('music_lastfm', 'active')
         
         return True
         

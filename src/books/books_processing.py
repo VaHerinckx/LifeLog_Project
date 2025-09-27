@@ -520,7 +520,7 @@ def create_books_file():
         output_path = 'files/processed_files/books/kindle_gr_processed.csv'
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        final_df.to_csv(output_path, sep='|', index=False)
+        final_df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
 
         print(f"\n✅ Successfully created unified books file!")
         print(f"📁 Saved to: {output_path}")
@@ -675,7 +675,7 @@ def update_cover_url():
     
     # Save the updated CSV
     try:
-        df.to_csv(csv_path, sep='|', index=False)
+        df.to_csv(csv_path, sep='|', index=False, encoding='utf-16')
         print(f"\n✅ Updated local CSV file with {len(updated_books)} books")
     except Exception as e:
         print(f"❌ Error saving CSV: {e}")
@@ -838,6 +838,9 @@ def full_books_pipeline(auto_full=False):
     if success:
         print("✅ Books pipeline completed successfully!")
         print("📊 Your unified books dataset is ready for analysis!")
+        # Record successful run
+        from src.utils.utils_functions import record_successful_run
+        record_successful_run('books_combined', 'coordination')
     else:
         print("❌ Books pipeline failed")
     print("="*60)

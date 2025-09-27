@@ -373,7 +373,7 @@ def create_trakt_processed_file(fetch_artwork_auto=None):
         )
         
         # Save to CSV with pipe separator (consistent with other processors)
-        df.to_csv(output_file, sep='|', index=False, encoding='utf-8')
+        df.to_csv(output_file, sep='|', index=False, encoding='utf-16')
         
         print(f"✅ Successfully processed {len(df)} episodes")
         print(f"📁 Saved to: {output_file}")
@@ -513,7 +513,7 @@ def manual_season_artwork_override():
         )
         
         # Save updated CSV
-        df.to_csv(processed_file, sep='|', index=False, encoding='utf-8')
+        df.to_csv(processed_file, sep='|', index=False, encoding='utf-16')
         
         print(f"✅ Successfully updated artwork for {selected_season['show_title']} Season {selected_season['season']}")
         print(f"📊 Updated {selected_season['count']} episode records")
@@ -624,7 +624,7 @@ def batch_season_artwork_override():
             )
             
             # Save updated CSV
-            df.to_csv(processed_file, sep='|', index=False, encoding='utf-8')
+            df.to_csv(processed_file, sep='|', index=False, encoding='utf-16')
             
             print(f"📊 Updated processed CSV file")
         

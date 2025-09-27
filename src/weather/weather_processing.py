@@ -140,7 +140,7 @@ def create_weather_file():
     df_weather.drop_duplicates(inplace=True)
 
     # Save to a CSV file
-    df_weather.to_csv('files/processed_files/weather_processed.csv', sep = '|', index=False)
+    df_weather.to_csv('files/processed_files/weather_processed.csv', sep = '|', index=False, encoding='utf-16')
 
 
 def get_weather_data(upload="Y"):

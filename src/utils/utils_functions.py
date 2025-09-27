@@ -583,3 +583,117 @@ def clean_rename_move_file(export_folder, download_folder, file_name, new_file_n
     # Move the renamed file to the export folder
     export_file_path = os.path.join(export_folder, new_file_name)
     shutil.move(renamed_file_path, export_file_path)
+
+
+def record_successful_run(source_name: str, pipeline_type: str = 'active'):
+    """
+    Record a successful pipeline run for a data source.
+    
+    Args:
+        source_name (str): Name of the data source (e.g., 'music_lastfm', 'books_goodreads')
+        pipeline_type (str): Type of pipeline ('active', 'coordination', 'legacy', 'inactive')
+    """
+    tracking_file = 'files/tracking/last_successful_runs.csv'
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    try:
+        # Ensure the tracking directory exists
+        os.makedirs(os.path.dirname(tracking_file), exist_ok=True)
+        
+        # Read existing tracking data
+        if os.path.exists(tracking_file):
+            df = pd.read_csv(tracking_file, sep=',')
+        else:
+            # Create new tracking file if it doesn't exist
+            df = pd.DataFrame(columns=['source_name', 'last_successful_run', 'status', 'pipeline_type'])
+        
+        # Check if source already exists
+        if source_name in df['source_name'].values:
+            # Update existing record
+            df.loc[df['source_name'] == source_name, 'last_successful_run'] = current_timestamp
+            df.loc[df['source_name'] == source_name, 'status'] = 'success'
+            df.loc[df['source_name'] == source_name, 'pipeline_type'] = pipeline_type
+            print(f"📈 Updated tracking for {source_name}: {current_timestamp}")
+        else:
+            # Add new record
+            new_row = {
+                'source_name': source_name,
+                'last_successful_run': current_timestamp,
+                'status': 'success',
+                'pipeline_type': pipeline_type
+            }
+            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            print(f"📈 Added new tracking for {source_name}: {current_timestamp}")
+        
+        # Save updated tracking file
+        df.to_csv(tracking_file, sep=',', index=False, encoding='utf-8')
+        
+    except Exception as e:
+        print(f"⚠️  Warning: Could not update tracking file: {e}")
+        # Don't fail the pipeline if tracking fails
+
+
+def get_last_successful_runs():
+    """
+    Get the tracking data for all data sources.
+    
+    Returns:
+        pd.DataFrame: DataFrame with tracking information, or empty DataFrame if file doesn't exist
+    """
+    tracking_file = 'files/tracking/last_successful_runs.csv'
+    
+    try:
+        if os.path.exists(tracking_file):
+            return pd.read_csv(tracking_file, sep=',')
+        else:
+            print(f"⚠️  Tracking file not found: {tracking_file}")
+            return pd.DataFrame(columns=['source_name', 'last_successful_run', 'status', 'pipeline_type'])
+    except Exception as e:
+        print(f"⚠️  Error reading tracking file: {e}")
+        return pd.DataFrame(columns=['source_name', 'last_successful_run', 'status', 'pipeline_type'])
+
+
+def display_tracking_summary():
+    """
+    Display a summary of all data source tracking information.
+    """
+    df = get_last_successful_runs()
+    
+    if df.empty:
+        print("📊 No tracking data available")
+        return
+    
+    print("\n📊 DATA SOURCE TRACKING SUMMARY")
+    print("=" * 50)
+    
+    # Group by pipeline type
+    for pipeline_type in ['active', 'coordination', 'legacy', 'inactive']:
+        sources = df[df['pipeline_type'] == pipeline_type]
+        if not sources.empty:
+            print(f"\n{pipeline_type.upper()} SOURCES:")
+            for _, row in sources.iterrows():
+                last_run = row['last_successful_run']
+                if pd.isna(last_run) or last_run == '':
+                    status_icon = "❌"
+                    last_run_str = "Never run"
+                else:
+                    # Calculate days since last run
+                    try:
+                        last_run_date = pd.to_datetime(last_run)
+                        days_ago = (datetime.now() - last_run_date).days
+                        if days_ago == 0:
+                            status_icon = "✅"
+                            last_run_str = "Today"
+                        elif days_ago <= 7:
+                            status_icon = "🟡"
+                            last_run_str = f"{days_ago} days ago"
+                        else:
+                            status_icon = "🟠"
+                            last_run_str = f"{days_ago} days ago"
+                    except:
+                        status_icon = "❓"
+                        last_run_str = "Invalid date"
+                
+                print(f"  {status_icon} {row['source_name']:<20} | {last_run_str}")
+    
+    print("=" * 50)

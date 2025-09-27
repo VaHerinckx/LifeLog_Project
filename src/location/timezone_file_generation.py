@@ -700,7 +700,7 @@ def create_manual_timezone_file():
 
         # Save to CSV with pipe separator (same format as Google data)
         print(f"💾 Saving processed data to {output_path}...")
-        df.to_csv(output_path, sep='|', index=False)
+        df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
 
         print(f"✅ Successfully processed manual timezone data!")
         print(f"📊 Created {len(df):,} hourly records")
@@ -873,7 +873,7 @@ def merge_timezone_files():
         combined_df = combined_df.drop('source', axis=1)
 
         # Save merged file
-        combined_df.to_csv(merged_path, sep='|', index=False)
+        combined_df.to_csv(merged_path, sep='|', index=False, encoding='utf-16')
 
         print(f"✅ Successfully merged timezone files!")
         print(f"📊 Combined records: {len(combined_df):,}")

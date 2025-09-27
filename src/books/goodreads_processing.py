@@ -624,7 +624,7 @@ def create_goodreads_file():
         # Save processed file
         output_path = 'files/processed_files/books/gr_processed.csv'
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        expanded_df.to_csv(output_path, sep='|', index=False)
+        expanded_df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
 
         print(f"✅ Successfully processed {len(expanded_df)} reading records")
         print(f"📊 Final columns: {list(expanded_df.columns)}")

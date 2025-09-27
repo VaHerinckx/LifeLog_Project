@@ -116,7 +116,7 @@ def create_moneymgr_file():
 
         # Save as CSV
         print(f"💾 Saving processed data to {output_file}...")
-        df.to_csv(output_file, sep='|', index=False)
+        df.to_csv(output_file, sep='|', index=False, encoding='utf-16')
 
         print(f"✅ Successfully processed {len(df)} records")
         print(f"📊 Data range: {df['Period'].min()} to {df['Period'].max()}")

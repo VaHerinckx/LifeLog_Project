@@ -837,7 +837,7 @@ def create_kindle_file():
 
         # Save processed file
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        final_df.to_csv(output_path, sep='|', index=False)
+        final_df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
 
         print(f"✅ Saved processed Kindle data to: {output_path}")
 

@@ -15,7 +15,7 @@ def get_genre(title, release_year):
     """Legacy function - now redirects to TMDB for consistency"""
     movie_info = get_tmdb_movie_info(title, release_year)
     return movie_info['genres']
-
+4
 
 def get_tmdb_movie_info(title, release_year):
     """Retrieves both poster URL and genres from TMDB API"""
@@ -121,11 +121,29 @@ def get_tmdb_movie_info(title, release_year):
         }
 
 
-def get_watched_rating(path_watched, path_ratings):
-    """Merges the watched & ratings dfs"""
+def get_watched_rating(path_watched, path_ratings, path_diary):
+    """Merges watched, ratings, and diary dfs - using diary for actual watch dates"""
     df_watched = pd.read_csv(path_watched)
     df_ratings = pd.read_csv(path_ratings)
-    return df_watched.merge(df_ratings[['Name', 'Year', 'Rating']], on=['Name', 'Year'], how='left')
+    df_diary = pd.read_csv(path_diary)
+    
+    # First merge watched films with ratings
+    df_merged = df_watched.merge(df_ratings[['Name', 'Year', 'Rating']], on=['Name', 'Year'], how='left')
+    
+    # Then merge with diary to get actual watch dates
+    # Only keep the 'Watched Date' column from diary, rename it to 'ActualDate'
+    df_diary_dates = df_diary[['Name', 'Year', 'Watched Date']].rename(columns={'Watched Date': 'ActualDate'})
+    
+    # Merge with diary dates (left join to keep all watched movies)
+    df_final = df_merged.merge(df_diary_dates, on=['Name', 'Year'], how='left')
+    
+    # Replace the original Date with ActualDate where available, otherwise leave blank
+    df_final['Date'] = df_final['ActualDate'].fillna('')
+    
+    # Drop the temporary ActualDate column
+    df_final = df_final.drop(columns=['ActualDate'])
+    
+    return df_final
 
 
 def download_letterboxd_data():
@@ -187,6 +205,7 @@ def create_letterboxd_file():
 
     path_watched = "files/exports/letterboxd_exports/watched.csv"
     path_ratings = "files/exports/letterboxd_exports/ratings.csv"
+    path_diary = "files/exports/letterboxd_exports/diary.csv"
     output_path = 'files/processed_files/movies/letterboxd_processed.csv'
 
     try:
@@ -199,9 +218,13 @@ def create_letterboxd_file():
             print(f"❌ Ratings file not found: {path_ratings}")
             return False
 
-        # Merge watched and ratings data
-        print("📖 Reading and merging watched and ratings data...")
-        df = get_watched_rating(path_watched, path_ratings)
+        if not os.path.exists(path_diary):
+            print(f"❌ Diary file not found: {path_diary}")
+            return False
+
+        # Merge watched, ratings, and diary data
+        print("📖 Reading and merging watched, ratings, and diary data...")
+        df = get_watched_rating(path_watched, path_ratings, path_diary)
 
         # Add Genre and Poster URLs from TMDB
         print("🎭 Adding genre and poster information from TMDB...")
@@ -246,7 +269,7 @@ def create_letterboxd_file():
 
         # Save to CSV
         print(f"💾 Saving processed data to {output_path}...")
-        df.to_csv(output_path, sep='|', index=False)
+        df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
 
         print(f"\n✅ Processing complete!")
         print(f"📊 Processed {len(df)} movie entries")
@@ -442,7 +465,7 @@ def manual_poster_update():
             df.loc[mask, 'PosterURL'] = new_url
 
             # Save the updated dataframe
-            df.to_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', index=False)
+            df.to_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', index=False, encoding='utf-16')
 
             print(f"✅ Successfully updated poster URL for {movie_name} ({movie_year})")
             print(f"   Updated {rows_updated} row(s) in the dataset")

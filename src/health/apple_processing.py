@@ -50,7 +50,7 @@ def apple_df_formatting(path):
         input_data = xmltodict.parse(xml_file.read())
     records_list = input_data['HealthData']['Record']
     df = pd.DataFrame(records_list)
-    df.to_csv('files/exports/apple_exports/apple_health_export/cleaned_export.csv', sep='|', index=False)
+    df.to_csv('files/exports/apple_exports/apple_health_export/cleaned_export.csv', sep='|', index=False, encoding='utf-16')
     return df
 
 def select_columns(df, name_val, data_type):
@@ -68,7 +68,7 @@ def select_columns(df, name_val, data_type):
         df["sleep_analysis"] = df["sleep_analysis"].map(dict_sleep_analysis)
     df['date'] = pd.to_datetime(df['date'], utc=True)
     df.drop_duplicates(inplace=True)
-    df.to_csv(path, sep='|', index=False)
+    df.to_csv(path, sep='|', index=False, encoding='utf-16')
     return df
 
 def expand_df(df, name_val, aggreg_method='sum'):
@@ -88,7 +88,7 @@ def expand_df(df, name_val, aggreg_method='sum'):
     new_df = new_df[['date', 'val']].groupby('date').mean().rename(columns={'val': name_val}).reset_index()
     new_df['date'] = pd.to_datetime(new_df['date'], utc=True)
     new_df.drop_duplicates(inplace=True)
-    new_df.to_csv(path, sep='|', index=False)
+    new_df.to_csv(path, sep='|', index=False, encoding='utf-16')
     return new_df
 
 def row_expander_minutes(row, aggreg_method):
@@ -218,7 +218,7 @@ def expand_df_vectorized(df, name_val, aggreg_method='sum'):
 
     # Save to CSV
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    result_df.to_csv(path, sep='|', index=False)
+    result_df.to_csv(path, sep='|', index=False, encoding='utf-16')
 
     # Performance summary
     elapsed_time = time.time() - start_time
@@ -325,7 +325,7 @@ def create_apple_files():
     for col in list(apple_df.columns[1:-2]):
         apple_df[col] = apple_df[col].astype(float)
     apple_df.sort_values('date', inplace=True)
-    apple_df.to_csv('files/processed_files/apple/apple_processed.csv', sep='|', index=False)
+    apple_df.to_csv('files/processed_files/apple/apple_processed.csv', sep='|', index=False, encoding='utf-16')
 
     print(f"\n🎉 Apple Health processing completed!")
     print(f"⏱️  Total vectorized processing time: {total_elapsed:.2f} seconds")

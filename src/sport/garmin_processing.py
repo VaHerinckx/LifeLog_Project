@@ -969,6 +969,9 @@ def full_garmin_pipeline(auto_full=False):
     print("\n" + "="*60)
     if success:
         print("✅ Garmin pipeline completed successfully!")
+        # Record successful run
+        from src.utils.utils_functions import record_successful_run
+        record_successful_run('sport_garmin', 'active')
     else:
         print("❌ Garmin pipeline failed")
     print("="*60)

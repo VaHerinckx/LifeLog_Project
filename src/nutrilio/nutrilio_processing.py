@@ -462,7 +462,7 @@ def generate_pbi_files(df, indicator):
     sliced_df.columns = [col.split('_')[0] for col in sliced_df.columns]
     melted_df = sliced_df.melt(id_vars='Full Date', value_vars=sliced_df.columns[1:], var_name=indicator, value_name='Value')
     melted_df = melted_df[melted_df['Value'] >= 1]
-    melted_df.sort_values("Full Date", ascending = False).to_csv(f"files/processed_files/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False)
+    melted_df.sort_values("Full Date", ascending = False).to_csv(f"files/processed_files/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False, encoding='utf-16')
     # Note: Drink scoring is now handled automatically in the main pipeline via USDA scoring
 
 def create_optimized_nutrition_file(df):
@@ -566,7 +566,7 @@ def create_nutrilio_files():
     df['Work - good day_text'] = df['Work - good day_text'].apply(lambda x: "Average" if x =="Ok" else x)
     
     print("💾 Saving main processed file...")
-    df.drop(list_col, axis = 1).to_csv("files/processed_files/nutrilio_processed.csv", sep = '|', index = False)
+    df.drop(list_col, axis = 1).to_csv("files/processed_files/nutrilio_processed.csv", sep = '|', index = False, encoding='utf-16')
     
     # Create optimized nutrition file for frontend performance
     optimized_nutrition_file = create_optimized_nutrition_file(df)
