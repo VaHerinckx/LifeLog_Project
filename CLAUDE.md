@@ -614,6 +614,51 @@ print("⬆️  Uploading to Google Drive...")
 - **Clear User Feedback**: Use standardized emoji-based status messages
 - **Detailed Logging**: Log errors with context for debugging
 
+### Code Organization Standards
+
+#### Import Management Rules
+**CRITICAL**: All imports must be placed at the top of the file, never inside functions.
+
+**✅ CORRECT Pattern:**
+```python
+# Standard library imports
+import os
+import pandas as pd
+import time
+
+# Project-specific imports
+from src.utils.file_operations import find_unzip_folder
+from src.utils.drive_operations import upload_multiple_files
+from src.utils.utils_functions import record_successful_run
+
+def my_pipeline_function():
+    # Function logic here
+    if success:
+        record_successful_run('source_name', 'active')
+```
+
+**❌ INCORRECT Pattern:**
+```python
+def my_pipeline_function():
+    # Function logic here
+    if success:
+        from src.utils.utils_functions import record_successful_run  # NEVER DO THIS
+        record_successful_run('source_name', 'active')
+```
+
+**Why This Matters:**
+- Imports at function level are executed every time the function runs
+- Creates unnecessary overhead and potential import errors
+- Makes dependencies unclear and harder to manage
+- Violates Python PEP 8 style guidelines
+- Can lead to circular import issues
+
+**Implementation Rule:**
+When adding new functionality that requires imports (like tracking), always:
+1. Add the import statement at the top of the file with other imports
+2. Use the imported function directly within the function logic
+3. Never place import statements inside functions, if/else blocks, or try/catch blocks
+
 ### Implementation Templates
 
 #### 1. New Source Processor Template
@@ -626,7 +671,7 @@ import pandas as pd
 import time
 from datetime import datetime
 
-# Utils imports  
+# Utils imports - CRITICAL: ALL imports must be at the top of the file  
 from src.utils.file_operations import [needed_functions]
 from src.utils.web_operations import [needed_functions]
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
