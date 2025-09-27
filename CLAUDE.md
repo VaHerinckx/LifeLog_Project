@@ -835,3 +835,506 @@ elif choice == "X":
 - Provide clear feedback on rate limit delays
 
 These guidelines ensure all Python processing code follows consistent patterns, making the codebase maintainable, extensible, and reliable. All new processors and modifications to existing ones must follow these standards.
+
+### Compliance Tracking and Management
+
+#### Python Processing Compliance Checklist
+**IMPORTANT**: When working on Python processing files, always reference and update the compliance checklist:
+- **File Location**: `python_processing_compliance_checklist.txt` (project root)
+- **Purpose**: Comprehensive checklist of 150+ specific improvements needed across all processors
+
+#### Workflow Requirements
+When working on Python processing tasks:
+
+1. **Before Starting Work**:
+   - Read the relevant section in `python_processing_compliance_checklist.txt`
+   - Add specific checklist items as todos using TodoWrite tool
+   - Prioritize work based on checklist priority levels (🔥 HIGH, ⚠️ MEDIUM, ✅ LOW, 🏆 COMPLIANT)
+
+2. **During Implementation**:
+   - Follow the specific requirements listed for each processor
+   - Ensure all standard patterns are implemented according to guidelines
+   - Test compliance against the validation checklist at the end of the file
+
+3. **After Completing Work**:
+   - Remove completed items from `python_processing_compliance_checklist.txt`
+   - Update the file to reflect current compliance status
+   - Mark todos as completed
+   - If new issues are discovered, add them to the checklist
+
+4. **For New Processors**:
+   - Use the template provided in guidelines above
+   - Add new processor to the checklist with compliance assessment
+   - Ensure it follows all established patterns from day one
+
+#### Checklist Management Rules
+- **Remove items** immediately when completed to keep checklist current
+- **Add new items** when discovering compliance issues not already listed
+- **Update priority levels** as issues are resolved or new priorities emerge
+- **Maintain the checklist** as the single source of truth for compliance status
+
+This systematic approach ensures steady progress toward full compliance across all Python processing files while maintaining visibility into remaining work.
+
+## Processed Files to Website Pages Mapping
+
+This section maps processed CSV files from the Python processing pipeline to their corresponding website pages. This mapping is critical for understanding data dependencies and impact analysis when making changes to processed file formats.
+
+### Data Flow Architecture
+
+**Pipeline**: Raw Exports → Python Processing → Google Drive CSV → Website Pages → User Interface
+
+### Complete Data Source Mapping
+
+#### 🎵 **Music Data**
+- **Processed File**: `lfm_processed.csv` (Last.fm + legacy Spotify data)
+- **Processing Location**: `lifelog_python_processing/src/music/`
+- **Environment Variable**: `VITE_MUSIC_FILE_ID`
+- **Website Usage**:
+  - **Primary Page**: `lifelog_website/src/pages/Music/Musicpage.jsx`
+  - **Analysis Component**: `lifelog_website/src/components/Music/MusicAnalysisTab.jsx`
+  - **Supporting Components**: Music filtering panels, artist charts
+  - **Features**: Artist filtering, genre analysis, listening statistics, temporal trends
+  - **Special Notes**: Large file processing with streaming and data aggregation
+
+#### 📚 **Reading Data**
+- **Processed File**: `kindle_gr_processed.csv` (Combined Kindle + Goodreads data)
+- **Processing Location**: `lifelog_python_processing/src/books/`
+- **Environment Variable**: `VITE_READING_FILE_ID`
+- **Website Usage**:
+  - **Primary Page**: `lifelog_website/src/pages/Reading/ReadingPage.jsx`
+  - **Analysis Component**: `lifelog_website/src/components/Reading/ReadingAnalysisTab.jsx`
+  - **Supporting Components**: `BookDetails.jsx`, `ReadingTimeline.jsx`, filtering panels
+  - **Features**: Book filtering, reading pace analysis, genre tracking, ratings analysis
+
+#### 🎙️ **Podcast Data**
+- **Processed File**: `pocket_casts_processed.csv` (Pocket Casts export)
+- **Processing Location**: `lifelog_python_processing/src/podcasts/`
+- **Environment Variable**: `VITE_PODCAST_FILE_ID`
+- **Website Usage**:
+  - **Primary Page**: `lifelog_website/src/pages/Podcast/PodcastPage.jsx`
+  - **Analysis Component**: `lifelog_website/src/components/Podcast/PodcastAnalysisTab.jsx`
+  - **Supporting Components**: `EpisodeList.jsx`, filtering panels
+  - **Features**: Episode tracking, podcast filtering, listening completion statistics
+
+#### 🎬 **Movies & TV Shows Data**
+- **Processed Files**: 
+  - `letterboxd_processed.csv` (Letterboxd movie data)
+  - `trakt_processed.csv` (Trakt TV show data)
+- **Processing Location**: `lifelog_python_processing/src/movies/`
+- **Environment Variables**: `VITE_MOVIES_FILE_ID`, `VITE_TRAKT_FILE_ID`
+- **Website Usage**:
+  - **Primary Page**: `lifelog_website/src/pages/Movies/MoviesPage.jsx`
+  - **Analysis Component**: `lifelog_website/src/components/Movies/MoviesAnalysisTab.jsx`
+  - **Supporting Components**: Movie/TV toggle, filtering panels
+  - **Features**: Movie/TV show toggle, rating tracking, genre filtering, rewatch detection
+
+#### 🥗 **Nutrition Data**
+- **Processed Files**: 
+  - `nutrilio_processed.csv` (Main nutrition data)
+  - Additional categorized nutrition files
+- **Processing Location**: `lifelog_python_processing/src/nutrilio/`
+- **Environment Variable**: `VITE_NUTRITION_FILE_ID`
+- **Website Usage**:
+  - **Primary Page**: `lifelog_website/src/pages/Nutrition/NutritionPage.jsx`
+  - **Analysis Component**: `lifelog_website/src/components/Nutrition/NutritionAnalysisTab.jsx`
+  - **Supporting Components**: `MealList.jsx`, filtering panels
+  - **Features**: Meal tracking, ingredient analysis, nutrition scoring system
+
+#### 🍎 **Health Data**
+- **Processed Files**: 
+  - `apple_processed.csv` (Apple Health data)
+  - `garmin_*_processed.csv` (Various Garmin files: activities, sleep, stress, etc.)
+- **Processing Location**: `lifelog_python_processing/src/health/` and `lifelog_python_processing/src/sport/`
+- **Environment Variable**: `VITE_HEALTH_FILE_ID`
+- **Website Usage**:
+  - **Primary Page**: `lifelog_website/src/pages/Health/HealthPage.jsx`
+  - **Features**: Health metrics tracking, activity analysis, sleep patterns
+
+### Data Sources with Processing but No Website Implementation
+
+#### 💰 **Finance Data**
+- **Processed File**: `moneymgr_processed.csv`
+- **Processing Location**: `lifelog_python_processing/src/finance/`
+- **Status**: ⚠️ Processed but no corresponding website page
+- **Action Needed**: Create finance page or remove from processing pipeline
+
+#### 📱 **Screen Time Data**
+- **Processed File**: `offscreen_processed.csv`
+- **Processing Location**: `lifelog_python_processing/src/screentime/`
+- **Status**: ⚠️ Processed but no corresponding website page
+- **Action Needed**: Create screentime page or remove from processing pipeline
+
+#### 🌤️ **Weather Data**
+- **Processed File**: `weather_processed.csv`
+- **Processing Location**: `lifelog_python_processing/src/weather/`
+- **Status**: ⚠️ Processed but no corresponding website page
+- **Action Needed**: Create weather page or remove from processing pipeline
+
+### Website Integration Patterns
+
+#### **Standard Page Architecture**
+All data-driven pages follow this pattern:
+1. **Data Fetching**: `useData()` hook with `fetchData('dataType')` on mount
+2. **Filtering Interface**: `FilteringPanel` component for consistent filtering UI
+3. **KPI Display**: `CardsPanel` component for key statistics
+4. **Analysis Views**: Dedicated `*AnalysisTab` components for charts and visualizations
+5. **List/Detail Views**: Grid/list toggles with detail modals
+
+#### **Data Processing Standards**
+- **Format**: Pipe-delimited CSV (`|`) with UTF-16 encoding
+- **Date Handling**: Automatic date parsing and validation
+- **String Cleaning**: Automatic text cleaning and normalization
+- **Large Files**: Special streaming processing for datasets > 100MB
+- **Caching**: Full dataset cached in React Context after initial load
+
+### Impact Analysis Requirements
+
+**CRITICAL**: When modifying processed file formats, always check and update affected website components:
+
+#### **Column Name Changes**
+When changing column names in processed CSV files:
+1. **Check React Components**: Search for old column references in corresponding page and analysis components
+2. **Update Data Processing**: Modify any data transformation logic in components
+3. **Update Filtering**: Check if filtered columns are affected
+4. **Test Functionality**: Verify all charts, lists, and statistics still work
+
+#### **Data Type Changes**
+When changing data types or formats:
+1. **Date Formats**: Update date parsing logic in components
+2. **Numerical Data**: Check chart configurations and calculations
+3. **Boolean Fields**: Verify filtering and conditional rendering logic
+4. **New Columns**: Add support for new fields in relevant components
+
+#### **File Structure Changes**
+When adding/removing processed files:
+1. **Update DataContext**: Add new data types to `DataContext.jsx`
+2. **Update Config**: Add environment variables to `config.js`
+3. **Create Pages**: Implement corresponding website pages for new data sources
+4. **Remove References**: Clean up unused data source references
+
+### Maintenance Instructions
+
+#### **For Claude - Keeping This Mapping Current**
+When working on the LifeLog project, always:
+
+1. **Before Modifying Processed Files**:
+   - Check this mapping to identify affected website pages
+   - Create todos for updating corresponding React components
+   - Plan impact analysis for data format changes
+
+2. **After Adding New Pages**:
+   - Update this mapping with new page → data source relationships
+   - Document any special data processing requirements
+   - Add the page to appropriate sections above
+
+3. **When Creating New Data Sources**:
+   - Add complete mapping entry following the template above
+   - Ensure corresponding website page exists or is planned
+   - Update the "Data Sources with Processing but No Website Implementation" section
+
+4. **When Removing Data Sources**:
+   - Remove mapping entries
+   - Clean up corresponding website pages and components
+   - Update environment variables and configuration files
+
+This mapping ensures data integrity and prevents breaking changes to the website when modifying the Python processing pipeline.
+
+## Data Source Tracking System
+
+The LifeLog project includes a comprehensive tracking system to monitor the last successful run of each data source pipeline. This helps identify which sources need refreshing and provides visibility into data freshness for the website.
+
+### Tracking Infrastructure
+
+#### **Tracking File Location**
+- **File**: `lifelog_python_processing/files/tracking/last_successful_runs.csv`
+- **Format**: Comma-separated values with UTF-8 encoding
+- **Columns**: `source_name`, `last_successful_run`, `status`, `pipeline_type`
+
+#### **Data Source Naming Convention**
+Data sources follow this standardized naming pattern:
+- **Single Sources**: `category_source` (e.g., `music_lastfm`, `books_goodreads`)
+- **Coordination Files**: `category_combined` (e.g., `books_combined`, `movies_combined`)
+- **Legacy Sources**: `category_source` with `pipeline_type: legacy` (e.g., `music_spotify`, `sport_polar`)
+
+#### **Pipeline Types**
+- **`active`**: Currently used data sources that are regularly updated
+- **`coordination`**: Multi-source coordination pipelines that merge data from multiple sources
+- **`legacy`**: Deprecated sources kept for historical purposes (lowest maintenance priority)
+- **`inactive`**: Configured but not currently used sources
+
+### Implementation Requirements
+
+#### **CRITICAL REQUIREMENT: All Pipeline Functions Must Include Tracking**
+Every `full_*_pipeline()` function MUST include a tracking call at the end of successful execution:
+
+```python
+# At the end of successful pipeline execution
+if success:
+    print("✅ [Source] pipeline completed successfully!")
+    # Record successful run - REQUIRED FOR ALL PIPELINES
+    from src.utils.utils_functions import record_successful_run
+    record_successful_run('source_name', 'pipeline_type')
+else:
+    print("❌ [Source] pipeline failed")
+```
+
+#### **Tracking Function Usage**
+```python
+record_successful_run(source_name, pipeline_type='active')
+```
+
+**Parameters:**
+- `source_name`: Standardized source identifier (e.g., 'music_lastfm', 'books_combined')
+- `pipeline_type`: One of 'active', 'coordination', 'legacy', 'inactive'
+
+#### **Required Implementation Pattern**
+1. **Import at Success Point**: Import the tracking function only when needed (inside success block)
+2. **Call After Success Message**: Place tracking call immediately after success print statement
+3. **Use Correct Source Name**: Follow the standardized naming convention
+4. **Set Correct Pipeline Type**: Use appropriate type based on source status
+
+### Tracking Function Reference
+
+#### **Core Functions**
+- `record_successful_run(source_name, pipeline_type)`: Record successful pipeline execution
+- `get_last_successful_runs()`: Retrieve all tracking data as DataFrame
+- `display_tracking_summary()`: Show formatted summary of all source status
+
+#### **Utility Features**
+- **Automatic Directory Creation**: Creates tracking directory if it doesn't exist
+- **Graceful Error Handling**: Tracking failures don't crash the pipeline
+- **Status Indicators**: Visual indicators for freshness (✅ Today, 🟡 Recent, 🟠 Old, ❌ Never)
+- **Progress Feedback**: Console messages confirm tracking updates
+
+### Data Source Mapping
+
+#### **Active Sources (pipeline_type: 'active')**
+- `music_lastfm` → Last.fm API processing
+- `books_goodreads` → Goodreads export processing
+- `books_kindle` → Kindle export processing
+- `movies_letterboxd` → Letterboxd export processing
+- `movies_trakt` → Trakt export processing
+- `podcasts_pocket_casts` → Pocket Casts export processing
+- `health_apple` → Apple Health export processing
+- `sport_garmin` → Garmin export processing
+- `finance_moneymgr` → MoneyMgr export processing
+- `nutrition_nutrilio` → Nutrilio export processing
+
+#### **Coordination Sources (pipeline_type: 'coordination')**
+- `books_combined` → Combined Goodreads + Kindle data
+- `movies_combined` → Combined Letterboxd + Trakt data (when implemented)
+- `music_combined` → Combined Last.fm + Spotify data (when implemented)
+
+#### **Legacy Sources (pipeline_type: 'legacy')**
+- `music_spotify` → Legacy Spotify processing (data now via Last.fm)
+- `sport_polar` → Legacy Polar processing (now using Garmin)
+
+#### **Inactive Sources (pipeline_type: 'inactive')**
+- `weather` → Weather data processing (configured but no website page)
+- `location_google` → Google location processing (incomplete implementation)
+- `screentime_offscreen` → Screen time processing (configured but no website page)
+
+### Website Integration
+
+#### **Tracking Data Access**
+The tracking file can be accessed by the website to display data freshness:
+- **File Location**: Available via Google Drive or direct file access
+- **Data Format**: CSV with clear status and timestamp columns
+- **Update Frequency**: Real-time updates after each successful pipeline run
+
+#### **Potential Website Features**
+- **Dashboard Status Indicators**: Show which sources need refreshing
+- **Data Freshness Warnings**: Alert users to stale data
+- **Last Update Timestamps**: Display when each data source was last updated
+- **Refresh Recommendations**: Suggest which sources to process next
+
+### Maintenance Instructions
+
+#### **For Claude - Adding Tracking to New Pipelines**
+When creating or modifying pipeline functions:
+
+1. **New Pipelines**: Always include tracking call in template implementation
+2. **Existing Pipelines**: Add tracking to any pipeline missing the call
+3. **Source Naming**: Follow the `category_source` or `category_combined` convention
+4. **Pipeline Type**: Use 'active' for regularly used sources, 'coordination' for multi-source pipelines
+5. **Error Handling**: Ensure tracking doesn't prevent pipeline completion if it fails
+
+#### **When Adding New Data Sources**
+1. **Add to Tracking File**: Include new source in initial CSV structure
+2. **Choose Correct Type**: Set appropriate pipeline_type based on usage
+3. **Implement Tracking**: Include tracking call in the pipeline function
+4. **Update Mapping**: Add source to the mapping sections above
+5. **Test Functionality**: Verify tracking works and doesn't break pipeline
+
+#### **When Removing Data Sources**
+1. **Update Pipeline Type**: Change to 'legacy' or 'inactive' rather than removing
+2. **Maintain History**: Keep tracking records for historical reference
+3. **Update Documentation**: Move source to appropriate section in mapping above
+4. **Clean Up Website**: Remove or update corresponding website references
+
+This tracking system ensures comprehensive monitoring of all data processing activities and provides valuable insights into data freshness and system health.
+
+## Website Impact Testing Requirements
+
+**CRITICAL**: When making changes to Python processing that affect processed file formats, data structure, or output characteristics, comprehensive website testing is MANDATORY to ensure no breakage occurs.
+
+### Changes That Require Website Testing
+
+#### **High Impact Changes (Mandatory Testing)**
+- **File Encoding Changes**: Switching between UTF-8, UTF-16, or other encodings
+- **Column Name Changes**: Renaming, adding, or removing columns in processed CSV files
+- **Data Type Changes**: Changing date formats, numerical formats, boolean representations
+- **File Structure Changes**: Changing delimiters, headers, or overall file organization
+- **Data Processing Logic Changes**: Modifications that alter the actual data values or structure
+
+#### **Medium Impact Changes (Recommended Testing)**
+- **New Data Sources**: Adding new processed files or data categories
+- **Data Validation Changes**: Modifications to data cleaning or validation logic
+- **Output Location Changes**: Moving processed files to different directories or Google Drive locations
+
+#### **Low Impact Changes (Situational Testing)**
+- **Performance Optimizations**: Changes that don't affect output format
+- **Error Handling Improvements**: Enhancements that don't change successful output
+- **Documentation Updates**: Changes that don't affect actual processing
+
+### Mandatory Testing Workflow
+
+#### **Phase 1: Pre-Change Analysis**
+1. **Identify Affected Pages**: Use the "Processed Files to Website Pages Mapping" section to identify which website pages use the affected data sources
+2. **Create Testing Plan**: List specific functionality to test on each affected page
+3. **Document Current Behavior**: Note how the pages currently function as a baseline
+4. **Prepare Test Data**: Ensure test data is available for comprehensive testing
+
+#### **Phase 2: Post-Change Testing**
+1. **Data Loading Verification**: Test that data loads correctly on all affected pages
+2. **Functionality Testing**: Verify all features work as expected (filtering, charts, lists, etc.)
+3. **Error Handling Testing**: Ensure error states are handled gracefully
+4. **Performance Testing**: Check that loading times haven't degraded significantly
+
+#### **Phase 3: Issue Resolution**
+1. **Document Issues**: Record any problems discovered during testing
+2. **Fix Website Code**: Update React components, DataContext, or configuration as needed
+3. **Re-test**: Verify fixes resolve issues without creating new problems
+4. **Update Documentation**: Modify mapping or requirements if changes affect future testing
+
+### Specific Testing Procedures
+
+#### **Data Loading Tests**
+```javascript
+// Test checklist for DataContext.jsx
+□ Data fetches without errors
+□ CSV parsing completes successfully
+□ All expected columns are present
+□ Data types are correctly interpreted
+□ No encoding corruption (special characters, null bytes)
+□ Loading states work correctly
+□ Error states are handled gracefully
+```
+
+#### **Page Functionality Tests**
+For each affected page:
+```javascript
+□ Page loads without JavaScript errors
+□ Data displays correctly in all components
+□ Filtering functionality works
+□ Charts render with correct data
+□ Lists/grids show proper information
+□ Search functionality operates correctly
+□ Export features work (if applicable)
+□ No visual corruption or layout issues
+```
+
+#### **Component-Specific Tests**
+```javascript
+// Analysis Tab Components
+□ Charts display correct data
+□ Aggregations calculate properly
+□ Date ranges filter correctly
+□ No data states show appropriately
+
+// Filtering Components
+□ All filter options populate correctly
+□ Filter selections affect data display
+□ Clear filters functionality works
+□ Filter state persists appropriately
+
+// Cards/Statistics Components
+□ Calculated metrics are accurate
+□ Number formatting is correct
+□ Percentage calculations work
+□ Trend indicators function properly
+```
+
+### Testing Tools and Methods
+
+#### **Browser Developer Tools**
+- **Console**: Check for JavaScript errors or warnings
+- **Network Tab**: Verify CSV files download correctly
+- **Application Tab**: Check for data caching issues
+- **Performance Tab**: Monitor loading performance
+
+#### **Data Validation**
+- **CSV Content**: Manually inspect downloaded CSV files for encoding issues
+- **Character Encoding**: Verify special characters display correctly
+- **Data Integrity**: Compare processed data with source data for accuracy
+
+### Common Issues and Solutions
+
+#### **Encoding Problems**
+- **Symptoms**: Corrupted special characters, null bytes in text, parsing errors
+- **Solutions**: Update DataContext encoding configuration, verify Papa Parse settings
+- **Prevention**: Test with international characters and special symbols
+
+#### **Column Mapping Issues**
+- **Symptoms**: "Column not found" errors, charts not rendering, filter options missing
+- **Solutions**: Update component property names, modify data transformation logic
+- **Prevention**: Maintain consistent column naming conventions
+
+#### **Performance Degradation**
+- **Symptoms**: Slow page loading, browser freezing, memory issues
+- **Solutions**: Implement chunked data processing, optimize data structures
+- **Prevention**: Test with realistic data sizes during development
+
+### Implementation Requirements for Claude
+
+#### **Mandatory Actions When Making Processing Changes**
+1. **Before Making Changes**: 
+   - Check the data mapping section to identify affected pages
+   - Create a testing plan listing all areas to verify
+   - Document the current functionality as a baseline
+
+2. **After Making Changes**:
+   - IMMEDIATELY test the website functionality
+   - Verify data loading works correctly
+   - Test all affected page features
+   - Fix any discovered issues
+
+3. **When Adding New Data Sources**:
+   - Add mapping entry to CLAUDE.md
+   - Create corresponding website page if needed
+   - Test data integration end-to-end
+   - Update environment variables and configuration
+
+4. **When Removing Data Sources**:
+   - Update or remove corresponding website pages
+   - Clean up data context references
+   - Remove environment variables
+   - Update mapping documentation
+
+#### **Error Resolution Protocol**
+If website testing reveals issues:
+1. **Document the Issue**: Record exact error messages and symptoms
+2. **Identify Root Cause**: Determine if issue is in processing output or website code
+3. **Fix Systematically**: Update website code to handle new data format
+4. **Re-test Thoroughly**: Ensure fix resolves issue without side effects
+5. **Update Documentation**: Modify procedures if new patterns emerge
+
+#### **Success Criteria**
+Changes are considered complete only when:
+- All affected website pages load without errors
+- All functionality works as expected
+- Performance remains acceptable
+- User experience is maintained or improved
+- Documentation is updated to reflect any changes
+
+This comprehensive testing approach ensures that backend processing changes never break the frontend user experience and maintains the integrity of the entire LifeLog system.
