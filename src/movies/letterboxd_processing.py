@@ -22,7 +22,7 @@ def get_tmdb_movie_info(title, release_year):
     """Retrieves both poster URL and genres from TMDB API"""
     # Check if we already have this data cached in the processed file
     try:
-        df_processed = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|')
+        df_processed = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', encoding='utf-16')
         if 'PosterURL' in df_processed.columns and 'Genre' in df_processed.columns:
             df_processed["Key"] = df_processed["Name"].astype(str) + df_processed["Year"].astype(str)
             key_input = str(title) + str(release_year)
@@ -337,7 +337,7 @@ def manual_poster_update():
     """
     # Load the processed file
     try:
-        df = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|')
+        df = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', encoding='utf-16')
     except FileNotFoundError:
         print("Error: letterboxd_processed.csv not found. Please run process_letterboxd_export() first.")
         return
