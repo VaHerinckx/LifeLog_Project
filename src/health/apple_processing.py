@@ -7,6 +7,7 @@ import time
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.utils_functions import record_successful_run
 
 # Disable pandas warning about chained assignment
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -478,6 +479,8 @@ def full_apple_pipeline(auto_full=False):
     print("\n" + "="*60)
     if success:
         print("✅ Apple Health pipeline completed successfully!")
+        # Record successful run
+        record_successful_run('health_apple', 'active')
     else:
         print("❌ Apple Health pipeline failed")
     print("="*60)

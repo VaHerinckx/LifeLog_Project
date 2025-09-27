@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from src.utils.file_operations import clean_rename_move_file
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
+from src.utils.utils_functions import record_successful_run
 load_dotenv()
 warnings.filterwarnings("ignore", message="DataFrame is highly fragmented.", category=PerformanceWarning)
 
@@ -792,6 +793,8 @@ def full_nutrilio_pipeline(auto_full=False):
     print("\n" + "="*60)
     if success:
         print("✅ Nutrilio pipeline completed successfully!")
+        # Record successful run
+        record_successful_run('nutrilio_nutrilio', 'active')
     else:
         print("❌ Nutrilio pipeline failed")
     print("="*60)

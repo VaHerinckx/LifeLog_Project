@@ -10,6 +10,7 @@ from pathlib import Path
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.utils_functions import record_successful_run
 
 
 def reverse_geocode_coordinates(lat: float, lon: float) -> Dict[str, str]:
@@ -656,6 +657,8 @@ def full_google_pipeline(auto_full=False):
     print("\n" + "="*60)
     if success:
         print("✅ Google Maps pipeline completed successfully!")
+        # Record successful run
+        record_successful_run('location_google', 'active')
     else:
         print("❌ Google Maps pipeline failed")
     print("="*60)

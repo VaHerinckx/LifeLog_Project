@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.utils_functions import record_successful_run
 
 load_dotenv()
 
@@ -582,6 +583,8 @@ def full_letterboxd_pipeline(auto_full=False):
     print("\n" + "="*60)
     if success:
         print("✅ Letterboxd pipeline completed successfully!")
+        # Record successful run
+        record_successful_run('movies_letterboxd', 'active')
     else:
         print("❌ Letterboxd pipeline failed")
     print("="*60)

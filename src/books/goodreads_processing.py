@@ -11,6 +11,7 @@ from selenium.webdriver.chrome.options import Options
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.utils_functions import record_successful_run
 
 # Fiction genres classification
 fiction_genres = ['drama', 'horror', 'thriller']
@@ -779,6 +780,8 @@ def full_goodreads_pipeline(auto_full=False):
     print("\n" + "="*60)
     if success:
         print("✅ Goodreads pipeline completed successfully!")
+        # Record successful run
+        record_successful_run('books_goodreads', 'active')
     else:
         print("❌ Goodreads pipeline failed")
     print("="*60)

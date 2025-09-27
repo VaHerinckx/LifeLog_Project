@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.utils_functions import record_successful_run
 
 load_dotenv()
 
@@ -658,6 +659,8 @@ if __name__ == "__main__":
                 if create_trakt_processed_file():  # Will prompt for artwork
                     if upload_trakt_results():
                         print("✅ Trakt data processing completed successfully!")
+                        # Record successful run
+                        record_successful_run('movies_trakt', 'active')
                     else:
                         print("❌ Failed to upload Trakt results")
                 else:
@@ -672,6 +675,8 @@ if __name__ == "__main__":
         if create_trakt_processed_file():  # Will prompt for artwork
             if upload_trakt_results():
                 print("✅ Trakt data processing completed successfully!")
+                # Record successful run
+                record_successful_run('movies_trakt', 'active')
             else:
                 print("❌ Failed to upload Trakt results")
         else:
