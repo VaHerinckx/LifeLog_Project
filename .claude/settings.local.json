@@ -6,7 +6,16 @@
       "Bash(pkill:*)",
       "Bash(npm run server:*)",
       "Bash(grep:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "WebFetch(domain:www.last.fm)",
+      "Bash(npm run lint)",
+      "Bash(npm run build:*)",
+      "Bash(mkdir:*)",
+      "Bash(find:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:api.nal.usda.gov)",
+      "WebFetch(domain:fdc.nal.usda.gov)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

@@ -336,3 +336,502 @@ Filter panels (FilteringPanel, AnalysisFilterPane, etc.) must ALWAYS be placed i
 This standardization ensures all analysis tabs have consistent width behavior, preventing the width constraint issue that was present in ReadingAnalysisTab, and provides a scalable pattern for future analysis components.
 
 This design system ensures visual consistency, maintainability, and scalability across the entire LifeLog website. All new CSS files and modifications must follow these guidelines.
+
+## Adding New Data Sources to the Website
+
+This section documents the standardized process for integrating new data sources into the LifeLog website, connecting processed CSV files from Google Drive to the frontend.
+
+### Phase 1: Configuration Setup (Required for all new data sources)
+
+#### Step 1: Environment Variables Setup (`.env`)
+Add the Google Drive file ID for your processed data file:
+
+```bash
+# Add this line to the .env file in lifelog_website directory
+VITE_[DATATYPE]_FILE_ID=your_google_drive_file_id_here
+```
+
+**How to get Google Drive file ID:**
+1. Upload your processed CSV file to Google Drive
+2. Right-click the file → "Get link" → "Copy link"
+3. Extract the file ID from the URL: `https://drive.google.com/file/d/FILE_ID_HERE/view`
+4. Use this ID in the environment variable
+
+**Examples:**
+```bash
+VITE_HEALTH_FILE_ID=1abc123def456ghi789jkl
+VITE_FITNESS_FILE_ID=2def456ghi789jkl123abc
+```
+
+#### Step 2: Configuration Layer (`src/config/config.js`)
+Add your data source to the `DRIVE_FILES` object:
+
+```javascript
+export const DRIVE_FILES = {
+  // Existing entries...
+  MUSIC: import.meta.env.VITE_MUSIC_FILE_ID,
+  MOVIES: import.meta.env.VITE_MOVIES_FILE_ID,
+  
+  // Add your new data source here
+  HEALTH: import.meta.env.VITE_HEALTH_FILE_ID,
+  FITNESS: import.meta.env.VITE_FITNESS_FILE_ID,
+};
+```
+
+#### Step 3: Data Context Integration (`src/context/DataContext.jsx`)
+Add your data source to the DataContext:
+
+1. **Add to initial state:**
+```javascript
+const initialData = {
+  // Existing data types...
+  music: null,
+  movies: null,
+  
+  // Add your new data type
+  health: null,
+  fitness: null,
+};
+```
+
+2. **Add to fetchData switch statement:**
+```javascript
+const fetchData = async (dataType) => {
+  try {
+    setLoading(prev => ({ ...prev, [dataType]: true }));
+    setError(prev => ({ ...prev, [dataType]: null }));
+
+    let fileId;
+    switch (dataType) {
+      // Existing cases...
+      case 'music':
+        fileId = DRIVE_FILES.MUSIC;
+        break;
+      case 'movies':
+        fileId = DRIVE_FILES.MOVIES;
+        break;
+        
+      // Add your new case here
+      case 'health':
+        fileId = DRIVE_FILES.HEALTH;
+        break;
+      case 'fitness':
+        fileId = DRIVE_FILES.FITNESS;
+        break;
+        
+      default:
+        throw new Error(`Unknown data type: ${dataType}`);
+    }
+    
+    // Rest of fetchData logic...
+  }
+};
+```
+
+### Data Format Requirements
+
+All processed CSV files must follow these standards:
+- **Delimiter**: Pipe-separated values (`|`)
+- **Encoding**: UTF-16 (automatically detected by Papa Parse)
+- **Headers**: First row contains column names
+- **Date format**: ISO 8601 format preferred (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM:SS`)
+
+### Usage in Pages
+
+Once configured, use the data in your page components:
+
+```javascript
+import { useData } from '../../context/DataContext';
+
+function YourPage() {
+  const { data, loading, error, fetchData } = useData();
+  
+  useEffect(() => {
+    fetchData('health'); // or your data type
+  }, [fetchData]);
+  
+  const healthData = data.health;
+  
+  // Your component logic...
+}
+```
+
+### Error Handling and Troubleshooting
+
+Common issues and solutions:
+- **"File not found"**: Check Google Drive file ID and sharing permissions
+- **"Parsing error"**: Verify CSV format (pipe-delimited, proper encoding)
+- **"Large file timeout"**: Files over 100MB may timeout (increase timeout in server.js)
+- **"Environment variable not found"**: Ensure `.env` file exists and variable name is correct
+
+### Reference Examples
+
+Examine existing implementations for patterns:
+- **Movies**: Simple data structure with date filtering
+- **Music**: Large dataset with special handling and chunked processing
+- **Books**: Multiple related data files (books + audiobooks)
+
+This process ensures consistent data integration patterns across all LifeLog data sources.
+
+## Python Processing Pipeline Guidelines
+
+This section provides comprehensive guidelines for developing and maintaining consistent Python data processing code within the LifeLog project. All Python processing code must follow these standards to ensure maintainability, consistency, and reliability.
+
+### Core Architecture Principles
+
+#### 1. Source Processor Structure
+- **One File Per Source**: Each data source (Spotify, Garmin, Goodreads, etc.) has its own dedicated processing file
+- **Themed Directories**: Group related sources in logical directories (`books/`, `music/`, `health/`, `movies/`, etc.)
+- **Complete Processing**: Each source processor handles the entire workflow from download to upload within a single file
+- **Self-Contained Logic**: Source-specific logic must remain in the source file, not in utils
+
+#### 2. Multi-Source Topic Handling
+**CRITICAL REQUIREMENT**: When a topic has multiple data sources, create a dedicated coordination file that processes and merges results.
+
+**Pattern Example - Books Topic**:
+- `books/goodreads_processing.py` - Processes Goodreads exports
+- `books/kindle_processing.py` - Processes Kindle exports  
+- `books/books_processing.py` - **Coordination file** that:
+  - Imports and calls individual source processors
+  - Checks for prerequisite processed files
+  - Merges data from multiple sources into unified output
+  - Handles combined upload operations
+
+**Implementation Rule**: 
+- Individual source processors (e.g., `goodreads_processing.py`) handle their specific data source
+- Coordination file (e.g., `books_processing.py`) orchestrates multi-source workflows
+- The coordination file becomes the primary entry point for the topic in `process_exports.py`
+
+#### 3. Utils Layer Separation
+Functions that can be used across multiple sources belong in utils modules:
+
+- **`utils/drive_operations.py`**: Google Drive upload, connection testing, credential management
+- **`utils/file_operations.py`**: File system operations, folder management, file validation
+- **`utils/web_operations.py`**: Browser automation, download prompting, URL handling
+- **`utils/utils_functions.py`**: Common data processing, timezone corrections, general utilities
+
+**Never Put in Utils**:
+- Source-specific data transformations
+- API calls specific to one service
+- Business logic tied to a particular data format
+
+### Standardized Pipeline Patterns
+
+#### 1. Pipeline Function Naming
+All processors must implement these standard function names:
+
+```python
+# Core pipeline functions
+def download_[source]_data()           # Download new data from service
+def move_[source]_files()              # Move/organize downloaded files
+def create_[source]_file()             # Process and create output CSV
+def upload_[source]_results()          # Upload processed files to Drive
+
+# Main pipeline orchestrator
+def full_[source]_pipeline()           # Complete workflow with user options
+
+# Legacy compatibility (if needed)
+def process_[source]_export()          # Backward-compatible wrapper
+```
+
+#### 2. Standard Pipeline Options
+Every `full_*_pipeline()` function must offer these 4 standard options:
+
+```python
+def full_[source]_pipeline():
+    print(f"🎵 {Source} Processing Pipeline")
+    print("=" * 50)
+    print("1. Download new data, process, and upload to Drive")
+    print("2. Process existing data and upload to Drive") 
+    print("3. Upload existing processed files to Drive")
+    print("4. Full pipeline (download + process + upload)")
+    
+    choice = input("Select option (1-4): ").strip()
+    # Implementation logic...
+```
+
+### Data Output Standards
+
+#### 1. File Format Requirements
+- **Delimiter**: Pipe-separated values (`|`) - never comma or tab
+- **Encoding**: UTF-16 with BOM for proper character handling
+- **Headers**: First row must contain descriptive column names
+- **Output Location**: `files/processed_files/[category]/[source]_processed.csv`
+
+#### 2. Column Naming and Ordering Standards
+
+**Column Naming Rules:**
+- **snake_case**: All column names must use snake_case format: `release_date`, `track_name`, `artist_name`
+- **Boolean Columns**: Use `is_*` or `has_*` prefixes: `is_favorite`, `has_lyrics`, `is_explicit`, `has_cover_art`
+- **Descriptive Names**: Use full descriptive names, not abbreviations:
+  - `release_date` not `date` or `dt`
+  - `track_name` not `name` or `title`
+  - `user_rating` not `rating` or `stars`
+  - `duration_seconds` not `duration` or `time`
+
+**Column Ordering Standards:**
+Columns must be ordered logically in this sequence:
+1. **Primary identifiers**: `id`, `name`, `title`, etc.
+2. **Descriptive attributes**: `artist_name`, `album_name`, `genre`, etc.
+3. **Numerical values**: `duration_seconds`, `user_rating`, `play_count`, etc.
+4. **Dates and timestamps**: `release_date`, `last_played_date`, `created_at`, etc.
+5. **Boolean columns**: `is_favorite`, `has_lyrics`, `is_explicit`, etc.
+
+**Example Column Order:**
+```
+track_id | track_name | artist_name | album_name | genre | duration_seconds | user_rating | release_date | last_played_date | is_favorite | has_lyrics | is_explicit
+```
+
+#### 3. Date Handling Standards
+- **Timezone Correction**: Use `time_difference_correction()` from utils for location-based timezone adjustments
+- **Date Format**: Prefer ISO 8601 format (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM:SS`)
+- **Consistency**: Ensure all dates within a file use the same format
+
+### User Interface Standards
+
+#### 1. Status Message Patterns
+Use consistent emoji-based messages throughout all processors:
+
+```python
+# Status indicators
+print("🚀 Starting [operation]...")
+print("✅ [Operation] completed successfully")
+print("❌ [Operation] failed: [reason]")
+print("⚠️  Warning: [issue]")
+print("📁 File found: [filename]")
+print("📂 Creating directory: [path]")
+print("🔗 Connecting to [service]...")
+print("⬆️  Uploading to Google Drive...")
+```
+
+#### 2. User Interaction Patterns
+- **Consistent Prompting**: Use standard input patterns with clear options
+- **Confirmation Workflows**: Ask for confirmation on destructive operations
+- **Progress Indication**: Show clear step-by-step progress through pipelines
+
+#### 3. Error Handling Standards
+- **Graceful Failures**: Allow pipeline to continue after non-critical errors
+- **Clear User Feedback**: Use standardized emoji-based status messages
+- **Detailed Logging**: Log errors with context for debugging
+
+### Implementation Templates
+
+#### 1. New Source Processor Template
+When creating a new source processor, follow this structure:
+
+```python
+# Standard imports
+import os
+import pandas as pd
+import time
+from datetime import datetime
+
+# Utils imports  
+from src.utils.file_operations import [needed_functions]
+from src.utils.web_operations import [needed_functions]
+from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+
+# Load environment variables if needed
+from dotenv import load_dotenv
+load_dotenv()
+
+def download_[source]_data():
+    """Download new data from [source] service"""
+    print("🚀 Starting [source] data download...")
+    # Implementation
+    print("✅ Download completed")
+
+def move_[source]_files():
+    """Move and organize [source] files"""
+    print("📁 Moving [source] files...")
+    # Implementation  
+    print("✅ Files moved successfully")
+
+def create_[source]_file():
+    """Process [source] data and create output CSV"""
+    print("🔄 Processing [source] data...")
+    # Data processing logic
+    # Save as pipe-delimited UTF-16 CSV with proper column naming/ordering
+    print("✅ Processing completed")
+
+def upload_[source]_results():
+    """Upload processed [source] files to Google Drive"""
+    print("⬆️  Uploading [source] results...")
+    files_to_upload = [
+        'files/processed_files/[category]/[source]_processed.csv'
+    ]
+    upload_multiple_files(files_to_upload)
+    print("✅ Upload completed")
+
+def full_[source]_pipeline():
+    """Complete [source] processing pipeline with user options"""
+    print("🎯 [Source] Processing Pipeline")
+    print("=" * 50)
+    print("1. Download new data, process, and upload to Drive")
+    print("2. Process existing data and upload to Drive")
+    print("3. Upload existing processed files to Drive") 
+    print("4. Full pipeline (download + process + upload)")
+    
+    choice = input("Select option (1-4): ").strip()
+    
+    if choice == "1":
+        download_[source]_data()
+        create_[source]_file()
+        upload_[source]_results()
+    elif choice == "2":
+        create_[source]_file()
+        upload_[source]_results()
+    elif choice == "3":
+        upload_[source]_results()
+    elif choice == "4":
+        download_[source]_data()
+        move_[source]_files()
+        create_[source]_file()
+        upload_[source]_results()
+    else:
+        print("❌ Invalid choice")
+
+# Legacy compatibility wrapper (if needed)
+def process_[source]_export():
+    """Legacy function - redirects to full pipeline"""
+    full_[source]_pipeline()
+```
+
+#### 2. Multi-Source Coordination Template
+For topics with multiple sources, create a coordination file:
+
+```python
+# Import individual source processors
+from src.[category].[source1]_processing import full_[source1]_pipeline
+from src.[category].[source2]_processing import full_[source2]_pipeline
+from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+
+def check_prerequisite_files():
+    """Check if required processed files from individual sources exist"""
+    required_files = {
+        '[source1]': 'files/processed_files/[category]/[source1]_processed.csv',
+        '[source2]': 'files/processed_files/[category]/[source2]_processed.csv'
+    }
+    
+    file_status = {}
+    for source, file_path in required_files.items():
+        exists = os.path.exists(file_path)
+        file_status[source] = {
+            'exists': exists,
+            'path': file_path
+        }
+        print(f"{'✅' if exists else '❌'} {source}: {file_path}")
+    
+    return file_status
+
+def merge_[category]_data():
+    """Merge data from multiple sources into unified output"""
+    print("🔄 Merging [category] data from multiple sources...")
+    
+    # Load individual processed files
+    df_source1 = pd.read_csv('files/processed_files/[category]/[source1]_processed.csv', sep='|')
+    df_source2 = pd.read_csv('files/processed_files/[category]/[source2]_processed.csv', sep='|')
+    
+    # Merge logic specific to the category
+    # Ensure final output follows column naming and ordering standards
+    
+    # Save merged result
+    output_path = 'files/processed_files/[category]/[category]_combined.csv'
+    merged_df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
+    print(f"✅ Merged data saved to {output_path}")
+
+def full_[category]_pipeline():
+    """Complete [category] processing pipeline coordinating multiple sources"""
+    print("📚 [Category] Multi-Source Processing Pipeline")
+    print("=" * 50)
+    print("1. Process all sources and merge results")
+    print("2. Process [source1] only")
+    print("3. Process [source2] only")
+    print("4. Merge existing processed files")
+    print("5. Upload merged results to Drive")
+    
+    choice = input("Select option (1-5): ").strip()
+    
+    if choice == "1":
+        full_[source1]_pipeline()
+        full_[source2]_pipeline()
+        merge_[category]_data()
+        upload_[category]_results()
+    elif choice == "2":
+        full_[source1]_pipeline()
+    elif choice == "3":
+        full_[source2]_pipeline()
+    elif choice == "4":
+        merge_[category]_data()
+    elif choice == "5":
+        upload_[category]_results()
+    else:
+        print("❌ Invalid choice")
+```
+
+### Environment and Configuration Standards
+
+#### 1. API Key Management
+- Store API keys in environment variables via `.env` file
+- Use descriptive names: `TMDB_Key`, `LASTFM_API_KEY`, `SPOTIFY_CLIENT_ID`
+- Always check for key existence before making API calls
+- Provide clear error messages when keys are missing
+
+#### 2. File Path Management
+- Use relative paths from project root
+- Create directory structure programmatically if it doesn't exist
+- Validate file existence before processing
+- Use Path objects for cross-platform compatibility
+
+### Testing and Validation
+
+#### 1. Sample File Generation
+- Every processor should support sample file creation for testing
+- Place sample files in `files/sample_files/[category]/`
+- Sample files should represent realistic data variety
+- Include edge cases in sample data
+
+#### 2. Data Validation
+- Validate file format before processing
+- Check for required columns in input files
+- Verify data types and ranges
+- Handle missing or malformed data gracefully
+
+### Integration with Main Pipeline
+
+#### 1. Adding to process_exports.py
+When adding a new processor to the main pipeline:
+
+```python
+# Import the main pipeline function
+from src.[category].[processor]_processing import full_[processor]_pipeline
+
+# Add to menu options in main()
+print("X. Process [Source] Data")
+
+# Add to choice handling
+elif choice == "X":
+    full_[processor]_pipeline()
+```
+
+#### 2. Google Drive Integration
+- All processors must use `upload_multiple_files()` from `drive_operations.py`
+- Test drive connection before upload operations
+- Handle authentication failures gracefully
+- Provide clear feedback on upload success/failure
+
+### Performance and Optimization
+
+#### 1. Large Dataset Handling
+- Process data in chunks for large files (>100MB)
+- Use efficient pandas operations (vectorization over loops)
+- Cache API responses when possible
+- Implement progress indicators for long operations
+
+#### 2. API Rate Limiting
+- Respect API rate limits with appropriate delays
+- Implement exponential backoff for failed requests
+- Cache results to minimize API calls
+- Provide clear feedback on rate limit delays
+
+These guidelines ensure all Python processing code follows consistent patterns, making the codebase maintainable, extensible, and reliable. All new processors and modifications to existing ones must follow these standards.
