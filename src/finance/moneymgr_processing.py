@@ -9,8 +9,8 @@ from src.utils.utils_functions import record_successful_run
 
 def add_sorting_columns(df):
     """Adds some columns used for sorting in the PBI report"""
-    df['Year_Week'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.week)))
-    df['Year_Month'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.month)))
+    df['year_week'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.week)))
+    df['year_month'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.month)))
     df['sorting_week'] = df['Period'].dt.year * 100 + df['Period'].dt.isocalendar().week
     df['sorting_month'] = df['Period'].dt.year * 100 + df['Period'].dt.month
     df['sorting_day'] = df['Period'].dt.year * 100 + df['Period'].dt.isocalendar().day
@@ -46,7 +46,7 @@ def move_moneymgr_files():
     """
     print("📁 Moving Money Manager files...")
 
-    download_folder = "/Users/valen/Downloads"
+    download_folder = os.path.expanduser("~/Downloads")
     export_folder = "files/exports/moneymgr_exports"
     expected_file = f"{date.today().strftime('%Y-%m-%d')}.xlsx"
     target_file = "moneymgr_export.xlsx"
@@ -169,13 +169,13 @@ def process_moneymgr_export(upload="Y"):
 
 def full_moneymgr_pipeline(auto_full=False):
     """
-    Complete Money Manager pipeline with 4 options.
+    Complete Money Manager pipeline with 4 standard options.
 
     Options:
-    1. Full pipeline (download → move → process → upload)
-    2. Download data only (get files from app)
-    3. Process existing file only (just processing)
-    4. Process existing file and upload (process → upload)
+    1. Download new data, process, and upload to Drive
+    2. Process existing data and upload to Drive
+    3. Upload existing processed files to Drive
+    4. Full pipeline (download + process + upload)
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -192,17 +192,17 @@ def full_moneymgr_pipeline(auto_full=False):
         choice = "1"
     else:
         print("\nSelect an option:")
-        print("1. Full pipeline (download → move → process → upload)")
-        print("2. Download data only (get files from app)")
-        print("3. Process existing file only")
-        print("4. Process existing file and upload to Drive")
+        print("1. Download new data, process, and upload to Drive")
+        print("2. Process existing data and upload to Drive")
+        print("3. Upload existing processed files to Drive")
+        print("4. Full pipeline (download + process + upload)")
 
         choice = input("\nEnter your choice (1-4): ").strip()
 
     success = False
 
     if choice == "1":
-        print("\n🚀 Starting full Money Manager pipeline...")
+        print("\n🚀 Download new data, process, and upload to Drive...")
 
         # Step 1: Download
         download_success = download_moneymgr_data()
@@ -214,7 +214,7 @@ def full_moneymgr_pipeline(auto_full=False):
             print("⚠️  Download not confirmed, but checking for existing files...")
             move_success = move_moneymgr_files()
 
-        # Step 3: Process (fallback to option 3 if no new files)
+        # Step 3: Process (fallback to existing files if no new files)
         if move_success:
             process_success = create_moneymgr_file()
         else:
@@ -230,22 +230,42 @@ def full_moneymgr_pipeline(auto_full=False):
             success = False
 
     elif choice == "2":
-        print("\n📥 Download Money Manager data only...")
-        download_success = download_moneymgr_data()
-        if download_success:
-            success = move_moneymgr_files()
-        else:
-            success = False
-
-    elif choice == "3":
-        print("\n⚙️  Processing existing Money Manager file only...")
-        success = create_moneymgr_file()
-
-    elif choice == "4":
-        print("\n⚙️  Processing existing file and uploading...")
+        print("\n⚙️  Process existing data and upload to Drive...")
         process_success = create_moneymgr_file()
         if process_success:
             success = upload_moneymgr_results()
+        else:
+            print("❌ Processing failed, skipping upload")
+            success = False
+
+    elif choice == "3":
+        print("\n⬆️  Upload existing processed files to Drive...")
+        success = upload_moneymgr_results()
+
+    elif choice == "4":
+        print("\n🚀 Full pipeline (download + process + upload)...")
+
+        # Step 1: Download
+        download_success = download_moneymgr_data()
+
+        # Step 2: Move files (even if download wasn't confirmed, maybe file exists)
+        if download_success:
+            move_success = move_moneymgr_files()
+        else:
+            print("⚠️  Download not confirmed, but checking for existing files...")
+            move_success = move_moneymgr_files()
+
+        # Step 3: Process (fallback to existing files if no new files)
+        if move_success:
+            process_success = create_moneymgr_file()
+        else:
+            print("⚠️  No new files found, attempting to process existing files...")
+            process_success = create_moneymgr_file()
+
+        # Step 4: Upload
+        if process_success:
+            upload_success = upload_moneymgr_results()
+            success = upload_success
         else:
             print("❌ Processing failed, skipping upload")
             success = False
