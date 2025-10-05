@@ -9,11 +9,11 @@ from src.utils.utils_functions import record_successful_run
 
 def add_sorting_columns(df):
     """Adds some columns used for sorting in the PBI report"""
-    df['year_week'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.week)))
-    df['year_month'] = df['Period'].apply(lambda x: str(x.year) + ' - ' + str(str(x.month)))
-    df['sorting_week'] = df['Period'].dt.year * 100 + df['Period'].dt.isocalendar().week
-    df['sorting_month'] = df['Period'].dt.year * 100 + df['Period'].dt.month
-    df['sorting_day'] = df['Period'].dt.year * 100 + df['Period'].dt.isocalendar().day
+    df['year_week'] = df['date'].apply(lambda x: str(x.year) + ' - ' + str(str(x.week)))
+    df['year_month'] = df['date'].apply(lambda x: str(x.year) + ' - ' + str(str(x.month)))
+    df['sorting_week'] = df['date'].dt.year * 100 + df['date'].dt.isocalendar().week
+    df['sorting_month'] = df['date'].dt.year * 100 + df['date'].dt.month
+    df['sorting_day'] = df['date'].dt.year * 100 + df['date'].dt.isocalendar().day
     return df
 
 
@@ -105,8 +105,11 @@ def create_moneymgr_file():
         print(f"📖 Reading data from {input_file}...")
         df = pd.read_excel(input_file)
 
-        # Sort by Period
-        df.sort_values(by="Period", inplace=True)
+        # Rename Period to date immediately after reading
+        df = df.rename(columns={'Period': 'date'})
+
+        # Sort by date
+        df.sort_values(by="date", inplace=True)
 
         # Drop unnecessary column if it exists
         if 'Accounts.1' in df.columns:
@@ -124,10 +127,16 @@ def create_moneymgr_file():
         # Add sorting columns
         df = add_sorting_columns(df)
 
+        print("Use unique currency rate for NTD expenses")
+        df['corrected_EUR'] = df.apply(lambda row: row['Amount'] * 0.029
+                                       if (row.get('Currency') == 'NTD') and (row.get('Accounts') not in ['Personal account', 'Cash'])
+                                       else row['EUR'], axis = 1)
+
         print("Adjusting for tricount expenses")
         df['corrected_EUR'] = df.apply(lambda row:
-            abs(float(row['amount_eur'])) / 2 if (row.get('Accounts') == 'Tricount Taiwan') and (row.get('Category') != "Cash swap")
-            else abs(float(row['EUR'])), axis=1)
+            abs(float(row['corrected_EUR'])) / 2 if (row.get('Accounts') == 'Tricount Taiwan') and (row.get('Category') != "Cash swap")
+            else abs(float(row['corrected_EUR'])), axis=1)
+
 
         # Add transaction_type column with mapped values
         print("📝 Adding transaction_type column...")
@@ -169,12 +178,12 @@ def create_moneymgr_file():
         df = df.drop(columns=['Income/Expense'])
         print("✅ Removed old Income/Expense column")
 
-        # Save as CSV
+        # Save as CSV with UTF-8 encoding (easier for website to handle)
         print(f"💾 Saving processed data to {output_file}...")
-        df.to_csv(output_file, sep='|', index=False, encoding='utf-16')
+        df.to_csv(output_file, sep='|', index=False, encoding='utf-8')
 
         print(f"✅ Successfully processed {len(df)} records")
-        print(f"📊 Data range: {df['Period'].min()} to {df['Period'].max()}")
+        print(f"📊 Data range: {df['date'].min()} to {df['date'].max()}")
 
         return True
 
