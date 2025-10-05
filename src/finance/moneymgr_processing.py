@@ -112,8 +112,62 @@ def create_moneymgr_file():
         if 'Accounts.1' in df.columns:
             df.drop('Accounts.1', axis=1, inplace=True)
 
+        # Remove specific accounts that are no longer needed
+        print("🗑️  Filtering out removed accounts...")
+        accounts_to_remove = ["Argenta Life Longer Life", "Argenta Life DP Dynamic Allocation", "Savings account"]
+        initial_count = len(df)
+        df = df[~df['Accounts'].isin(accounts_to_remove)]
+        removed_count = initial_count - len(df)
+        if removed_count > 0:
+            print(f"   Removed {removed_count} records from: {', '.join(accounts_to_remove)}")
+
         # Add sorting columns
         df = add_sorting_columns(df)
+
+        print("Adjusting for tricount expenses")
+        df['corrected_EUR'] = df.apply(lambda row:
+            abs(float(row['amount_eur'])) / 2 if (row.get('Accounts') == 'Tricount Taiwan') and (row.get('Category') != "Cash swap")
+            else abs(float(row['EUR'])), axis=1)
+
+        # Add transaction_type column with mapped values
+        print("📝 Adding transaction_type column...")
+        transaction_type_dict = {
+            "Income": "income",
+            "Exp.": "expense",
+            "Transfer-In": "incoming_transfer",
+            "Transfer-Out": "outgoing_transfer"
+        }
+
+        # Check for unmapped Income/Expense values before filtering
+        unmapped_values = df[~df['Income/Expense'].isin(transaction_type_dict.keys())]['Income/Expense'].unique()
+        if len(unmapped_values) > 0:
+            print(f"⚠️  WARNING: Found unmapped Income/Expense values that will be removed:")
+            for val in unmapped_values:
+                count = len(df[df['Income/Expense'] == val])
+                print(f"   - '{val}': {count} records")
+
+        # Map transaction types
+        df['transaction_type'] = df['Income/Expense'].map(transaction_type_dict)
+
+        # Remove records with unmapped values (NaN in transaction_type)
+        before_filter = len(df)
+        df = df[df['transaction_type'].notna()]
+        removed_unmapped = before_filter - len(df)
+        if removed_unmapped > 0:
+            print(f"🗑️  Removed {removed_unmapped} records with unmapped Income/Expense values")
+
+        # Add movement column (positive for income/incoming transfers, negative for expenses/outgoing transfers)
+        print("➕ Adding movement column...")
+        df['movement'] = df.apply(
+            lambda x: x['corrected_EUR'] if x['transaction_type'] in ['income', 'incoming_transfer']
+            else x['corrected_EUR'] * -1,
+            axis=1
+        )
+        print("✅ Movement column added")
+
+        # Drop the old Income/Expense column - now replaced by transaction_type
+        df = df.drop(columns=['Income/Expense'])
+        print("✅ Removed old Income/Expense column")
 
         # Save as CSV
         print(f"💾 Saving processed data to {output_file}...")
