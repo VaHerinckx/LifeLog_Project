@@ -285,37 +285,50 @@ def time_difference_correction(df: pd.DataFrame, timestamp_column: str, source_t
             print(f"   Sample raw values: {location_df['timestamp'].head().tolist()}")
             print(f"   Type of first value: {type(location_df['timestamp'].iloc[0])}")
 
-        # Force proper datetime parsing and ensure timezone-naive
+        # CRITICAL FIX: Location timestamps contain timezone info (e.g., 2023-01-01T00:00:00+01:00)
+        # We need to parse them WITH timezone info and convert to UTC for comparison
         try:
-            # Parse all timestamps as pandas datetime64 objects (timezone-naive)
-            location_df['timestamp_parsed'] = pd.to_datetime(location_df['timestamp'], errors='coerce')
-
-            # Ensure the result is a proper pandas datetime64 column, not Python datetime objects
-            if location_df['timestamp_parsed'].dtype == 'object':
-                # Force conversion to datetime64
-                location_df['timestamp_parsed'] = pd.to_datetime(location_df['timestamp_parsed'].astype(str), errors='coerce')
-
-            # Make absolutely sure it's timezone-naive
-            if hasattr(location_df['timestamp_parsed'].dtype, 'tz') and location_df['timestamp_parsed'].dtype.tz is not None:
-                location_df['timestamp_parsed'] = location_df['timestamp_parsed'].dt.tz_localize(None)
+            # Parse timestamps keeping timezone information
+            location_df['timestamp_parsed'] = pd.to_datetime(location_df['timestamp'], errors='coerce', utc=False)
 
             if debug:
-                print(f"   After parsing: {location_df['timestamp_parsed'].dtype}")
+                print(f"   After initial parsing: {location_df['timestamp_parsed'].dtype}")
                 print(f"   Sample parsed values: {location_df['timestamp_parsed'].head().tolist()}")
+                if hasattr(location_df['timestamp_parsed'].dtype, 'tz'):
+                    print(f"   Timezone info: {location_df['timestamp_parsed'].dtype.tz}")
 
-            # Force to timezone-naive if still timezone-aware
+            # Convert timezone-aware timestamps to UTC, then remove timezone info for comparison
             if hasattr(location_df['timestamp_parsed'].dtype, 'tz') and location_df['timestamp_parsed'].dtype.tz is not None:
-                if debug:
-                    print(f"   Removing timezone info: {location_df['timestamp_parsed'].dtype.tz}")
-                location_df['timestamp_parsed'] = location_df['timestamp_parsed'].dt.tz_localize(None)
+                # Already has timezone, convert to UTC
+                print("   📍 Location timestamps have timezone info, converting to UTC...")
+                location_df['timestamp_parsed'] = location_df['timestamp_parsed'].dt.tz_convert('UTC').dt.tz_localize(None)
+            else:
+                # Try to infer timezone from the string format
+                # Check if first timestamp has timezone offset (e.g., +01:00)
+                first_ts = str(location_df['timestamp'].iloc[0])
+                if '+' in first_ts or first_ts.count('-') > 2:  # Has timezone offset
+                    print("   📍 Parsing timestamps with timezone information...")
+                    # Re-parse with timezone awareness
+                    location_df['timestamp_parsed'] = pd.to_datetime(location_df['timestamp'], errors='coerce')
+                    # Convert to UTC and remove timezone
+                    if hasattr(location_df['timestamp_parsed'].dtype, 'tz') and location_df['timestamp_parsed'].dtype.tz is not None:
+                        location_df['timestamp_parsed'] = location_df['timestamp_parsed'].dt.tz_convert('UTC').dt.tz_localize(None)
+                    else:
+                        # Pandas didn't detect timezone, manually handle
+                        print("   ⚠️  Timezone in string but not detected by pandas, converting manually...")
+                        location_df['timestamp_parsed'] = pd.to_datetime(location_df['timestamp'], errors='coerce', utc=True).dt.tz_localize(None)
+                else:
+                    print("   📍 Location timestamps are already timezone-naive (UTC assumed)")
 
             if debug:
                 print(f"   Final location timestamp dtype: {location_df['timestamp_parsed'].dtype}")
-                print(f"   Final sample: {location_df['timestamp_parsed'].head().tolist()}")
+                print(f"   Final sample (should be UTC): {location_df['timestamp_parsed'].head().tolist()}")
 
         except Exception as e:
             print(f"   ❌ Error parsing location timestamps: {e}")
             print("⚠️  Falling back to simple timezone conversion")
+            import traceback
+            traceback.print_exc()
             has_location_data = False
 
         if has_location_data:
@@ -386,61 +399,6 @@ def time_difference_correction(df: pd.DataFrame, timestamp_column: str, source_t
     # Location-based timezone correction (only when location data is available)
     print("🌍 Applying location-based timezone corrections...")
 
-    # Function to find local timezone for a given UTC timestamp
-    def find_local_timezone_offset(utc_timestamp):
-        """Find the local timezone offset for a given UTC timestamp."""
-        if pd.isna(utc_timestamp):
-            return 0
-
-        # DEBUG: Show what we're comparing
-        if debug:
-            print(f"🔍 DEBUG - Comparing timestamps:")
-            print(f"   Looking for: {utc_timestamp} (type: {type(utc_timestamp)})")
-            print(f"   Location sample: {location_df['timestamp_parsed'].iloc[0]} (type: {type(location_df['timestamp_parsed'].iloc[0])})")
-
-        # Find the location record that covers this timestamp
-        # Use the latest record that starts before or at this timestamp
-        try:
-            applicable_records = location_df[location_df['timestamp_parsed'] <= utc_timestamp]
-        except Exception as e:
-            if debug:
-                print(f"❌ Comparison error: {e}")
-                print(f"   UTC timestamp: {utc_timestamp} (type: {type(utc_timestamp)})")
-                print(f"   Location timestamp sample: {location_df['timestamp_parsed'].iloc[0]} (type: {type(location_df['timestamp_parsed'].iloc[0])})")
-            # Try to fix the comparison by ensuring both are timezone-naive
-            try:
-                # Make sure both sides of comparison are timezone-naive
-                if hasattr(utc_timestamp, 'tz') and utc_timestamp.tz is not None:
-                    utc_timestamp = utc_timestamp.tz_localize(None)
-
-                # Ensure location timestamps are also timezone-naive
-                if hasattr(location_df['timestamp_parsed'].dtype, 'tz') and location_df['timestamp_parsed'].dtype.tz is not None:
-                    location_df['timestamp_parsed'] = location_df['timestamp_parsed'].dt.tz_localize(None)
-
-                applicable_records = location_df[location_df['timestamp_parsed'] <= utc_timestamp]
-                if debug:
-                    print("✅ Fixed comparison by removing timezone info")
-            except Exception as e2:
-                if debug:
-                    print(f"❌ Still failed after timezone fix: {e2}")
-                return 0
-
-        if len(applicable_records) == 0:
-            # No records before this timestamp, use the earliest record
-            if len(location_df) > 0:
-                offset = location_df.iloc[0]['local_offset_minutes']
-                if debug:
-                    print(f"⚠️  Using earliest location data for {utc_timestamp}")
-                return offset
-            else:
-                if debug:
-                    print(f"⚠️  No location data available, using UTC for {utc_timestamp}")
-                return 0
-
-        # Use the most recent applicable record
-        latest_record = applicable_records.iloc[-1]
-        return latest_record['local_offset_minutes']
-
     # CRITICAL FIX: Ensure both DataFrames have timezone-naive timestamps before any operations
     if debug:
         print("🚨 DEBUG - FINAL TIMEZONE CHECK BEFORE COMPARISON:")
@@ -467,33 +425,53 @@ def time_difference_correction(df: pd.DataFrame, timestamp_column: str, source_t
         print(f"   Sample input UTC: {result_df['temp_utc_timestamp'].head().tolist()}")
         print(f"   Sample location: {location_df['timestamp_parsed'].head().tolist()}")
 
-    try:
-        result_df['temp_local_offset'] = result_df['temp_utc_timestamp'].apply(find_local_timezone_offset)
-    except Exception as e:
-        print(f"❌ Error in timezone offset calculation: {e}")
-        if debug:
-            print("🚨 COMPARISON ERROR DEBUG:")
-            print(f"   Input timestamp type: {type(result_df['temp_utc_timestamp'].iloc[0])}")
-            print(f"   Location timestamp type: {type(location_df['timestamp_parsed'].iloc[0])}")
-        raise
+    # OPTIMIZED APPROACH: Use merge_asof instead of apply for massive performance boost
+    # This is O(n log n) instead of O(n*m)
+    print("⚡ Using optimized merge for timezone matching...")
 
-    # Convert from UTC to local timezone
-    result_df['temp_corrected_timestamp'] = result_df.apply(
-        lambda row: row['temp_utc_timestamp'] + timedelta(minutes=row['temp_local_offset']),
-        axis=1
+    # Save original index to preserve row order for final result
+    result_df['_original_index'] = result_df.index
+
+    # Ensure both dataframes are sorted by timestamp
+    result_df_sorted = result_df.sort_values('temp_utc_timestamp').reset_index(drop=True)
+    location_df = location_df.sort_values('timestamp_parsed').reset_index(drop=True)
+
+    # Use merge_asof to find the nearest location record for each timestamp
+    # direction='backward' means we take the most recent location record before or at the timestamp
+    merged = pd.merge_asof(
+        result_df_sorted,
+        location_df[['timestamp_parsed', 'local_offset_minutes']],
+        left_on='temp_utc_timestamp',
+        right_on='timestamp_parsed',
+        direction='backward'
     )
 
-    # Update the original timestamp column with proper datetime objects (not strings)
-    result_df[timestamp_column] = result_df['temp_corrected_timestamp']
+    # Fill any NaN offsets (timestamps before first location record) with the first location's offset
+    if merged['local_offset_minutes'].isna().any():
+        first_offset = location_df.iloc[0]['local_offset_minutes']
+        print(f"   ⚠️  {merged['local_offset_minutes'].isna().sum()} timestamps before location data, using offset {first_offset/60:+.1f}h")
+        merged['local_offset_minutes'].fillna(first_offset, inplace=True)
 
-    # Clean up temporary columns
-    temp_columns = [col for col in result_df.columns if col.startswith('temp_')]
+    # Add the offset back to the sorted dataframe
+    result_df_sorted['temp_local_offset'] = merged['local_offset_minutes']
+
+    # Convert from UTC to local timezone
+    result_df_sorted['temp_corrected_timestamp'] = result_df_sorted['temp_utc_timestamp'] + pd.to_timedelta(result_df_sorted['temp_local_offset'], unit='m')
+
+    # Restore original order
+    result_df_sorted = result_df_sorted.sort_values('_original_index').reset_index(drop=True)
+
+    # Update the original timestamp column in the result dataframe
+    result_df[timestamp_column] = result_df_sorted['temp_corrected_timestamp'].values
+
+    # Clean up temporary columns (including the index marker)
+    temp_columns = [col for col in result_df.columns if col.startswith('temp_') or col == '_original_index']
     result_df = result_df.drop(columns=temp_columns)
 
     # Calculate summary statistics
     total_corrections = len(result_df)
 
-    # Show sample of corrections
+    # Show sample of corrections (now correctly aligned)
     print(f"\n✅ Successfully corrected {total_corrections} timestamps")
 
     if total_corrections > 0:

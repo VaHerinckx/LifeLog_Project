@@ -12,6 +12,46 @@ from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run
 
+# Geocoding cache file path
+GEOCODING_CACHE_FILE = 'files/work_files/geocoding_cache.json'
+
+
+def load_geocoding_cache() -> Dict[str, Dict[str, str]]:
+    """
+    Load geocoding cache from JSON file.
+
+    Returns:
+        Dictionary mapping coordinates to location info
+    """
+    if os.path.exists(GEOCODING_CACHE_FILE):
+        try:
+            with open(GEOCODING_CACHE_FILE, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
+            print(f"📦 Loaded geocoding cache with {len(cache)} locations")
+            return cache
+        except Exception as e:
+            print(f"⚠️  Error loading geocoding cache: {e}")
+            return {}
+    return {}
+
+
+def save_geocoding_cache(cache: Dict[str, Dict[str, str]]) -> None:
+    """
+    Save geocoding cache to JSON file.
+
+    Args:
+        cache: Dictionary mapping coordinates to location info
+    """
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(GEOCODING_CACHE_FILE), exist_ok=True)
+
+        with open(GEOCODING_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, indent=2, ensure_ascii=False)
+        print(f"💾 Saved geocoding cache with {len(cache)} locations")
+    except Exception as e:
+        print(f"⚠️  Error saving geocoding cache: {e}")
+
 
 def reverse_geocode_coordinates(lat: float, lon: float) -> Dict[str, str]:
     """
@@ -248,42 +288,76 @@ def create_hourly_timezone_records(location_data: List[Dict]) -> List[Dict]:
 
     print(f"📅 Date range: {min_time.date()} to {max_time.date()}")
 
-    # Create hourly records
+    # OPTIMIZATION 1: Load existing geocoding cache and geocode only new coordinates
+    print("🌍 Loading geocoding cache and processing coordinates...")
+    geocoding_cache = load_geocoding_cache()
+    unique_coordinates = set(point['coordinates'] for point in timeline_points)
+
+    # Find coordinates that need geocoding (not in cache)
+    coordinates_to_geocode = [coord for coord in unique_coordinates if coord not in geocoding_cache]
+
+    if coordinates_to_geocode:
+        print(f"📍 Need to geocode {len(coordinates_to_geocode)} new locations (already have {len(geocoding_cache)} cached)")
+
+        for idx, coordinates in enumerate(coordinates_to_geocode, 1):
+            if idx % 10 == 0:
+                print(f"   Geocoded {idx}/{len(coordinates_to_geocode)} new locations...")
+
+            lat, lon = parse_coordinates(coordinates)
+            if lat != 0.0 or lon != 0.0:
+                time.sleep(0.1)  # Respectful API delay
+                location_info = reverse_geocode_coordinates(lat, lon)
+                geocoding_cache[coordinates] = location_info
+            else:
+                geocoding_cache[coordinates] = {
+                    'city': 'Unknown City',
+                    'country': 'Unknown Country'
+                }
+
+        # Save updated cache
+        save_geocoding_cache(geocoding_cache)
+        print(f"✅ Geocoded {len(coordinates_to_geocode)} new locations")
+    else:
+        print(f"✅ All {len(unique_coordinates)} locations already cached - no geocoding needed!")
+
+    # OPTIMIZATION 2: Build index for fast timeline lookup
+    print("⚡ Building timeline index for fast lookup...")
+    # Create a list of (hour, point) tuples for all hours covered by each point
+    timeline_index = {}
+    for point in timeline_points:
+        point_start = point['start_time'].replace(minute=0, second=0, microsecond=0)
+        point_end = point['end_time'].replace(minute=0, second=0, microsecond=0)
+
+        current = point_start
+        while current <= point_end:
+            timeline_index[current] = point
+            current += timedelta(hours=1)
+
+    print(f"✅ Indexed {len(timeline_index)} hours")
+
+    # OPTIMIZATION 3: Generate hourly records with O(1) lookup
+    print("📝 Generating hourly records...")
     hourly_records = []
     current_hour = min_time.replace(minute=0, second=0, microsecond=0)
+    total_hours = int((max_time - min_time).total_seconds() / 3600) + 1
 
-    # Cache for geocoding to avoid repeated API calls
-    geocoding_cache = {}
+    # Track last known point for interpolation
+    last_known_point = None
 
     while current_hour <= max_time:
-        # Find which timeline point covers this hour
-        covering_point = None
+        # Progress indicator every 500 hours
+        hours_processed = len(hourly_records)
+        if hours_processed % 500 == 0 and hours_processed > 0:
+            print(f"   Processed {hours_processed}/{total_hours} hours...")
 
-        for point in timeline_points:
-            if point['start_time'] <= current_hour <= point['end_time']:
-                covering_point = point
-                break
+        # O(1) lookup instead of O(n) search
+        covering_point = timeline_index.get(current_hour)
 
         if covering_point:
-            # We have data for this hour
+            last_known_point = covering_point
             coordinates = covering_point['coordinates']
             timezone = covering_point['timezone']
             is_home = covering_point['is_home']
-
-            # Geocode coordinates if not cached
-            if coordinates not in geocoding_cache:
-                lat, lon = parse_coordinates(coordinates)
-                if lat != 0.0 or lon != 0.0:
-                    # Add small delay to be respectful to geocoding API
-                    time.sleep(0.1)
-                    location_info = reverse_geocode_coordinates(lat, lon)
-                    geocoding_cache[coordinates] = location_info
-                else:
-                    geocoding_cache[coordinates] = {
-                        'city': 'Unknown City',
-                        'country': 'Unknown Country'
-                    }
-
             location_info = geocoding_cache[coordinates]
 
             record = {
@@ -296,39 +370,11 @@ def create_hourly_timezone_records(location_data: List[Dict]) -> List[Dict]:
             }
 
         else:
-            # No data for this hour - interpolate from nearest points
-            # Find the closest points before and after
-            before_point = None
-            after_point = None
-
-            for point in timeline_points:
-                if point['end_time'] < current_hour:
-                    before_point = point
-                elif point['start_time'] > current_hour and after_point is None:
-                    after_point = point
-                    break
-
-            # Use the closer point, preferring the after point for timezone changes
-            chosen_point = after_point if after_point else before_point
-
-            if chosen_point:
-                coordinates = chosen_point['coordinates']
-                timezone = chosen_point['timezone']
-                is_home = chosen_point['is_home']
-
-                # Use cached geocoding
-                if coordinates not in geocoding_cache:
-                    lat, lon = parse_coordinates(coordinates)
-                    if lat != 0.0 or lon != 0.0:
-                        time.sleep(0.1)
-                        location_info = reverse_geocode_coordinates(lat, lon)
-                        geocoding_cache[coordinates] = location_info
-                    else:
-                        geocoding_cache[coordinates] = {
-                            'city': 'Unknown City',
-                            'country': 'Unknown Country'
-                        }
-
+            # No data for this hour - use last known point or fallback
+            if last_known_point:
+                coordinates = last_known_point['coordinates']
+                timezone = last_known_point['timezone']
+                is_home = last_known_point['is_home']
                 location_info = geocoding_cache[coordinates]
 
                 record = {
@@ -434,15 +480,15 @@ def merge_timezone_files():
     try:
         files_to_merge = []
 
-        # Check which files exist
+        # Check which files exist (both now UTF-8 encoded)
         if os.path.exists(manual_path):
-            manual_df = pd.read_csv(manual_path, sep='|')
+            manual_df = pd.read_csv(manual_path, sep='|', encoding='utf-8')
             manual_df['source'] = 'manual'
             files_to_merge.append(manual_df)
             print(f"✅ Loaded manual file: {len(manual_df):,} records")
 
         if os.path.exists(google_path):
-            google_df = pd.read_csv(google_path, sep='|')
+            google_df = pd.read_csv(google_path, sep='|', encoding='utf-8')
             google_df['source'] = 'google'
             files_to_merge.append(google_df)
             print(f"✅ Loaded Google file: {len(google_df):,} records")
