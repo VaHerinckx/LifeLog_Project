@@ -4,56 +4,85 @@ import unidecode
 import os
 import json
 from dotenv import load_dotenv
-from src.utils.utils_functions import time_difference_correction, get_response, clean_rename_move_folder, find_unzip_folder
+from src.utils.utils_functions import time_difference_correction, clean_rename_move_folder, find_unzip_folder
 from lingua import Language, LanguageDetectorBuilder
 from deep_translator import GoogleTranslator
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-#from langdetect import detect
-#from googletrans import Translator
-from openai import OpenAI
-from src.utils.drive_storage import update_drive
+from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.file_operations import check_file_exists
+from src.utils.web_operations import open_web_urls
 import requests
 import time
 load_dotenv()
 
-path_dict_language = 'files/work_files/pocket_casts_work_files/podcasts_titles_language.json'
-path_dict_translation = 'files/work_files/pocket_casts_work_files/podcasts_cleaned_translated.json'
+# ============================================================================
+# FILE PATHS - Centralized configuration
+# ============================================================================
+WORK_DIR = 'files/work_files/pocket_casts_work_files'
+EXPORT_DIR = 'files/exports/pocket_casts_exports'
+OUTPUT_DIR = 'files/processed_files/podcasts'
+
+LANGUAGE_CACHE = f'{WORK_DIR}/podcasts_titles_language.json'
+TRANSLATION_CACHE = f'{WORK_DIR}/podcasts_cleaned_translated.json'
+PODCAST_MAPPING_FILE = f'{WORK_DIR}/podcast_mapping.xlsx'
+ITUNES_CACHE_FILE = f'{WORK_DIR}/itunes_api_podcasts.csv'
+ARTWORK_CACHE_FILE = f'{WORK_DIR}/podcast_artwork_cache.json'
+OUTPUT_FILE = f'{OUTPUT_DIR}/pocket_casts_processed.csv'
+EXPORT_DATA_FILE = f'{EXPORT_DIR}/data.txt'
+
+# Legacy path variables for backward compatibility
+path_dict_language = LANGUAGE_CACHE
+path_dict_translation = TRANSLATION_CACHE
+
 google_lang = {'FRENCH' : 'fr','DUTCH' : 'nl','ENGLISH': 'en', 'CHINESE' : 'zh-CN'}
 
-def gpt_podcast_language(client, podcasts):
-    """Generates a ChatGPT prompt to get language of the different podcasts"""
-    system_prompt = """You are a helpful linguistic expert who is able to identify the language of
-    the texts you are given as input.
-    You are able to understand french, chinese (traditionnal and simplified), dutch
-    and english alike."""
-    user_prompt = f"""Please identify the language used in the podcast episodes names
-    delimited by triple backticks below.
-    Please just answer with only the information, in capital letters, and it should always be one of these 4 languages:
-    ENGLISH, FRENCH, DUTCH or CHINESE. If you are unsure, say ENGLISH.
-    Below are examples of how your answer should look like:
-    Podcast list 1: ['Ep. 183 | The Nanjing Massacre (Part 2)', 'Ep. 182 | The Nanjing Massacre (Part 1)',
-                     'CHP-006 The Opium War'] Output: ENGLISH
-    Podcast list 2: ['The Leftovers, la fin est proche', 'Que faut-il attendre du retour de Twin Peaks ?',
-                     'Quel avenir pour HBO ?'] Output: FRENCH
-    Podcast list 3: ['#23: “Voor het echte verhaal van Thiago’s transfer is het wachten op de memoires van Bart Verhaeghe”',
-                     '#11: "Over Anderlechts mislukte transfers is veel gesproken, maar die van Club Brugge de laatste jaren kunnen ook tellen"',
-                     '#8:  “Brandon Mechele is een degelijke verdediger, maar iemand van het niveau Jan Vertonghen heeft Club Brugge niet”']
-                    Output: DUTCH
-    Podcast list 4: ['2.2.42B《此心安处是吾乡》', '3.1.9B《我的父亲》','2.3.15AB《爱的代价》'] Output: CHINESE
-    Podcast list 5: ['John Locke', 'Petain','XYZ'] Output: ENGLISH
-    Now provide the same for the following podcast episodes ```{podcasts}```"""
-    return get_response(client, system_prompt, user_prompt)
+def detect_podcast_language(episodes):
+    """Detects language of podcast using lingua library (free, no API calls)"""
+    # Build language detector for English, French, Dutch, and Chinese
+    detector = LanguageDetectorBuilder.from_languages(
+        Language.ENGLISH,
+        Language.FRENCH,
+        Language.DUTCH,
+        Language.CHINESE
+    ).build()
+
+    # Combine all episode titles into one text sample for better detection
+    combined_text = " ".join([str(ep) for ep in episodes if ep and str(ep) != 'nan'])
+
+    if not combined_text.strip():
+        return "ENGLISH"  # Default fallback
+
+    # Detect language
+    detected = detector.detect_language_of(combined_text)
+
+    if detected:
+        # Map lingua Language enum to our format
+        language_map = {
+            Language.ENGLISH: "ENGLISH",
+            Language.FRENCH: "FRENCH",
+            Language.DUTCH: "DUTCH",
+            Language.CHINESE: "CHINESE"
+        }
+        return language_map.get(detected, "ENGLISH")
+
+    return "ENGLISH"  # Default fallback
 
 def identify_language_new_pods(df, list_new, dict_pod_language):
-    api_key = os.environ['OpenAI_Key']
-    client = OpenAI(api_key = api_key)
+    """Identify language for new podcasts using free lingua library"""
+    print(f"📝 Detecting language for {len(list_new)} new podcasts...")
+
     for pod in list_new:
         list_episodes = list(df[df["podcast_name"] == pod].title.unique())
-        dict_pod_language[pod] = gpt_podcast_language(client, list_episodes)
+        detected_language = detect_podcast_language(list_episodes)
+        dict_pod_language[pod] = detected_language
+        print(f"   • {pod}: {detected_language}")
+
     with open(path_dict_language, 'w') as f:
         json.dump(dict_pod_language, f)
+
+    print("✅ Language detection completed")
     return dict_pod_language
 
 def identify_language(df, list_new):
@@ -158,11 +187,34 @@ def parse_table_history(table_str):
             data_line = line.split(',')
         data.append(data_line)
     df_history = pd.DataFrame(data, columns=columns)
-    #Turning Unix Timestamp into proper date format
-    df_history['modified at'] = pd.to_datetime(df_history['modified at'], unit = 'ms')
-    #Removing milliseconds and adjusting to time difference in Taiwan
-    df_history['modified at'] = pd.to_datetime(df_history['modified at'], utc = True).dt.floor('S').apply(lambda x: time_difference_correction(x)).sort_values()
-    df_history['published at'] = pd.to_datetime(df_history['published at'], unit = 's', utc = True).apply(lambda x: time_difference_correction(x)).sort_values()
+
+    # Turning Unix Timestamp into proper date format (UTC)
+    # Convert to numeric first to handle empty strings and invalid values
+    df_history['modified at'] = pd.to_numeric(df_history['modified at'], errors='coerce')
+    df_history['published at'] = pd.to_numeric(df_history['published at'], errors='coerce')
+
+    # Convert numeric timestamps to datetime
+    df_history['modified at'] = pd.to_datetime(df_history['modified at'], unit='ms', utc=True, errors='coerce').dt.floor('S')
+    df_history['published at'] = pd.to_datetime(df_history['published at'], unit='s', utc=True, errors='coerce')
+
+    # Remove rows with null 'modified at' timestamps (required for timezone correction)
+    initial_count = len(df_history)
+    df_history = df_history[df_history['modified at'].notna()].copy()
+    dropped_count = initial_count - len(df_history)
+
+    if dropped_count > 0:
+        print(f"⚠️  Dropped {dropped_count} rows with invalid 'modified at' timestamps")
+
+    if len(df_history) == 0:
+        print("❌ Error: No valid episodes found in history data")
+        return df_history
+
+    # Apply timezone correction to convert from UTC to local time based on location data
+    df_history = time_difference_correction(df_history, 'modified at', source_timezone='UTC')
+    df_history = time_difference_correction(df_history, 'published at', source_timezone='UTC')
+
+    # Sort by modified at timestamp
+    df_history = df_history.sort_values('modified at')
     return df_history
 
 def merge_history_episodes(df_history,df_episodes):
@@ -178,30 +230,104 @@ def completion_calculation(listen_time, duration):
         return int((float(listen_time)/float(duration))*100)
 
 def retrieve_name_genre(df):
-    df_pod = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
-    dict_podcast_genre = df_pod.set_index('podcast_id')['podcast_genre'].to_dict()
+    df_pod = pd.read_excel(PODCAST_MAPPING_FILE)
+    dict_genre = df_pod.set_index('podcast_id')['genre'].to_dict()
     dict_podcast_name = df_pod.set_index('podcast_id')['podcast_name'].to_dict()
     df["podcast_name"] = df["podcast"].apply(lambda x: dict_podcast_name[x] if x in dict_podcast_name.keys() else "Check")
-    df["podcast_genre"] = df["podcast"].apply(lambda x: dict_podcast_genre[x] if x in dict_podcast_genre.keys() else "Check")
+    df["genre"] = df["podcast"].apply(lambda x: dict_genre[x] if x in dict_genre.keys() else "Check")
     return df
 
 def missing_name_genre(df, list_new):
-    df_pod = pd.read_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx')
-    print(f"{len(list_new)} new podcasts")
-    for new in list_new:
-        #Retrieve the
-        new_podcast_data = {}
-        print(new)
-        new_podcasts = list(df[df['podcast'] == new].title.unique())
-        print(f"These are the episodes from this new podcast : {new_podcasts}" + "\n")
-        new_podcast_data["podcast_id"] = new
-        new_podcast_data["podcast_name"] = input("What's the podcast's name ? " + "\n")
-        new_podcast_data["podcast_genre"] = input("What's the podcast's genre ? Please choose from the following list: " + "\n" +
-                                                  "News and Current Affairs" + "\n"  + "Real-life stories" + "\n"  + "Educational" + "\n"  +
-                                                  "Sports" + "\n"  + "History" + "\n"  + "Humor" + "\n"  + "Technology" + "\n"  + "Horror" + "\n"  +
-                                                  "Culture" + "\n"  + "Self-Improvement" + " : ")
-        df_pod = df_pod.append(new_podcast_data, ignore_index=True)
-        df_pod.to_excel('files/work_files/pocket_casts_work_files/podcast_mapping.xlsx', index = False)
+    """
+    Process new podcasts with fallback hierarchy:
+    1. iTunes API auto-discovery
+    2. Existing genre from mapping file backup
+    3. Manual input with numbered list selection
+    """
+    df_pod = pd.read_excel(PODCAST_MAPPING_FILE)
+
+    # Get existing unique genres from mapping file for selection
+    existing_genres = sorted(df_pod['genre'].dropna().unique().tolist())
+
+    print(f"\n🎙️  Processing {len(list_new)} new podcast(s)...")
+
+    for podcast_uuid in list_new:
+        new_podcast_data = {"podcast_id": podcast_uuid}
+
+        print(f"\n{'='*60}")
+        print(f"New podcast UUID: {podcast_uuid}")
+        print(f"{'='*60}")
+
+        # Show sample episode titles
+        episodes = df[df['podcast'] == podcast_uuid]
+        sample_episodes = list(episodes.title.unique())[:3]
+        print(f"\n📝 Sample episodes:")
+        for i, ep in enumerate(sample_episodes, 1):
+            print(f"   {i}. {ep[:70]}..." if len(ep) > 70 else f"   {i}. {ep}")
+
+        # Try auto-discovery first (iTunes API)
+        print(f"\n{'='*60}")
+        print("ATTEMPTING AUTO-DISCOVERY (using iTunes API)...")
+        print(f"{'='*60}")
+
+        discovered_info = auto_discover_podcast_info(podcast_uuid, df)
+
+        if discovered_info:
+            # Auto-discovery successful!
+            new_podcast_data["podcast_name"] = discovered_info['podcast_name']
+            new_podcast_data["genre"] = discovered_info['genre']  # Use iTunes genre
+            print(f"\n🎉 Auto-discovery successful!")
+            print(f"   Name: {new_podcast_data['podcast_name']}")
+            print(f"   Genre: {new_podcast_data['genre']}")
+        else:
+            # Fall back to manual input
+            print(f"\n{'='*60}")
+            print("AUTO-DISCOVERY FAILED - MANUAL INPUT REQUIRED")
+            print(f"{'='*60}")
+
+            # Get podcast name
+            new_podcast_data["podcast_name"] = input("\n❓ What's the podcast's name? ")
+
+            # Check if mapping file has a backup genre for this podcast UUID
+            # (This handles cases where name was entered before but iTunes failed)
+            backup_genre = None
+            if podcast_uuid in df_pod['podcast_id'].values:
+                backup_genre = df_pod[df_pod['podcast_id'] == podcast_uuid]['genre'].iloc[0]
+                if pd.notna(backup_genre) and backup_genre != "Check":
+                    print(f"\n✅ Found backup genre in mapping file: {backup_genre}")
+                    new_podcast_data["genre"] = backup_genre
+                else:
+                    backup_genre = None
+
+            # If no backup genre, prompt for manual selection
+            if backup_genre is None:
+                print(f"\n📂 Select genre from existing genres:")
+                print(f"   0. [Enter new genre manually]")
+                for i, genre in enumerate(existing_genres, 1):
+                    print(f"   {i}. {genre}")
+
+                while True:
+                    try:
+                        genre_choice = input(f"\n❓ Select genre (0-{len(existing_genres)}): ").strip()
+                        choice_num = int(genre_choice)
+
+                        if choice_num == 0:
+                            # Manual genre entry
+                            new_podcast_data["genre"] = input("   Enter new genre: ").strip()
+                            break
+                        elif 1 <= choice_num <= len(existing_genres):
+                            # Select from existing genres
+                            new_podcast_data["genre"] = existing_genres[choice_num - 1]
+                            break
+                        else:
+                            print(f"   ❌ Invalid choice. Please enter a number between 0 and {len(existing_genres)}")
+                    except ValueError:
+                        print(f"   ❌ Invalid input. Please enter a number.")
+
+        # Save the new podcast to mapping file
+        df_pod = pd.concat([df_pod, pd.DataFrame([new_podcast_data])], ignore_index=True)
+        df_pod.to_excel(PODCAST_MAPPING_FILE, index=False)
+        print(f"✅ Saved to mapping file: {new_podcast_data['podcast_name']}\n")
 
 def add_columns(df):
     """Adds the podcast name and genre to each episode in the dataset. If missing, it is computed by user input"""
@@ -211,40 +337,6 @@ def add_columns(df):
         missing_name_genre(df, list_new)
         df = retrieve_name_genre(df)
     return df, list_new
-
-def get_podcast_info_from_pocketcast(uuid):
-    """
-    Get podcast information from Pocket Casts private API.
-    """
-    try:
-        url = f"https://api.pocketcasts.com/discover/show/{uuid}"
-
-        # Add a small delay to avoid rate limiting
-        time.sleep(0.5)
-
-        # Make request
-        response = requests.get(url)
-        response.raise_for_status()  # Raise exception for bad status codes
-
-        # Parse response
-        data = response.json()
-
-        return {
-            'uuid': uuid,
-            'title': data.get('title'),
-            'author': data.get('author'),
-            'description': data.get('description'),
-            'category': data.get('category'),
-            'language': data.get('language'),
-            'website': data.get('website'),
-            'artwork_url': data.get('artwork'),
-            'subscribers': data.get('subscribers')
-        }
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching info for UUID {uuid}: {str(e)}")
-        return None
-
 
 def get_podcast_info(podcast_name):
     """
@@ -277,15 +369,460 @@ def get_podcast_info(podcast_name):
         print(f"Error fetching info for {podcast_name}: {str(e)}")
         return None
 
-def enrich_podcast_data(df, api_results_path):
+
+def auto_discover_podcast_info(podcast_uuid, df):
+    """
+    Auto-discover podcast information using iTunes API search based on episode titles.
+    Returns podcast info dict if found, None otherwise.
+    """
+    print(f"\n🔍 Auto-discovering podcast info for UUID: {podcast_uuid}")
+
+    # Get sample episode titles for this podcast
+    episodes = df[df['podcast'] == podcast_uuid]
+    sample_titles = episodes['title'].head(5).tolist()
+
+    print(f"📋 Found {len(sample_titles)} episode titles to search:")
+    for i, title in enumerate(sample_titles[:3], 1):
+        print(f"   {i}. {title[:60]}..." if len(title) > 60 else f"   {i}. {title}")
+
+    # Try searching iTunes with each episode title
+    # (Podcasts often include their name in episode metadata)
+    for title in sample_titles:
+        if not title or pd.isna(title):
+            continue
+
+        info = get_podcast_info(title)
+
+        if info and info.get('itunes_name'):
+            print(f"\n✅ Found potential match:")
+            print(f"   Podcast: {info['itunes_name']}")
+            print(f"   Creator: {info['artist']}")
+            print(f"   Genre: {info['genre']}")
+
+            # Ask user to confirm
+            confirm = input(f"\n   Is this the correct podcast? (y/n): ").strip().lower()
+
+            if confirm == 'y':
+                print(f"✅ Confirmed: {info['itunes_name']}")
+                # Use iTunes name as the podcast name
+                info['podcast_name'] = info['itunes_name']
+                return info
+            else:
+                print("   Trying next search...")
+                continue
+
+    print("❌ Auto-discovery failed - no match found")
+    return None
+
+def load_artwork_cache():
+    """Load artwork cache from JSON file"""
+    try:
+        with open(ARTWORK_CACHE_FILE, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("ℹ️  Artwork cache file not found, creating new one")
+        return {}
+    except json.JSONDecodeError:
+        print("⚠️  Artwork cache file corrupted, starting fresh")
+        return {}
+
+
+def save_artwork_cache(cache_data):
+    """Save artwork cache to JSON file"""
+    with open(ARTWORK_CACHE_FILE, 'w') as f:
+        json.dump(cache_data, f, indent=2)
+
+
+def manual_genre_override():
+    """
+    Interactive function to manually update podcast genres.
+    Searches podcasts by name and allows updating genre using numbered list from existing genres in processed CSV.
+    """
+    print("\n" + "="*60)
+    print("📂 MANUAL GENRE OVERRIDE")
+    print("="*60)
+
+    # Load processed CSV
+    try:
+        df = pd.read_csv(OUTPUT_FILE, sep="|", encoding="utf-8")
+    except FileNotFoundError:
+        print("❌ Processed file not found. Please process data first.")
+        return False
+
+    # Get existing unique genres from processed CSV (not mapping file)
+    existing_genres = sorted(df['genre'].dropna().unique().tolist())
+
+    # Get unique podcasts
+    podcasts = df['podcast_name'].dropna().unique()
+    print(f"\n📋 Found {len(podcasts)} podcasts in processed data")
+
+    # Search for podcast
+    search_term = input("\n🔍 Enter podcast name to search (partial match): ").strip().lower()
+
+    matches = [p for p in podcasts if search_term in p.lower()]
+
+    if not matches:
+        print(f"❌ No podcasts found matching '{search_term}'")
+        return False
+
+    if len(matches) > 1:
+        print(f"\n📋 Found {len(matches)} matching podcasts:")
+        for i, podcast in enumerate(matches, 1):
+            current_genre = df[df['podcast_name'] == podcast]['genre'].iloc[0] if 'genre' in df.columns else 'N/A'
+            print(f"   {i}. {podcast}")
+            print(f"      Current genre: {current_genre}")
+
+        try:
+            choice = int(input(f"\n❓ Select podcast (1-{len(matches)}): ").strip())
+            if 1 <= choice <= len(matches):
+                podcast_name = matches[choice - 1]
+            else:
+                print("❌ Invalid choice")
+                return False
+        except ValueError:
+            print("❌ Invalid input")
+            return False
+    else:
+        podcast_name = matches[0]
+
+    # Show current genre
+    current_genre = df[df['podcast_name'] == podcast_name]['genre'].iloc[0] if 'genre' in df.columns else 'N/A'
+    print(f"\n📺 Podcast: {podcast_name}")
+    print(f"   Current genre: {current_genre}")
+
+    # Genre selection with numbered list
+    print(f"\n📂 Select new genre from existing genres:")
+    print(f"   0. [Enter new genre manually]")
+    for i, genre in enumerate(existing_genres, 1):
+        print(f"   {i}. {genre}")
+
+    while True:
+        try:
+            genre_choice = input(f"\n❓ Select genre (0-{len(existing_genres)}, or 'cancel' to abort): ").strip()
+
+            if genre_choice.lower() == 'cancel':
+                print("❌ Cancelled")
+                return False
+
+            choice_num = int(genre_choice)
+
+            if choice_num == 0:
+                # Manual genre entry
+                new_genre = input("   Enter new genre: ").strip()
+                break
+            elif 1 <= choice_num <= len(existing_genres):
+                # Select from existing genres
+                new_genre = existing_genres[choice_num - 1]
+                break
+            else:
+                print(f"   ❌ Invalid choice. Please enter a number between 0 and {len(existing_genres)}")
+        except ValueError:
+            print(f"   ❌ Invalid input. Please enter a number.")
+
+    # Update all rows for this podcast in the CSV
+    df.loc[df['podcast_name'] == podcast_name, 'genre'] = new_genre
+
+    # Save updated CSV
+    df.to_csv(OUTPUT_FILE, sep="|", encoding="utf-8", index=False)
+
+    # Update podcast mapping file
+    df_pod = pd.read_excel(PODCAST_MAPPING_FILE)
+    df_pod.loc[df_pod['podcast_name'] == podcast_name, 'genre'] = new_genre
+    df_pod.to_excel(PODCAST_MAPPING_FILE, index=False)
+
+    print(f"\n✅ Genre updated successfully!")
+    print(f"   Podcast: {podcast_name}")
+    print(f"   Old genre: {current_genre}")
+    print(f"   New genre: {new_genre}")
+
+    # Ask if user wants to upload to Drive
+    upload_choice = input("\n❓ Upload updated file to Google Drive? (y/n): ").strip().lower()
+    if upload_choice == 'y':
+        upload_pocket_casts_results()
+
+    return True
+
+
+def manual_artwork_override():
+    """
+    Interactive function to manually update podcast artwork URLs.
+    Searches podcasts by name and allows updating artwork URL.
+    """
+    print("\n" + "="*60)
+    print("🎨 MANUAL ARTWORK OVERRIDE")
+    print("="*60)
+
+    # Load processed CSV
+    try:
+        df = pd.read_csv(OUTPUT_FILE, sep="|", encoding="utf-8")
+    except FileNotFoundError:
+        print("❌ Processed file not found. Please process data first.")
+        return False
+
+    # Load artwork cache
+    artwork_cache = load_artwork_cache()
+
+    # Get unique podcasts
+    podcasts = df['podcast_name'].dropna().unique()
+    print(f"\n📋 Found {len(podcasts)} podcasts in processed data")
+
+    # Search for podcast
+    search_term = input("\n🔍 Enter podcast name to search (partial match): ").strip().lower()
+
+    matches = [p for p in podcasts if search_term in p.lower()]
+
+    if not matches:
+        print(f"❌ No podcasts found matching '{search_term}'")
+        return False
+
+    if len(matches) > 1:
+        print(f"\n📋 Found {len(matches)} matching podcasts:")
+        for i, podcast in enumerate(matches, 1):
+            current_url = df[df['podcast_name'] == podcast]['artwork_url'].iloc[0] if 'artwork_url' in df.columns else 'N/A'
+            url_display = current_url[:50] + "..." if len(str(current_url)) > 50 else current_url
+            print(f"   {i}. {podcast}")
+            print(f"      Current: {url_display}")
+
+        try:
+            choice = int(input(f"\n❓ Select podcast (1-{len(matches)}): ").strip())
+            if 1 <= choice <= len(matches):
+                podcast_name = matches[choice - 1]
+            else:
+                print("❌ Invalid choice")
+                return False
+        except ValueError:
+            print("❌ Invalid input")
+            return False
+    else:
+        podcast_name = matches[0]
+
+    # Show current artwork URL
+    current_url = df[df['podcast_name'] == podcast_name]['artwork_url'].iloc[0] if 'artwork_url' in df.columns else 'N/A'
+    print(f"\n📺 Podcast: {podcast_name}")
+    print(f"   Current artwork URL: {current_url}")
+
+    # Get new URL
+    new_url = input("\n❓ Enter new artwork URL (or 'cancel' to abort): ").strip()
+
+    if new_url.lower() == 'cancel':
+        print("❌ Cancelled")
+        return False
+
+    # Update cache
+    artwork_cache[podcast_name] = new_url
+    save_artwork_cache(artwork_cache)
+
+    # Update all rows for this podcast in the CSV
+    df.loc[df['podcast_name'] == podcast_name, 'artwork_url'] = new_url
+
+    # Save updated CSV
+    df.to_csv(OUTPUT_FILE, sep="|", encoding="utf-8", index=False)
+
+    print(f"\n✅ Artwork updated successfully!")
+    print(f"   Podcast: {podcast_name}")
+    print(f"   New URL: {new_url[:60]}..." if len(new_url) > 60 else f"   New URL: {new_url}")
+
+    # Ask if user wants to upload to Drive
+    upload_choice = input("\n❓ Upload updated file to Google Drive? (y/n): ").strip().lower()
+    if upload_choice == 'y':
+        upload_pocket_casts_results()
+
+    return True
+
+
+def manual_itunes_search():
+    """
+    Interactive function to manually search iTunes API and select the correct podcast from multiple results.
+    Useful when automatic discovery selected the wrong podcast.
+    """
+    print("\n" + "="*60)
+    print("🔍 MANUAL ITUNES API SEARCH")
+    print("="*60)
+
+    # Load processed CSV
+    try:
+        df = pd.read_csv(OUTPUT_FILE, sep="|", encoding="utf-8")
+    except FileNotFoundError:
+        print("❌ Processed file not found. Please process data first.")
+        return False
+
+    # Load iTunes API cache
+    try:
+        api_results_df = pd.read_csv(ITUNES_CACHE_FILE, sep="|", quoting=1, escapechar='\\')
+    except (FileNotFoundError, pd.errors.EmptyDataError):
+        print("❌ iTunes API cache not found. Please run the pipeline first.")
+        return False
+
+    # Get unique podcasts
+    podcasts = df['podcast_name'].dropna().unique()
+    print(f"\n📋 Found {len(podcasts)} podcasts in processed data")
+
+    # Search for podcast
+    search_term = input("\n🔍 Enter podcast name to search (partial match): ").strip().lower()
+
+    matches = [p for p in podcasts if search_term in p.lower()]
+
+    if not matches:
+        print(f"❌ No podcasts found matching '{search_term}'")
+        return False
+
+    if len(matches) > 1:
+        print(f"\n📋 Found {len(matches)} matching podcasts:")
+        for i, podcast in enumerate(matches, 1):
+            current_itunes = df[df['podcast_name'] == podcast]['itunes_name'].iloc[0] if 'itunes_name' in df.columns else 'N/A'
+            print(f"   {i}. {podcast}")
+            print(f"      Current iTunes match: {current_itunes}")
+
+        try:
+            choice = int(input(f"\n❓ Select podcast (1-{len(matches)}): ").strip())
+            if 1 <= choice <= len(matches):
+                podcast_name = matches[choice - 1]
+            else:
+                print("❌ Invalid choice")
+                return False
+        except ValueError:
+            print("❌ Invalid input")
+            return False
+    else:
+        podcast_name = matches[0]
+
+    # Show current iTunes match
+    current_itunes = df[df['podcast_name'] == podcast_name]['itunes_name'].iloc[0] if 'itunes_name' in df.columns else 'N/A'
+    current_genre = df[df['podcast_name'] == podcast_name]['genre'].iloc[0] if 'genre' in df.columns else 'N/A'
+    print(f"\n📺 Podcast: {podcast_name}")
+    print(f"   Current iTunes match: {current_itunes}")
+    print(f"   Current genre: {current_genre}")
+
+    # Get search query from user
+    search_query = input("\n🔍 Enter search term for iTunes API (or press Enter to use podcast name): ").strip()
+    if not search_query:
+        search_query = podcast_name
+
+    # Fetch multiple results from iTunes API
+    print(f"\n🔄 Searching iTunes API for: {search_query}")
+    try:
+        encoded_name = requests.utils.quote(search_query)
+        url = f"https://itunes.apple.com/search?term={encoded_name}&entity=podcast&limit=10"
+        time.sleep(0.5)
+        response = requests.get(url)
+        data = response.json()
+
+        if data['resultCount'] == 0:
+            print("❌ No results found from iTunes API")
+            return False
+
+        # Display all results
+        print(f"\n📋 Found {data['resultCount']} result(s) from iTunes API:")
+        print(f"   0. [Cancel - don't update]")
+
+        results = []
+        for i, podcast in enumerate(data['results'][:10], 1):  # Limit to 10 results
+            itunes_name = podcast.get('collectionName', 'N/A')
+            artist = podcast.get('artistName', 'N/A')
+            genre = podcast.get('primaryGenreName', 'N/A')
+            print(f"   {i}. {itunes_name}")
+            print(f"      Creator: {artist}")
+            print(f"      Genre: {genre}")
+            results.append({
+                'podcast_name': podcast_name,
+                'itunes_name': itunes_name,
+                'artist': artist,
+                'artwork_large': podcast.get('artworkUrl600'),
+                'genre': genre,
+                'feed_url': podcast.get('feedUrl')
+            })
+
+        # User selection
+        while True:
+            try:
+                choice = input(f"\n❓ Select the correct podcast (0-{len(results)}, or 'cancel'): ").strip()
+
+                if choice.lower() == 'cancel':
+                    print("❌ Cancelled")
+                    return False
+
+                choice_num = int(choice)
+
+                if choice_num == 0:
+                    print("❌ Cancelled - no updates made")
+                    return False
+                elif 1 <= choice_num <= len(results):
+                    selected_info = results[choice_num - 1]
+                    break
+                else:
+                    print(f"   ❌ Invalid choice. Please enter a number between 0 and {len(results)}")
+            except ValueError:
+                print(f"   ❌ Invalid input. Please enter a number.")
+
+    except Exception as e:
+        print(f"❌ Error fetching from iTunes API: {str(e)}")
+        return False
+
+    # Update iTunes API cache
+    if podcast_name in api_results_df['podcast_name'].values:
+        # Update existing entry
+        for col, value in selected_info.items():
+            api_results_df.loc[api_results_df['podcast_name'] == podcast_name, col] = value
+    else:
+        # Add new entry
+        api_results_df = pd.concat([api_results_df, pd.DataFrame([selected_info])], ignore_index=True)
+
+    api_results_df.to_csv(ITUNES_CACHE_FILE, index=False, sep="|", quoting=1, escapechar='\\')
+
+    # Update processed CSV
+    df.loc[df['podcast_name'] == podcast_name, 'itunes_name'] = selected_info['itunes_name']
+    df.loc[df['podcast_name'] == podcast_name, 'artist'] = selected_info['artist']
+    df.loc[df['podcast_name'] == podcast_name, 'genre'] = selected_info['genre']
+    df.loc[df['podcast_name'] == podcast_name, 'artwork_url'] = selected_info['artwork_large']
+    df.loc[df['podcast_name'] == podcast_name, 'feed_url'] = selected_info['feed_url']
+    df.to_csv(OUTPUT_FILE, sep="|", encoding="utf-8", index=False)
+
+    # Update podcast mapping file
+    df_pod = pd.read_excel(PODCAST_MAPPING_FILE)
+    df_pod.loc[df_pod['podcast_name'] == podcast_name, 'genre'] = selected_info['genre']
+    df_pod.to_excel(PODCAST_MAPPING_FILE, index=False)
+
+    print(f"\n✅ iTunes match updated successfully!")
+    print(f"   Podcast: {podcast_name}")
+    print(f"   New iTunes match: {selected_info['itunes_name']}")
+    print(f"   New genre: {selected_info['genre']}")
+
+    # Ask if user wants to upload to Drive
+    upload_choice = input("\n❓ Upload updated file to Google Drive? (y/n): ").strip().lower()
+    if upload_choice == 'y':
+        upload_pocket_casts_results()
+
+    return True
+
+
+def enrich_podcast_data(df):
     """
     Enrich podcast episodes data with iTunes metadata.
+    Also applies manual artwork overrides from cache.
     """
+    # Load artwork cache for manual overrides
+    artwork_cache = load_artwork_cache()
+
     # 1. Get unique podcast names from episodes
     unique_podcasts = df['podcast_name'].unique()
 
     # 2. Load existing API results if file exists
-    api_results_df = pd.read_csv(api_results_path, sep = "|")
+    try:
+        # Try reading with standard settings first
+        api_results_df = pd.read_csv(ITUNES_CACHE_FILE, sep="|")
+    except (FileNotFoundError, pd.errors.EmptyDataError):
+        # Create empty DataFrame if file doesn't exist or is empty
+        print("⚠️  iTunes API cache file not found, creating new one")
+        api_results_df = pd.DataFrame(columns=['podcast_name', 'itunes_name', 'artist', 'artwork_large', 'genre', 'feed_url'])
+    except pd.errors.ParserError:
+        # If parsing fails, try with quoting to handle special characters
+        print("⚠️  iTunes API cache has formatting issues, attempting recovery...")
+        try:
+            api_results_df = pd.read_csv(ITUNES_CACHE_FILE, sep="|", quoting=1, escapechar='\\')
+        except:
+            # If still fails, start fresh
+            print("❌ Could not parse existing iTunes API cache, starting fresh")
+            api_results_df = pd.DataFrame(columns=['podcast_name', 'itunes_name', 'artist', 'artwork_large', 'genre', 'feed_url'])
 
     # 3. Get API data for new podcasts
     counter = 0
@@ -303,19 +840,44 @@ def enrich_podcast_data(df, api_results_path):
                 api_results_df = pd.concat([api_results_df, new_row_df], ignore_index=True)
                 print(f"Results for {podcast} were fetched")
         if counter%10 == 0:
-            api_results_df.to_csv(api_results_path, index=False, sep = "|")
+            api_results_df.to_csv(ITUNES_CACHE_FILE, index=False, sep="|", quoting=1, escapechar='\\')
             print("Temporary API results saved")
 
-    # Save updated API results
-    api_results_df.to_csv(api_results_path, index=False)
+    # Save updated API results with proper quoting to handle special characters
+    api_results_df.to_csv(ITUNES_CACHE_FILE, index=False, sep="|", quoting=1, escapechar='\\')
     print("All API results saved")
+
     # 4. Join episodes with API results
-    enriched_df = df.merge(api_results_df, on='podcast_name', how='left')
+    enriched_df = df.merge(api_results_df, on='podcast_name', how='left', suffixes=('_mapping', '_itunes'))
+
+    # 5. Merge genre columns: iTunes genre takes precedence, falls back to mapping file genre
+    if 'genre_itunes' in enriched_df.columns and 'genre_mapping' in enriched_df.columns:
+        # Use iTunes genre when available (non-null), otherwise use mapping file backup
+        enriched_df['genre'] = enriched_df['genre_itunes'].fillna(enriched_df['genre_mapping'])
+        # Drop the temporary genre columns
+        enriched_df = enriched_df.drop(columns=['genre_itunes', 'genre_mapping'])
+    elif 'genre_itunes' in enriched_df.columns:
+        # Only iTunes genre exists (shouldn't happen, but handle it)
+        enriched_df['genre'] = enriched_df['genre_itunes']
+        enriched_df = enriched_df.drop(columns=['genre_itunes'])
+    elif 'genre_mapping' in enriched_df.columns:
+        # Only mapping genre exists (shouldn't happen, but handle it)
+        enriched_df['genre'] = enriched_df['genre_mapping']
+        enriched_df = enriched_df.drop(columns=['genre_mapping'])
+
+    # 6. Apply manual artwork overrides from cache
+    if artwork_cache:
+        print(f"\n🎨 Applying {len(artwork_cache)} manual artwork override(s)...")
+        for podcast_name, artwork_url in artwork_cache.items():
+            if podcast_name in enriched_df['podcast_name'].values:
+                enriched_df.loc[enriched_df['podcast_name'] == podcast_name, 'artwork_large'] = artwork_url
+                print(f"   ✅ {podcast_name}")
+
     return enriched_df
 
 
-def create_pocket_cast_file():
-    tables = open_txt_file('files/exports/pocket_casts_exports/data.txt')
+def create_pocket_casts_file():
+    tables = open_txt_file(EXPORT_DATA_FILE)
     #Get status of the different episodes I listened
     table_episodes = tables[3]
     df_episodes = parse_table_episodes(table_episodes).drop(parse_table_episodes(table_episodes).index[-2:])
@@ -323,31 +885,222 @@ def create_pocket_cast_file():
     table_history = tables[5].split('\n-------')[2]
     df_history = parse_table_history(table_history).drop(parse_table_history(table_history).index[-2:])
     df = merge_history_episodes(df_history,df_episodes)
-    df["completion_%"] = df.apply(lambda x: completion_calculation(x["played up to"], x["duration"]),axis = 1)
+    df["completion_percent"] = df.apply(lambda x: completion_calculation(x["played up to"], x["duration"]),axis = 1)
     #print(df_episodes)
     #list_new = list(df[df["podcast_name"] == "Check"]["podcast"].unique())
     df, list_new = add_columns(df)
     df = identify_translate_clean(df, list_new)
     df.sort_values('modified at', ascending=True, inplace = True)
-    df['new_podcast_yn'] = df.groupby('podcast_name').cumcount() == 0
-    df['new_podcast_yn'] = df['new_podcast_yn'].astype(int)
-    df['new_recurring_podcast_yn'] = df.groupby('podcast_name').cumcount() == 5
-    df['new_recurring_podcast_yn'] = df['new_recurring_podcast_yn'].astype(int)
-    df = enrich_podcast_data(df, "files/work_files/pocket_casts_work_files/itunes_api_podcasts.csv")
+    df['is_new_podcast'] = df.groupby('podcast_name').cumcount() == 0
+    df['is_new_podcast'] = df['is_new_podcast'].astype(int)
+    df['is_recurring_podcast'] = df.groupby('podcast_name').cumcount() == 5
+    df['is_recurring_podcast'] = df['is_recurring_podcast'].astype(int)
+    df = enrich_podcast_data(df)
     df.sort_values('modified at', ascending=False, inplace = True)
-    df.to_csv('files/processed_files/pocket_casts_processed.csv', sep = "|", encoding = "utf-16")
+
+    # Rename columns to snake_case standard
+    df = df.rename(columns={
+        'uuid': 'episode_uuid',
+        'modified at': 'listened_date',
+        'podcast': 'podcast_id',
+        'published at': 'published_date',
+        'title': 'episode_title',
+        'url': 'episode_url',
+        'played up to': 'listened_seconds',
+        'duration': 'duration_seconds',
+        'title_cleaned_t': 'title_cleaned_translated',
+        'artwork_large': 'artwork_url'
+    })
+
+    # Reorder columns logically: identifiers → descriptive → numerical → dates → booleans
+    column_order = [
+        'episode_uuid', 'podcast_id', 'podcast_name', 'episode_title', 'episode_url',
+        'genre', 'duration_seconds', 'listened_seconds', 'completion_percent',
+        'published_date', 'listened_date', 'is_new_podcast', 'is_recurring_podcast',
+        'language', 'title_cleaned_translated', 'itunes_name', 'artist', 'artwork_url',
+        'feed_url'
+    ]
+
+    # Only include columns that exist in the dataframe
+    existing_columns = [col for col in column_order if col in df.columns]
+    df = df[existing_columns]
+
+    # Save with UTF-8 encoding (critical for website compatibility)
+    df.to_csv(OUTPUT_FILE, sep="|", encoding="utf-8", index=False)
+
+    return True
+
+
+# ============================================================================
+# STANDARD PIPELINE FUNCTIONS
+# ============================================================================
+
+def download_pocket_casts_data():
+    """Step 1: Instructions for obtaining Pocket Casts GDPR export"""
+    print("\n🎙️  POCKET CASTS DATA EXPORT INSTRUCTIONS")
+    print("="*60)
+    print("\nPocket Casts requires a GDPR data request to export your listening history.")
+    print("\nSteps to request your data:")
+    print("1. Email Pocket Casts support or use their GDPR request form")
+    print("2. Wait for them to prepare your data export (usually 1-3 days)")
+    print("3. Download the zip file they email you")
+    print("4. Save the zip file to your Downloads folder")
+    print("\nOnce you have the export file in Downloads, you can proceed with processing.")
+    print("="*60)
+
+    choice = input("\nHave you already downloaded the export to your Downloads folder? (y/n): ").strip().lower()
+
+    if choice == 'y':
+        print("✅ Ready to proceed with processing")
+        return True
+    else:
+        print("⚠️  Please download the export file first, then run this pipeline again")
+        return False
+
+
+def move_pocket_casts_files():
+    """Step 2: Find, unzip, and move Pocket Casts export files"""
+    print("\n📁 Finding and organizing Pocket Casts export files...")
+
+    try:
+        find_unzip_folder("pocket_casts")
+        clean_rename_move_folder("files/exports", "/Users/valen/Downloads", "pocket_casts_export_unzipped", "pocket_casts_exports")
+        print("✅ Files moved successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Error moving files: {str(e)}")
+        return False
+
+
+def upload_pocket_casts_results():
+    """Step 4: Upload processed files to Google Drive"""
+    print("\n⬆️  Uploading Pocket Casts processed files to Google Drive...")
+
+    files_to_upload = [OUTPUT_FILE]
+
+    # Verify files exist before uploading
+    if not os.path.exists(files_to_upload[0]):
+        print(f"❌ Processed file not found: {files_to_upload[0]}")
+        return False
+
+    # Verify Drive connection
+    if not verify_drive_connection():
+        print("❌ Could not connect to Google Drive")
+        return False
+
+    try:
+        upload_multiple_files(files_to_upload)
+        print("✅ Upload completed successfully")
+        return True
+    except Exception as e:
+        print(f"❌ Upload failed: {str(e)}")
+        return False
+
+
+def full_pocket_casts_pipeline(auto_full=False):
+    """Complete Pocket Casts pipeline with 7-option menu including manual iTunes search and overrides"""
+    print("\n" + "="*60)
+    print("🎙️  POCKET CASTS PROCESSING PIPELINE")
+    print("="*60)
+
+    if auto_full:
+        print("🤖 Auto mode: Running full pipeline...")
+        choice = "4"
+    else:
+        print("\nSelect an option:")
+        print("1. Download new data, process, and upload to Drive")
+        print("2. Process existing data and upload to Drive")
+        print("3. Upload existing processed files to Drive")
+        print("4. Full pipeline (download + process + upload)")
+        print("5. Manual iTunes API search (fix wrong podcast match)")
+        print("6. Manual artwork override (update podcast cover images)")
+        print("7. Manual genre override (update podcast genres)")
+
+        choice = input("\nEnter your choice (1-7): ").strip()
+
+    success = False
+
+    try:
+        if choice == "1":
+            print("\n🚀 Starting download + process + upload workflow...")
+            if download_pocket_casts_data():
+                if move_pocket_casts_files():
+                    if create_pocket_casts_file():
+                        if upload_pocket_casts_results():
+                            success = True
+                            from src.utils.utils_functions import record_successful_run
+                            record_successful_run('podcasts_pocket_casts', 'active')
+
+        elif choice == "2":
+            print("\n🔄 Processing existing data and uploading...")
+            if move_pocket_casts_files():
+                if create_pocket_casts_file():
+                    if upload_pocket_casts_results():
+                        success = True
+                        from src.utils.utils_functions import record_successful_run
+                        record_successful_run('podcasts_pocket_casts', 'active')
+
+        elif choice == "3":
+            print("\n⬆️  Uploading existing processed files...")
+            success = upload_pocket_casts_results()
+
+        elif choice == "4":
+            print("\n🚀 Starting full pipeline...")
+            if download_pocket_casts_data():
+                if move_pocket_casts_files():
+                    if create_pocket_casts_file():
+                        if upload_pocket_casts_results():
+                            success = True
+                            from src.utils.utils_functions import record_successful_run
+                            record_successful_run('podcasts_pocket_casts', 'active')
+
+        elif choice == "5":
+            print("\n🔍 Starting manual iTunes API search...")
+            success = manual_itunes_search()
+
+        elif choice == "6":
+            print("\n🎨 Starting artwork override...")
+            success = manual_artwork_override()
+
+        elif choice == "7":
+            print("\n📂 Starting genre override...")
+            success = manual_genre_override()
+
+        else:
+            print("❌ Invalid choice. Please select 1-7.")
+            return False
+
+    except Exception as e:
+        print(f"\n❌ Pipeline failed with error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+    if success:
+        print("\n✅ Pocket Casts pipeline completed successfully!")
+    else:
+        print("\n❌ Pocket Casts pipeline failed")
+
+    return success
+
+
+# ============================================================================
+# LEGACY FUNCTION (for backward compatibility)
+# ============================================================================
 
 def process_pocket_casts_export(upload="Y"):
+    """Legacy function - use full_pocket_casts_pipeline() instead"""
     file_names = []
     print('Starting the processing of the Pocket Casts export \n')
     find_unzip_folder("pocket_casts")
     clean_rename_move_folder("files/exports", "/Users/valen/Downloads", "pocket_casts_export_unzipped", "pocket_casts_exports")
-    create_pocket_cast_file()
+    create_pocket_casts_file()
     file_names.append('files/processed_files/pocket_casts_processed.csv')
     if upload == "Y":
-        update_drive(file_names)
+        upload_multiple_files(file_names)
         print('Pocket Cast processed files were created and uploaded to the Drive \n')
     else:
         print('Pocket Cast processed files were created \n')
 
 #process_pocket_casts_export()
+full_pocket_casts_pipeline()

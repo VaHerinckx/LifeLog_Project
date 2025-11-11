@@ -9,7 +9,7 @@ from src.music.lastfm_processing import process_lfm_export
 from src.books.goodreads_processing import process_gr_export
 from src.books.books_processing import process_book_exports
 from src.books.kindle_processing import process_kindle_export
-from src.podcasts.pocket_casts_processing import process_pocket_casts_export
+from src.podcasts.pocket_casts_processing import full_pocket_casts_pipeline
 from src.sport.garmin_processing import process_garmin_export
 from src.finance.moneymgr_processing import process_moneymgr_export
 from src.nutrilio.nutrilio_processing import process_nutrilio_export
@@ -246,7 +246,7 @@ def download_process_upload():
     if run_process(LFM, process_lfm_export, "Last.fm", upload="N"):
         upload_file_list(music_files)
 
-    if run_process(PCC, process_pocket_casts_export, "Pocket Casts", upload="N"):
+    if run_process(PCC, full_pocket_casts_pipeline, "Pocket Casts", auto_full=False):
         upload_file_list(podcast_files)
 
     if run_process(GAR, process_garmin_export, "Garmin", upload="N"):
