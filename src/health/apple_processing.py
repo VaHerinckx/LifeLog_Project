@@ -7,7 +7,7 @@ import time
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
-from src.utils.utils_functions import record_successful_run
+from src.utils.utils_functions import record_successful_run, time_difference_correction
 
 # Disable pandas warning about chained assignment
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -25,7 +25,7 @@ dict_identifier = {
     'active_energy': 'HKQuantityTypeIdentifierActiveEnergyBurned',
     'body_weight' : 'HKQuantityTypeIdentifierBodyMass',
     'sleep_analysis' : 'HKCategoryTypeIdentifierSleepAnalysis',
-    'body_fat_%' : 'HKQuantityTypeIdentifierBodyFatPercentage'
+    'body_fat_percent' : 'HKQuantityTypeIdentifierBodyFatPercentage'
 }
 
 #Dictionary to change the values for the sleep categorization
@@ -39,9 +39,20 @@ dict_sleep_analysis = {
 }
 
 def clean_import_file():
-    """Function to clean the import file by removing certain lines that are creating bugs"""
+    """
+    Function to clean the import file by removing certain lines that are creating bugs.
+
+    Note: Lines 156-211 in the raw Apple Health export.xml contain metadata elements
+    that cause parsing issues with xmltodict. These lines typically include:
+    - InstantaneousBeatsPerMinute records with complex nested structures
+    - MetadataEntry elements that don't conform to the standard schema
+
+    Warning: These line numbers are hardcoded and may break if Apple changes
+    the export format. If parsing fails, check the export.xml structure.
+    """
     path = 'files/exports/apple_exports/apple_health_export/export.xml'
     new_path = 'files/exports/apple_exports/apple_health_export/cleaned_export.xml'
+    # Remove lines 156-211 which contain problematic metadata entries
     command = f"sed -e '156,211d' {path} > {new_path}"
     subprocess.run(command, shell=True)
 
@@ -51,7 +62,7 @@ def apple_df_formatting(path):
         input_data = xmltodict.parse(xml_file.read())
     records_list = input_data['HealthData']['Record']
     df = pd.DataFrame(records_list)
-    df.to_csv('files/exports/apple_exports/apple_health_export/cleaned_export.csv', sep='|', index=False, encoding='utf-16')
+    df.to_csv('files/exports/apple_exports/apple_health_export/cleaned_export.csv', sep='|', index=False, encoding='utf-8')
     return df
 
 def select_columns(df, name_val, data_type):
@@ -67,9 +78,9 @@ def select_columns(df, name_val, data_type):
     elif name_val == "sleep_analysis":
         df = df[['date', name_val]].groupby('date').max().reset_index()
         df["sleep_analysis"] = df["sleep_analysis"].map(dict_sleep_analysis)
-    df['date'] = pd.to_datetime(df['date'], utc=True)
+    df['date'] = pd.to_datetime(df['date'])  # Timezone-naive (local time after correction)
     df.drop_duplicates(inplace=True)
-    df.to_csv(path, sep='|', index=False, encoding='utf-16')
+    df.to_csv(path, sep='|', index=False, encoding='utf-8')
     return df
 
 def expand_df(df, name_val, aggreg_method='sum'):
@@ -79,7 +90,7 @@ def expand_df(df, name_val, aggreg_method='sum'):
     df["@value"] = df["@value"].astype(float)
     new_df = pd.DataFrame(columns=['date', 'val', 'source'])
     old_df = pd.read_csv(path, sep='|').rename(columns={name_val: 'val'})
-    old_df['date'] = pd.to_datetime(old_df['date'])
+    old_df['date'] = pd.to_datetime(old_df['date']).dt.tz_localize(None)  # Force timezone-naive
     new_df = pd.concat([new_df, old_df], ignore_index=True)
     df = df[df["@startDate"] > max(old_df["date"])].reset_index(drop=True)
     print(f'{df.shape[0]} new rows to expand for {name_val}')
@@ -87,19 +98,21 @@ def expand_df(df, name_val, aggreg_method='sum'):
         new_df = pd.concat([new_df, row_expander_minutes(row, aggreg_method)], ignore_index=True)
     print(f'{df.shape[0]} rows expanded for {name_val} \n')
     new_df = new_df[['date', 'val']].groupby('date').mean().rename(columns={'val': name_val}).reset_index()
-    new_df['date'] = pd.to_datetime(new_df['date'], utc=True)
+    new_df['date'] = pd.to_datetime(new_df['date'])  # Timezone-naive (local time after correction)
     new_df.drop_duplicates(inplace=True)
-    new_df.to_csv(path, sep='|', index=False, encoding='utf-16')
+    new_df.to_csv(path, sep='|', index=False, encoding='utf-8')
     return new_df
 
 def row_expander_minutes(row, aggreg_method):
     """Function to expand a single row into multiple rows, each representing a minute"""
     minute_diff = (row['@endDate'] - row['@startDate']).total_seconds() / 60
     if minute_diff <= 1:
-        date_df = pd.DataFrame(columns=['date', 'val', 'source'])
-        new_row = {'date': row['@startDate'], 'val': row["@value"], 'source': row['@sourceName']}
-        date_df = date_df.append(new_row, ignore_index=True)
-        return date_df
+        # Single minute case - create DataFrame directly
+        return pd.DataFrame({
+            'date': [row['@startDate']],
+            'val': [row["@value"]],
+            'source': [row['@sourceName']]
+        })
     dates = pd.date_range(row['@startDate'], row['@endDate'] - pd.Timedelta(minutes=1), freq='T')
     date_df = pd.DataFrame({'date': dates})
     if aggreg_method == 'sum':
@@ -159,7 +172,7 @@ def expand_df_vectorized(df, name_val, aggreg_method='sum'):
     # Read existing data once
     try:
         old_df = pd.read_csv(path, sep='|').rename(columns={name_val: 'val'})
-        old_df['date'] = pd.to_datetime(old_df['date'])
+        old_df['date'] = pd.to_datetime(old_df['date']).dt.tz_localize(None)  # Force timezone-naive
 
         # Filter to only new data
         max_old_date = old_df['date'].max()
@@ -214,12 +227,12 @@ def expand_df_vectorized(df, name_val, aggreg_method='sum'):
 
     # Final aggregation and cleanup
     result_df = combined_df[['date', 'val']].groupby('date').mean().rename(columns={'val': name_val}).reset_index()
-    result_df['date'] = pd.to_datetime(result_df['date'], utc=True)
+    result_df['date'] = pd.to_datetime(result_df['date'])  # Timezone-naive (local time after correction)
     result_df.drop_duplicates(inplace=True)
 
     # Save to CSV
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    result_df.to_csv(path, sep='|', index=False, encoding='utf-16')
+    result_df.to_csv(path, sep='|', index=False, encoding='utf-8')
 
     # Performance summary
     elapsed_time = time.time() - start_time
@@ -267,7 +280,7 @@ def move_apple_files():
     # Then move the unzipped folder
     move_success = clean_rename_move_folder(
         export_folder="files/exports",
-        download_folder="/Users/valen/Downloads",
+        download_folder=os.path.expanduser("~/Downloads"),
         folder_name="apple_export_unzipped",
         new_folder_name="apple_exports"
     )
@@ -293,6 +306,11 @@ def create_apple_files():
     df['@startDate'] = pd.to_datetime(df['@startDate']).dt.floor("T")
     df['@endDate'] = pd.to_datetime(df['@endDate']).dt.floor("T")
 
+    # Apply timezone correction from GMT to local time based on location
+    print("🌍 Applying timezone correction from GMT to local time...")
+    df = time_difference_correction(df, '@startDate', source_timezone='GMT')
+    df = time_difference_correction(df, '@endDate', source_timezone='GMT')
+
     print("⚡ Using optimized vectorized processing for metrics expansion...")
     start_total_time = time.time()
 
@@ -306,14 +324,15 @@ def create_apple_files():
     df_audio_exposure = expand_df_vectorized(df, 'audio_exposure', 'avg')
     df_heart_rate = select_columns(df, 'heart_rate', float)
     df_body_weight = select_columns(df, 'body_weight', float)
-    df_body_fat_perc =  select_columns(df, 'body_fat_%', float)
+    df_body_fat_perc =  select_columns(df, 'body_fat_percent', float)
     df_sleep_analysis = select_columns(df, 'sleep_analysis', str)
+    # Merge datasets in logical order: Activity → Energy → Body → Other
     apple_df = df_step_count.merge(df_step_length, how='outer', on='date') \
         .merge(df_walking_dist, how='outer', on='date') \
         .merge(df_flights_climbed, how='outer', on='date') \
+        .merge(df_walking_speed, how='outer', on='date') \
         .merge(df_resting_energy, how='outer', on='date') \
         .merge(df_active_energy, how='outer', on='date') \
-        .merge(df_walking_speed, how='outer', on='date') \
         .merge(df_heart_rate, how='outer', on='date') \
         .merge(df_body_weight, how='outer', on='date') \
         .merge(df_body_fat_perc, how='outer', on='date') \
@@ -326,7 +345,7 @@ def create_apple_files():
     for col in list(apple_df.columns[1:-2]):
         apple_df[col] = apple_df[col].astype(float)
     apple_df.sort_values('date', inplace=True)
-    apple_df.to_csv('files/processed_files/apple/apple_processed.csv', sep='|', index=False, encoding='utf-16')
+    apple_df.to_csv('files/processed_files/apple/apple_processed.csv', sep='|', index=False, encoding='utf-8')
 
     print(f"\n🎉 Apple Health processing completed!")
     print(f"⏱️  Total vectorized processing time: {total_elapsed:.2f} seconds")
@@ -400,12 +419,12 @@ def process_apple_export(upload="Y"):
 
 def full_apple_pipeline(auto_full=False):
     """
-    Complete Apple Health pipeline with 3 options.
+    Complete Apple Health pipeline with 3 standard options.
 
     Options:
-    1. Full pipeline (download → move → process → upload)
-    2. Process existing file only
-    3. Process existing file and upload
+    1. Download new data, process, and upload to Drive
+    2. Process existing data and upload to Drive
+    3. Upload existing processed files to Drive
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -422,16 +441,16 @@ def full_apple_pipeline(auto_full=False):
         choice = "1"
     else:
         print("\nSelect an option:")
-        print("1. Full pipeline (download → move → process → upload)")
-        print("2. Process existing file only")
-        print("3. Process existing file and upload to Drive")
+        print("1. Download new data, process, and upload to Drive")
+        print("2. Process existing data and upload to Drive")
+        print("3. Upload existing processed files to Drive")
 
         choice = input("\nEnter your choice (1-3): ").strip()
 
     success = False
 
     if choice == "1":
-        print("\n🚀 Starting full Apple Health pipeline...")
+        print("\n🚀 Download new data, process, and upload to Drive...")
 
         # Step 1: Download
         download_success = download_apple_data()
@@ -443,7 +462,7 @@ def full_apple_pipeline(auto_full=False):
             print("⚠️  Download not confirmed, but checking for existing files...")
             move_success = move_apple_files()
 
-        # Step 3: Process (fallback to option 2 if no new files)
+        # Step 3: Process (fallback if no new files)
         if move_success:
             process_success = create_apple_file()
         else:
@@ -459,17 +478,17 @@ def full_apple_pipeline(auto_full=False):
             success = False
 
     elif choice == "2":
-        print("\n⚙️  Processing existing Apple Health file only...")
-        success = create_apple_file()
-
-    elif choice == "3":
-        print("\n⚙️  Processing existing file and uploading...")
+        print("\n⚙️  Process existing data and upload to Drive...")
         process_success = create_apple_file()
         if process_success:
             success = upload_apple_results()
         else:
             print("❌ Processing failed, skipping upload")
             success = False
+
+    elif choice == "3":
+        print("\n☁️  Upload existing processed files to Drive...")
+        success = upload_apple_results()
 
     else:
         print("❌ Invalid choice. Please select 1-3.")
