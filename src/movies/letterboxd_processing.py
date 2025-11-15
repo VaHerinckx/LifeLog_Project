@@ -16,20 +16,20 @@ def get_genre(title, release_year):
     """Legacy function - now redirects to TMDB for consistency"""
     movie_info = get_tmdb_movie_info(title, release_year)
     return movie_info['genres']
-4
+
 
 def get_tmdb_movie_info(title, release_year):
     """Retrieves both poster URL and genres from TMDB API"""
     # Check if we already have this data cached in the processed file
     try:
-        df_processed = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', encoding='utf-16')
-        if 'PosterURL' in df_processed.columns and 'Genre' in df_processed.columns:
-            df_processed["Key"] = df_processed["Name"].astype(str) + df_processed["Year"].astype(str)
+        df_processed = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', encoding='utf-8')
+        if 'poster_url' in df_processed.columns and 'genre' in df_processed.columns:
+            df_processed["key"] = df_processed["name"].astype(str) + df_processed["year"].astype(str)
             key_input = str(title) + str(release_year)
-            if key_input in list(df_processed["Key"].unique()):
-                existing_row = df_processed[df_processed["Key"] == key_input].iloc[0]
-                existing_poster = existing_row['PosterURL']
-                existing_genre = existing_row['Genre']
+            if key_input in list(df_processed["key"].unique()):
+                existing_row = df_processed[df_processed["key"] == key_input].iloc[0]
+                existing_poster = existing_row['poster_url']
+                existing_genre = existing_row['genre']
                 if pd.notna(existing_poster) and existing_poster != 'No poster found' and pd.notna(existing_genre) and existing_genre != 'Unknown':
                     print(f"Using cached data for {title} ({release_year})")
                     return {
@@ -259,18 +259,28 @@ def create_letterboxd_file():
         df['PosterURL'] = df.apply(lambda x: poster_dict.get(f"{x['Name']}_{x['Year']}", 'No poster found'), axis=1)
         df['Genre'] = df.apply(lambda x: genre_dict.get(f"{x['Name']}_{x['Year']}", 'Unknown'), axis=1)
 
-        # Convert Date to datetime for proper sorting
-        df['Date'] = pd.to_datetime(df['Date'])
+        # Rename columns to snake_case for consistency
+        df = df.rename(columns={
+            'Name': 'name',
+            'Year': 'year',
+            'Rating': 'rating',
+            'Date': 'date',
+            'PosterURL': 'poster_url',
+            'Genre': 'genre'
+        })
+
+        # Convert date to datetime for proper sorting
+        df['date'] = pd.to_datetime(df['date'])
 
         # Sort by date (most recent first)
-        df = df.sort_values('Date', ascending=False)
+        df = df.sort_values('date', ascending=False)
 
         # Ensure the output directory exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         # Save to CSV
         print(f"💾 Saving processed data to {output_path}...")
-        df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
+        df.to_csv(output_path, sep='|', index=False, encoding='utf-8')
 
         print(f"\n✅ Processing complete!")
         print(f"📊 Processed {len(df)} movie entries")
@@ -278,13 +288,13 @@ def create_letterboxd_file():
         print(f"🎭 Found genres for {len([genre for genre in genre_dict.values() if genre != 'Unknown'])} movies")
 
         # Print some sample data for verification
-        movies_with_data = df[(df['PosterURL'] != 'No poster found') & (df['Genre'] != 'Unknown')].head(5)
+        movies_with_data = df[(df['poster_url'] != 'No poster found') & (df['genre'] != 'Unknown')].head(5)
         if not movies_with_data.empty:
             print("\n🎯 Sample movies with complete data:")
             for _, movie in movies_with_data.iterrows():
-                print(f"  • {movie['Name']} ({movie['Year']})")
-                print(f"    Genres: {movie['Genre']}")
-                print(f"    Poster: {movie['PosterURL'][:50]}...")
+                print(f"  • {movie['name']} ({movie['year']})")
+                print(f"    Genres: {movie['genre']}")
+                print(f"    Poster: {movie['poster_url'][:50]}...")
 
         return True
 
@@ -337,13 +347,13 @@ def manual_poster_update():
     """
     # Load the processed file
     try:
-        df = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', encoding='utf-16')
+        df = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', encoding='utf-8')
     except FileNotFoundError:
         print("Error: letterboxd_processed.csv not found. Please run process_letterboxd_export() first.")
         return
 
-    if 'PosterURL' not in df.columns:
-        print("Error: PosterURL column not found. Please run process_letterboxd_export() first.")
+    if 'poster_url' not in df.columns:
+        print("Error: poster_url column not found. Please run process_letterboxd_export() first.")
         return
 
     print("\n" + "="*60)
@@ -365,22 +375,22 @@ def manual_poster_update():
             continue
 
         # Find matching movies (case-insensitive)
-        matching_movies = df[df['Name'].str.contains(search_term, case=False, na=False)]
+        matching_movies = df[df['name'].str.contains(search_term, case=False, na=False)]
 
         if matching_movies.empty:
             print(f"No movies found containing '{search_term}'. Try a different search term.")
             continue
 
         # Get unique movies (same movie might appear multiple times if watched multiple times)
-        unique_movies = matching_movies[['Name', 'Year', 'PosterURL']].drop_duplicates()
-        unique_movies = unique_movies.sort_values(['Name', 'Year'])
+        unique_movies = matching_movies[['name', 'year', 'poster_url']].drop_duplicates()
+        unique_movies = unique_movies.sort_values(['name', 'year'])
 
         print(f"\nFound {len(unique_movies)} matching movie(s):")
         print("-" * 80)
 
         # Display options with current poster URLs
         for idx, (_, movie) in enumerate(unique_movies.iterrows(), 1):
-            current_poster = movie['PosterURL']
+            current_poster = movie['poster_url']
             if current_poster == 'No poster found':
                 poster_status = "❌ No poster"
             elif current_poster.startswith('http'):
@@ -388,7 +398,7 @@ def manual_poster_update():
             else:
                 poster_status = "⚠️  Unknown status"
 
-            print(f"{idx:2d}. {movie['Name']} ({movie['Year']}) - {poster_status}")
+            print(f"{idx:2d}. {movie['name']} ({movie['year']}) - {poster_status}")
             if current_poster != 'No poster found' and current_poster.startswith('http'):
                 print(f"     Current URL: {current_poster}")
             print()
@@ -415,9 +425,9 @@ def manual_poster_update():
 
         # Get the selected movie
         selected_movie = unique_movies.iloc[choice_idx]
-        movie_name = selected_movie['Name']
-        movie_year = selected_movie['Year']
-        current_url = selected_movie['PosterURL']
+        movie_name = selected_movie['name']
+        movie_year = selected_movie['year']
+        current_url = selected_movie['poster_url']
 
         print(f"\nSelected: {movie_name} ({movie_year})")
         if current_url != 'No poster found':
@@ -460,13 +470,13 @@ def manual_poster_update():
 
         if confirm == 'y':
             # Update all rows for this movie (in case of multiple watches)
-            mask = (df['Name'] == movie_name) & (df['Year'] == movie_year)
+            mask = (df['name'] == movie_name) & (df['year'] == movie_year)
             rows_updated = mask.sum()
 
-            df.loc[mask, 'PosterURL'] = new_url
+            df.loc[mask, 'poster_url'] = new_url
 
             # Save the updated dataframe
-            df.to_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', index=False, encoding='utf-16')
+            df.to_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', index=False, encoding='utf-8')
 
             print(f"✅ Successfully updated poster URL for {movie_name} ({movie_year})")
             print(f"   Updated {rows_updated} row(s) in the dataset")
@@ -488,10 +498,10 @@ def full_letterboxd_pipeline(auto_full=False):
     Complete Letterboxd pipeline with 4 options.
 
     Options:
-    1. Full pipeline (download → move → process → upload)
-    2. Download data only (open web page + move files)
-    3. Process existing file only (just processing)
-    4. Process existing file and upload (process → upload)
+    1. Download new data, process, and upload to Drive
+    2. Process existing data and upload to Drive
+    3. Upload existing processed files to Drive
+    4. Manually update a poster then upload to Drive
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -508,13 +518,12 @@ def full_letterboxd_pipeline(auto_full=False):
         choice = "1"
     else:
         print("\nSelect an option:")
-        print("1. Full pipeline (download → move → process → upload)")
-        print("2. Download data only (open web page + move files)")
-        print("3. Process existing file only")
-        print("4. Process existing file and upload to Drive")
-        print("5. Manually update a poster then upload to Drive")
+        print("1. Download new data, process, and upload to Drive")
+        print("2. Process existing data and upload to Drive")
+        print("3. Upload existing processed files to Drive")
+        print("4. Manually update a poster then upload to Drive")
 
-        choice = input("\nEnter your choice (1-5): ").strip()
+        choice = input("\nEnter your choice (1-4): ").strip()
 
     success = False
 
@@ -531,7 +540,7 @@ def full_letterboxd_pipeline(auto_full=False):
             print("⚠️  Download not confirmed, but checking for existing files...")
             move_success = move_letterboxd_files()
 
-        # Step 3: Process (fallback to option 3 if no new files)
+        # Step 3: Process (fallback if no new files)
         if move_success:
             process_success = create_letterboxd_file()
         else:
@@ -547,32 +556,25 @@ def full_letterboxd_pipeline(auto_full=False):
             success = False
 
     elif choice == "2":
-        print("\n📥 Download Letterboxd data only...")
-        download_success = download_letterboxd_data()
-        if download_success:
-            success = move_letterboxd_files()
-        else:
-            success = False
-
-    elif choice == "3":
-        print("\n⚙️  Processing existing Letterboxd file only...")
-        success = create_letterboxd_file()
-
-    elif choice == "4":
-        print("\n⚙️  Processing existing file and uploading...")
+        print("\n⚙️  Processing existing data and uploading...")
         process_success = create_letterboxd_file()
         if process_success:
             success = upload_letterboxd_results()
         else:
             print("❌ Processing failed, skipping upload")
             success = False
-    elif choice == "5":
-        print("\nManually updating a poster...")
+
+    elif choice == "3":
+        print("\n⬆️  Uploading existing processed files...")
+        success = upload_letterboxd_results()
+
+    elif choice == "4":
+        print("\n🎨 Manually updating a poster...")
         update_success = manual_poster_update()
-        upload_success = upload_letterboxd_results()
-        if update_success & upload_success:
-            success = True
+        if update_success:
+            success = upload_letterboxd_results()
         else:
+            print("❌ Poster update failed, skipping upload")
             success = False
 
     else:

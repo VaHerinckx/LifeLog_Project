@@ -17,7 +17,7 @@ from src.health.apple_processing import process_apple_export
 from src.screentime.offscreen_processing import process_offscreen_export
 from src.weather.weather_processing import get_weather_data
 from src.movies.letterboxd_processing import process_letterboxd_export
-from src.movies.trakt_processing import create_trakt_processed_file
+from lifelog_python_processing.src.shows.trakt_processing import create_trakt_processed_file
 from src.location.location_processing import full_location_pipeline
 
 # Updated imports for enhanced authentication
