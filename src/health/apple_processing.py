@@ -147,6 +147,9 @@ def row_expander_vectorized(row, aggreg_method):
         values = np.full(len(dates), row["@value"] / minute_diff)
     elif aggreg_method == 'avg':
         values = np.full(len(dates), row["@value"])
+    elif aggreg_method == 'categorical':
+        # For categorical data (like sleep phases), repeat the same value for all minutes
+        values = np.full(len(dates), row["@value"])
     else:
         values = np.full(len(dates), row["@value"])
 
@@ -167,7 +170,14 @@ def expand_df_vectorized(df, name_val, aggreg_method='sum'):
 
     # Filter and prepare data
     df_filtered = df[df['@type'] == dict_identifier[name_val]].reset_index(drop=True)
-    df_filtered["@value"] = df_filtered["@value"].astype(float)
+
+    # Convert to appropriate data type based on aggregation method
+    if aggreg_method == 'categorical':
+        # Keep as string/object for categorical data (e.g., sleep phases)
+        pass
+    else:
+        # Convert to float for numerical aggregation
+        df_filtered["@value"] = df_filtered["@value"].astype(float)
 
     # Read existing data once
     try:
@@ -220,13 +230,27 @@ def expand_df_vectorized(df, name_val, aggreg_method='sum'):
     if expanded_dfs:
         new_expanded_df = pd.concat(expanded_dfs, ignore_index=True)
 
+        # For sleep_analysis, map raw values to human-readable labels before concatenating
+        # This ensures new data has same format as old data (prevents null values)
+        if name_val == 'sleep_analysis' and aggreg_method == 'categorical':
+            new_expanded_df['val'] = new_expanded_df['val'].map(dict_sleep_analysis)
+
         # Combine with existing data
         combined_df = pd.concat([old_df, new_expanded_df], ignore_index=True)
     else:
         combined_df = old_df
 
     # Final aggregation and cleanup
-    result_df = combined_df[['date', 'val']].groupby('date').mean().rename(columns={'val': name_val}).reset_index()
+    if aggreg_method == 'categorical':
+        # For categorical sleep data, keep minute-level granularity (no aggregation!)
+        # Just rename the column and remove any duplicate timestamps
+        result_df = combined_df[['date', 'val']].rename(columns={'val': name_val})
+        result_df.drop_duplicates(subset=['date'], keep='first', inplace=True)
+        result_df.reset_index(drop=True, inplace=True)
+    else:
+        # For numerical data, aggregate to daily level using mean
+        result_df = combined_df[['date', 'val']].groupby('date').mean().rename(columns={'val': name_val}).reset_index()
+
     result_df['date'] = pd.to_datetime(result_df['date'])  # Timezone-naive (local time after correction)
     result_df.drop_duplicates(inplace=True)
 
@@ -325,7 +349,10 @@ def create_apple_files():
     df_heart_rate = select_columns(df, 'heart_rate', float)
     df_body_weight = select_columns(df, 'body_weight', float)
     df_body_fat_perc =  select_columns(df, 'body_fat_percent', float)
-    df_sleep_analysis = select_columns(df, 'sleep_analysis', str)
+
+    # Process sleep analysis with categorical expansion to cascade phases across all minutes
+    # Note: Mapping from raw values to readable labels happens inside expand_df_vectorized()
+    df_sleep_analysis = expand_df_vectorized(df, 'sleep_analysis', 'categorical')
     # Merge datasets in logical order: Activity → Energy → Body → Other
     apple_df = df_step_count.merge(df_step_length, how='outer', on='date') \
         .merge(df_walking_dist, how='outer', on='date') \
