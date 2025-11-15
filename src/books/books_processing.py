@@ -384,7 +384,7 @@ def create_books_file():
             print(f"❌ Goodreads file not found: {gr_path}")
             return False
 
-        df_gr = pd.read_csv(gr_path, sep='|')
+        df_gr = pd.read_csv(gr_path, sep='|', encoding='utf-8')
         print(f"✅ Loaded {len(df_gr)} Goodreads records")
 
         # Load Kindle data
@@ -393,7 +393,7 @@ def create_books_file():
             print(f"❌ Kindle file not found: {kindle_path}")
             return False
 
-        df_kindle = pd.read_csv(kindle_path, sep='|')
+        df_kindle = pd.read_csv(kindle_path, sep='|', encoding='utf-8')
         print(f"✅ Loaded {len(df_kindle)} Kindle records")
 
         # Enhance Kindle data with Goodreads metadata
@@ -520,7 +520,7 @@ def create_books_file():
         output_path = 'files/processed_files/books/kindle_gr_processed.csv'
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        final_df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
+        final_df.to_csv(output_path, sep='|', index=False, encoding='utf-8')
 
         print(f"\n✅ Successfully created unified books file!")
         print(f"📁 Saved to: {output_path}")
@@ -590,7 +590,7 @@ def update_cover_url():
     # Load the CSV file
     csv_path = 'files/processed_files/books/kindle_gr_processed.csv'
     try:
-        df = pd.read_csv(csv_path, sep='|')
+        df = pd.read_csv(csv_path, sep='|', encoding='utf-8')
         print(f"✅ Loaded {len(df)} books from database")
     except FileNotFoundError:
         print(f"❌ File not found: {csv_path}")
@@ -675,7 +675,7 @@ def update_cover_url():
     
     # Save the updated CSV
     try:
-        df.to_csv(csv_path, sep='|', index=False, encoding='utf-16')
+        df.to_csv(csv_path, sep='|', index=False, encoding='utf-8')
         print(f"\n✅ Updated local CSV file with {len(updated_books)} books")
     except Exception as e:
         print(f"❌ Error saving CSV: {e}")

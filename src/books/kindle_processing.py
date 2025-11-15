@@ -475,7 +475,7 @@ def create_asin_bookid_mapping(min_overlap_threshold: float = 0.3) -> Dict:
             print(f"❌ Goodreads file not found: {goodreads_csv_path}")
             return existing_mapping
 
-        gr_df = pd.read_csv(goodreads_csv_path, sep='|')
+        gr_df = pd.read_csv(goodreads_csv_path, sep='|', encoding='utf-8')
         print(f"✅ Loaded {len(gr_df)} Goodreads reading records")
 
         # Check for required columns
@@ -601,7 +601,7 @@ def manual_asin_mapping() -> bool:
             print(f"❌ Goodreads file not found: {goodreads_csv_path}")
             return False
 
-        gr_df = pd.read_csv(goodreads_csv_path, sep='|')
+        gr_df = pd.read_csv(goodreads_csv_path, sep='|', encoding='utf-8')
         available_books = gr_df[['Book Id', 'Title']].drop_duplicates()
 
         print(f"\n🔧 MANUAL ASIN MAPPING")
@@ -742,7 +742,7 @@ def create_kindle_file():
             print(f"❌ Goodreads file not found: {goodreads_csv_path}")
             return False
 
-        gr_df = pd.read_csv(goodreads_csv_path, sep='|')
+        gr_df = pd.read_csv(goodreads_csv_path, sep='|', encoding='utf-8')
 
         # Create a Book ID to book info mapping
         book_info = {}
@@ -838,7 +838,7 @@ def create_kindle_file():
 
         # Save processed file
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        final_df.to_csv(output_path, sep='|', index=False, encoding='utf-16')
+        final_df.to_csv(output_path, sep='|', index=False, encoding='utf-8')
 
         print(f"✅ Saved processed Kindle data to: {output_path}")
 
