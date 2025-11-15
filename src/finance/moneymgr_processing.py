@@ -232,13 +232,12 @@ def process_moneymgr_export(upload="Y"):
 
 def full_moneymgr_pipeline(auto_full=False):
     """
-    Complete Money Manager pipeline with 4 standard options.
+    Complete Money Manager pipeline with 3 standard options.
 
     Options:
     1. Download new data, process, and upload to Drive
     2. Process existing data and upload to Drive
     3. Upload existing processed files to Drive
-    4. Full pipeline (download + process + upload)
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -258,9 +257,8 @@ def full_moneymgr_pipeline(auto_full=False):
         print("1. Download new data, process, and upload to Drive")
         print("2. Process existing data and upload to Drive")
         print("3. Upload existing processed files to Drive")
-        print("4. Full pipeline (download + process + upload)")
 
-        choice = input("\nEnter your choice (1-4): ").strip()
+        choice = input("\nEnter your choice (1-3): ").strip()
 
     success = False
 
@@ -305,36 +303,8 @@ def full_moneymgr_pipeline(auto_full=False):
         print("\n⬆️  Upload existing processed files to Drive...")
         success = upload_moneymgr_results()
 
-    elif choice == "4":
-        print("\n🚀 Full pipeline (download + process + upload)...")
-
-        # Step 1: Download
-        download_success = download_moneymgr_data()
-
-        # Step 2: Move files (even if download wasn't confirmed, maybe file exists)
-        if download_success:
-            move_success = move_moneymgr_files()
-        else:
-            print("⚠️  Download not confirmed, but checking for existing files...")
-            move_success = move_moneymgr_files()
-
-        # Step 3: Process (fallback to existing files if no new files)
-        if move_success:
-            process_success = create_moneymgr_file()
-        else:
-            print("⚠️  No new files found, attempting to process existing files...")
-            process_success = create_moneymgr_file()
-
-        # Step 4: Upload
-        if process_success:
-            upload_success = upload_moneymgr_results()
-            success = upload_success
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
-
     else:
-        print("❌ Invalid choice. Please select 1-4.")
+        print("❌ Invalid choice. Please select 1-3.")
         return False
 
     # Final status
