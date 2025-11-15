@@ -7,7 +7,7 @@ import time
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
-from src.utils.utils_functions import record_successful_run, time_difference_correction
+from src.utils.utils_functions import record_successful_run
 
 # Disable pandas warning about chained assignment
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -327,13 +327,10 @@ def create_apple_files():
         apple_df_formatting(path_cleaned_xml)
     df = pd.read_csv(path_csv_export, sep='|', low_memory=False)
     print("🔄 Preparing timestamp data...")
-    df['@startDate'] = pd.to_datetime(df['@startDate']).dt.floor("T")
-    df['@endDate'] = pd.to_datetime(df['@endDate']).dt.floor("T")
-
-    # Apply timezone correction from GMT to local time based on location
-    print("🌍 Applying timezone correction from GMT to local time...")
-    df = time_difference_correction(df, '@startDate', source_timezone='GMT')
-    df = time_difference_correction(df, '@endDate', source_timezone='GMT')
+    # Parse timestamps keeping original local time (strip timezone offset without conversion)
+    # utc=False prevents conversion to UTC, then tz_localize(None) removes timezone awareness
+    df['@startDate'] = pd.to_datetime(df['@startDate'], utc=False).dt.tz_localize(None).dt.floor("T")
+    df['@endDate'] = pd.to_datetime(df['@endDate'], utc=False).dt.tz_localize(None).dt.floor("T")
 
     print("⚡ Using optimized vectorized processing for metrics expansion...")
     start_total_time = time.time()
