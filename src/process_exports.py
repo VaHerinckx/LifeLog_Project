@@ -18,6 +18,7 @@ from src.screentime.offscreen_processing import process_offscreen_export
 from src.weather.weather_processing import get_weather_data
 from src.movies.letterboxd_processing import process_letterboxd_export
 from src.movies.trakt_processing import create_trakt_processed_file
+from src.location.location_processing import full_location_pipeline
 
 # Updated imports for enhanced authentication
 from src.utils.drive_storage import (
@@ -72,7 +73,8 @@ nutrilio_files = ['files/processed_files/nutrilio_body_sensations_pbi_processed_
                   'files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', 'files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx',]
 screentime_files = ['files/processed_files/offscreen_processed.csv']
 weather_files = ['files/processed_files/weather_processed.csv']
-all_files = reading_files + finance_files+ health_files + podcast_files + music_files + movies_files + nutrilio_files + screentime_files + weather_files
+location_files = ['files/processed_files/location/combined_timezone_processed.csv']
+all_files = reading_files + finance_files+ health_files + podcast_files + music_files + movies_files + nutrilio_files + screentime_files + weather_files + location_files
 
 dict_upload = {
     "podcast" : podcast_files,
@@ -83,7 +85,8 @@ dict_upload = {
     "movies" : movies_files,
     "nutrilio" : nutrilio_files,
     "screentime" : screentime_files,
-    "weather" : weather_files
+    "weather" : weather_files,
+    "location" : location_files
 }
 
 
@@ -191,6 +194,7 @@ def download_process_upload():
     KIN = input("New Kindle file? (Y/N) ")
     TRK = input("New Trakt file? (Y/N) ")
     WEA = input("Use API to download latest weather data? (Y/N) ")
+    LOC = input("Process location data (Google Maps + Manual Excel)? (Y/N) ")
 
     file_names = []
     print('\n')
@@ -272,6 +276,9 @@ def download_process_upload():
 
     if run_process(WEA, get_weather_data, "Weather", upload="N"):
         upload_file_list(weather_files)
+
+    if run_process(LOC, full_location_pipeline, "Location", auto_full=False):
+        upload_file_list(location_files)
 
     # Report on any failures
     if failed_steps:
