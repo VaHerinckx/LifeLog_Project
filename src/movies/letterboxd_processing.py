@@ -493,7 +493,7 @@ def manual_poster_update():
     print("\nManual poster update session complete!")
     return True
 
-def full_letterboxd_pipeline(auto_full=False):
+def full_letterboxd_pipeline(auto_full=False, auto_process_only=False):
     """
     Complete Letterboxd pipeline with 4 options.
 
@@ -505,6 +505,7 @@ def full_letterboxd_pipeline(auto_full=False):
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
+        auto_process_only (bool): If True, automatically runs option 2 without user input
 
     Returns:
         bool: True if pipeline completed successfully, False otherwise
@@ -513,7 +514,10 @@ def full_letterboxd_pipeline(auto_full=False):
     print("🎬 LETTERBOXD DATA PIPELINE")
     print("="*60)
 
-    if auto_full:
+    if auto_process_only:
+        print("🤖 Auto process mode: Processing existing data and uploading...")
+        choice = "2"
+    elif auto_full:
         print("🤖 Auto mode: Running full pipeline...")
         choice = "1"
     else:

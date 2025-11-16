@@ -700,7 +700,7 @@ class LastFmAPIProcessor:
         return success
 
 
-def full_lfm_pipeline(auto_full=False):
+def full_lfm_pipeline(auto_full=False, auto_process_only=False):
     """
     Complete Last.fm API pipeline with 3 standard options.
     Uses Last.fm API for automatic incremental updates.
@@ -712,6 +712,7 @@ def full_lfm_pipeline(auto_full=False):
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
+        auto_process_only (bool): If True, automatically runs option 2 without user input
 
     Returns:
         bool: True if pipeline completed successfully, False otherwise
@@ -721,7 +722,10 @@ def full_lfm_pipeline(auto_full=False):
     print("="*60)
 
     try:
-        if auto_full:
+        if auto_process_only:
+            print("🤖 Auto process mode: Processing existing data and uploading...")
+            choice = "2"
+        elif auto_full:
             print("🤖 Auto mode: Fetching new data from API...")
             choice = "1"
         else:

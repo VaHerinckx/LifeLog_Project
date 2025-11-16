@@ -1017,13 +1017,16 @@ def upload_pocket_casts_results():
         return False
 
 
-def full_pocket_casts_pipeline(auto_full=False):
+def full_pocket_casts_pipeline(auto_full=False, auto_process_only=False):
     """Complete Pocket Casts pipeline with 6-option menu including manual iTunes search and overrides"""
     print("\n" + "="*60)
     print("🎙️  POCKET CASTS PROCESSING PIPELINE")
     print("="*60)
 
-    if auto_full:
+    if auto_process_only:
+        print("🤖 Auto process mode: Processing existing data and uploading...")
+        choice = "2"
+    elif auto_full:
         print("🤖 Auto mode: Running full pipeline...")
         choice = "1"
     else:
@@ -1112,5 +1115,5 @@ def process_pocket_casts_export(upload="Y"):
     else:
         print('Pocket Cast processed files were created \n')
 
-#process_pocket_casts_export()
-full_pocket_casts_pipeline()
+if __name__ == "__main__":
+    full_pocket_casts_pipeline()

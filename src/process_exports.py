@@ -1,24 +1,19 @@
 import subprocess
-import pandas as pd
-import chardet
 import sys
-import traceback
-import logging
-from datetime import datetime
 from src.music.lastfm_processing import full_lfm_pipeline
-from src.books.goodreads_processing import process_gr_export
-from src.books.books_processing import process_book_exports
-from src.books.kindle_processing import process_kindle_export
-from src.podcasts.pocket_casts_processing import full_pocket_casts_pipeline
-from src.sport.garmin_processing import process_garmin_export
-from src.finance.moneymgr_processing import process_moneymgr_export
-from src.nutrilio.nutrilio_processing import process_nutrilio_export
-from src.health.apple_processing import process_apple_export
-from src.screentime.offscreen_processing import process_offscreen_export
+from src.books.books_processing import full_books_pipeline
+from src.books.goodreads_processing import download_goodreads_data, move_goodreads_files
+from src.books.kindle_processing import download_kindle_data, move_kindle_files
+from src.podcasts.pocket_casts_processing import full_pocket_casts_pipeline, move_pocket_casts_files, download_pocket_casts_data
+from src.sport.garmin_processing import full_garmin_pipeline, move_garmin_files, download_garmin_data
+from src.finance.moneymgr_processing import full_moneymgr_pipeline, move_moneymgr_files, download_moneymgr_data
+from src.nutrilio.nutrilio_processing import full_nutrilio_pipeline, move_nutrilio_files, download_nutrilio_data
+from src.health.apple_processing import full_apple_pipeline, move_apple_files, download_apple_data
+from src.screentime.offscreen_processing import full_offscreen_pipeline, move_offscreen_files, download_offscreen_data
 from src.weather.weather_processing import get_weather_data
-from src.movies.letterboxd_processing import process_letterboxd_export
-from lifelog_python_processing.src.shows.trakt_processing import create_trakt_processed_file
-from src.location.location_processing import full_location_pipeline
+from src.movies.letterboxd_processing import full_letterboxd_pipeline, move_letterboxd_files, download_letterboxd_data
+from src.shows.trakt_processing import full_trakt_pipeline, move_trakt_files, download_trakt_data
+from src.location.location_processing import full_location_pipeline, move_google_files
 
 # Updated imports for enhanced authentication
 from src.utils.drive_storage import (
@@ -57,357 +52,518 @@ if not DRIVE_INITIALIZED:
     print("❌ Cannot proceed without Google Drive connection. Exiting.")
     sys.exit(1)
 
-# File organization
-reading_files = ['files/processed_files/kindle_gr_processed.csv']
-finance_files = ['files/processed_files/moneymgr_processed.csv']
-health_files = ['files/processed_files/apple_processed.csv', 'files/processed_files/garmin_activities_list_processed.csv',
-                'files/processed_files/garmin_activities_splits_processed.csv', 'files/processed_files/garmin_sleep_processed.csv',
-                'files/processed_files/garmin_stress_level_processed.csv', 'files/processed_files/garmin_training_history_processed.csv']
-podcast_files = ['files/processed_files/pocket_casts_processed.csv']
-music_files = ['files/processed_files/lfm_processed.csv']
-movies_files = ['files/processed_files/letterboxd_processed.csv', 'files/processed_files/movies/trakt_processed.csv']
-nutrilio_files = ['files/processed_files/nutrilio_body_sensations_pbi_processed_file.csv', 'files/processed_files/nutrilio_dreams_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_drinks_pbi_processed_file.csv', 'files/processed_files/nutrilio_food_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_self_improvement_pbi_processed_file.csv', 'files/processed_files/nutrilio_social_activity_pbi_processed_file.csv',
-                  'files/processed_files/nutrilio_work_content_pbi_processed_file.csv', 'files/processed_files/nutrilio_processed.csv',
-                  'files/work_files/nutrilio_work_files/nutrilio_meal_score_input.xlsx', 'files/work_files/nutrilio_work_files/nutrilio_drinks_category.xlsx',]
-screentime_files = ['files/processed_files/offscreen_processed.csv']
-weather_files = ['files/processed_files/weather_processed.csv']
-location_files = ['files/processed_files/location/combined_timezone_processed.csv']
-all_files = reading_files + finance_files+ health_files + podcast_files + music_files + movies_files + nutrilio_files + screentime_files + weather_files + location_files
 
-dict_upload = {
-    "podcast" : podcast_files,
-    "reading" : reading_files,
-    "health" : health_files,
-    "finance" : finance_files,
-    "music" : music_files,
-    "movies" : movies_files,
-    "nutrilio" : nutrilio_files,
-    "screentime" : screentime_files,
-    "weather" : weather_files,
-    "location" : location_files
+# ============================================================================
+# PIPELINE REGISTRY - Central configuration for all data sources
+# ============================================================================
+
+PIPELINE_REGISTRY = {
+    'books': {
+        'name': 'Books (Goodreads + Kindle)',
+        'function': full_books_pipeline,
+        'download_method': 'coordination',  # Handles both Goodreads and Kindle
+        'requires_timezone': False,
+        'move_function': None,  # Coordination pipeline handles this
+        'download_function': None,  # Handled separately by Goodreads and Kindle
+        'urls': [],
+        'description': 'Processes Goodreads and Kindle reading data',
+        'user_selectable': True
+    },
+    'goodreads': {
+        'name': 'Goodreads (Reading)',
+        'function': None,  # Part of books coordination
+        'download_method': 'manual_web',
+        'requires_timezone': False,
+        'move_function': move_goodreads_files,
+        'download_function': download_goodreads_data,
+        'urls': ['https://www.goodreads.com/review/import'],
+        'description': 'Downloads Goodreads library export',
+        'user_selectable': False  # Hidden - part of books coordination
+    },
+    'kindle': {
+        'name': 'Kindle (Reading)',
+        'function': None,  # Part of books coordination
+        'download_method': 'email',
+        'requires_timezone': False,
+        'move_function': move_kindle_files,
+        'download_function': download_kindle_data,
+        'urls': ['https://www.amazon.com/hz/privacy-central/data-requests/preview.html'],
+        'description': 'Downloads Kindle data from Amazon',
+        'user_selectable': False  # Hidden - part of books coordination
+    },
+    'music': {
+        'name': 'Music (Last.fm)',
+        'function': full_lfm_pipeline,
+        'download_method': 'api',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Fetches listening history from Last.fm API',
+        'user_selectable': True
+    },
+    'podcasts': {
+        'name': 'Podcasts (Pocket Casts)',
+        'function': full_pocket_casts_pipeline,
+        'download_method': 'manual_web',
+        'requires_timezone': True,
+        'move_function': move_pocket_casts_files,
+        'download_function': download_pocket_casts_data,
+        'urls': ['https://pocketcasts.com/'],
+        'description': 'Processes Pocket Casts listening history (requires timezone correction)',
+        'user_selectable': True
+    },
+    'garmin': {
+        'name': 'Fitness (Garmin)',
+        'function': full_garmin_pipeline,
+        'download_method': 'email',
+        'requires_timezone': True,
+        'move_function': move_garmin_files,
+        'download_function': download_garmin_data,
+        'urls': ['https://www.garmin.com/fr-BE/account/datamanagement/exportdata/'],
+        'description': 'Processes Garmin fitness data (requires timezone correction)',
+        'user_selectable': True
+    },
+    'apple_health': {
+        'name': 'Health (Apple Health)',
+        'function': full_apple_pipeline,
+        'download_method': 'manual_app',
+        'requires_timezone': False,
+        'move_function': move_apple_files,
+        'download_function': download_apple_data,
+        'urls': [],
+        'description': 'Processes Apple Health export from iPhone',
+        'user_selectable': True
+    },
+    'letterboxd': {
+        'name': 'Movies (Letterboxd)',
+        'function': full_letterboxd_pipeline,
+        'download_method': 'manual_web',
+        'requires_timezone': False,
+        'move_function': move_letterboxd_files,
+        'download_function': download_letterboxd_data,
+        'urls': ['https://letterboxd.com/settings/data/'],
+        'description': 'Processes Letterboxd movie viewing history',
+        'user_selectable': True
+    },
+    'trakt': {
+        'name': 'TV Shows (Trakt)',
+        'function': full_trakt_pipeline,
+        'download_method': 'manual_web',
+        'requires_timezone': False,
+        'move_function': move_trakt_files,
+        'download_function': download_trakt_data,
+        'urls': ['https://trakt.tv/settings/data'],
+        'description': 'Processes Trakt TV show watching history',
+        'user_selectable': True
+    },
+    'finance': {
+        'name': 'Finance (Money Manager)',
+        'function': full_moneymgr_pipeline,
+        'download_method': 'manual_app',
+        'requires_timezone': False,
+        'move_function': move_moneymgr_files,
+        'download_function': download_moneymgr_data,
+        'urls': [],
+        'description': 'Processes Money Manager expense tracking data',
+        'user_selectable': True
+    },
+    'nutrition': {
+        'name': 'Nutrition (Nutrilio)',
+        'function': full_nutrilio_pipeline,
+        'download_method': 'manual_app',
+        'requires_timezone': False,
+        'move_function': move_nutrilio_files,
+        'download_function': download_nutrilio_data,
+        'urls': [],
+        'description': 'Processes Nutrilio meal and nutrition tracking data',
+        'user_selectable': True
+    },
+    'offscreen': {
+        'name': 'Screen Time (Offscreen)',
+        'function': full_offscreen_pipeline,
+        'download_method': 'manual_app',
+        'requires_timezone': True,
+        'move_function': move_offscreen_files,
+        'download_function': download_offscreen_data,
+        'urls': [],
+        'description': 'Processes Offscreen app usage data (requires timezone correction)',
+        'user_selectable': True
+    },
+    'weather': {
+        'name': 'Weather (Meteostat API)',
+        'function': get_weather_data,
+        'download_method': 'api',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Fetches weather data from Meteostat API',
+        'user_selectable': True
+    },
 }
 
 
-def download_web_data():
-    """Opens all the web urls in Firefox, then asks the user if each export was made, to later decide if processing is needed"""
-    urls = [
-        'https://www.goodreads.com/review/import',
-        'https://benjaminbenben.com/lastfm-to-csv/',
-        'https://www.amazon.com/hz/privacy-central/data-requests/preview.html',
-        'https://www.garmin.com/fr-BE/account/datamanagement/exportdata/',
-        'https://letterboxd.com/settings/data/']
-    for url in urls:
-        try:
-            subprocess.run(['open', '-a', 'Firefox', '-g', url])
-        except Exception as e:
-            print(f"Warning: Failed to open {url}")
+# ============================================================================
+# WORKFLOW FUNCTIONS
+# ============================================================================
 
-    GR = input("Did GR export got downloaded ? (Y/N) ")
-    LFM = input("Did LFM export got downloaded ? (Y/N) ")
-    LBX = input("Did Letterboxd export got downloaded ? (Y/N) ")
-    input("Was Pocket cast export requested ? (Y/N) ")
-    input("Was Garmin & Kindle data requested? (Y/N) ")
-    return GR, LFM, LBX
+def collect_user_choices(registry):
+    """
+    Present all available topics and collect user Y/N choices.
+    Only shows topics where user_selectable is True.
 
+    Args:
+        registry (dict): Pipeline registry with all data sources
 
-def download_app_data():
-    """Asks the user if each export was made from the different apps, to later decide if processing is needed"""
-    MM = input("Did Money MGR export got downloaded ? (Y/N) ")
-    NUT = input("Did Nutrilio export got downloaded ? (Y/N) ")
-    APH = input("Did Apple Health export got downloaded ? (Y/N) ")
-    OFF = input("Did Offscreen export got downloaded ? (Y/N) ")
-    return MM, NUT, APH, OFF
+    Returns:
+        list: Names of selected topics
+    """
+    print("\n" + "=" * 60)
+    print("📋 DATA SOURCE SELECTION")
+    print("=" * 60)
+    print("\nAvailable data sources:\n")
 
+    # Filter to only user-selectable topics
+    selectable_topics = {k: v for k, v in registry.items() if v.get('user_selectable', True)}
 
-def upload_files():
-    """Upload processed files to Google Drive using enhanced authentication"""
-    file_names = all_files
+    # Display all user-selectable topics with descriptions
+    for i, (key, config) in enumerate(selectable_topics.items(), 1):
+        tz_indicator = " ⚠️ [Timezone]" if config['requires_timezone'] else ""
+        method_label = {
+            'api': '[API]',
+            'manual_web': '[Web]',
+            'manual_app': '[App]',
+            'email': '[Email]',
+            'coordination': '[Multi]'
+        }.get(config['download_method'], '')
 
-    print(f"\n📤 Starting upload of {len(file_names)} files...")
-    print("=" * 50)
+        print(f"  {i:2d}. {config['name']:<30} {method_label:<8} {tz_indicator}")
+        print(f"      {config['description']}")
 
-    # Use the enhanced update_drive function
-    success = update_drive(file_names)
+    print("\n" + "-" * 60)
+    print("Legend:")
+    print("  [API]  - Automated API fetch")
+    print("  [Web]  - Manual browser download")
+    print("  [App]  - Manual app export")
+    print("  [Email]- Request via web, receive email")
+    print("  [Multi]- Coordinates multiple sources")
+    print("  ⚠️ [Timezone] - Requires timezone correction")
+    print("-" * 60)
 
-    if success:
-        print("🎉 All files uploaded successfully!")
-    else:
-        print("⚠️  Some files failed to upload. Check the log above for details.")
+    # Collect user choices
+    selected = []
+    print("\n🎯 Select which data sources to process:\n")
 
-    print("=" * 50)
-    return success
+    for key, config in selectable_topics.items():
+        while True:
+            choice = input(f"Process {config['name']}? (Y/N): ").strip().upper()
+            if choice in ['Y', 'N']:
+                if choice == 'Y':
+                    selected.append(key)
+                    print(f"  ✅ Added to processing queue")
+                break
+            else:
+                print("  ❌ Invalid input. Please enter Y or N.")
 
+    print("\n" + "=" * 60)
+    print(f"📊 Selected {len(selected)} data source(s) for processing")
+    print("=" * 60)
 
-def upload_file_list(file_list):
-    """Upload a specific list of files to Google Drive"""
-
-    print(f"\n📤 Starting upload of {len(file_list)} files...")
-    print("=" * 40)
-
-    # Use the enhanced update_drive function
-    success = update_drive(file_list)
-
-    if success:
-        print("✅ Files uploaded successfully!")
-    else:
-        print("⚠️  Some files failed to upload. Check the log above for details.")
-
-    print("=" * 40)
-    return success
-
-
-def download_process_upload():
-    """Download, process, and prepare data for upload with error handling"""
-    # Setup for tracking failures
-    failed_steps = []
-
-    # Get user inputs as before
-    web_download = input("Do you want to download new data from websites? (Y/N) ")
-    if web_download == "Y":
-        try:
-            GR, LFM, LBX = download_web_data()
-        except Exception as e:
-            print(f"ERROR during web data download: {str(e)}")
-            GR, LFM, LBX = 'N', 'N', 'N'
-    else:
-        GR = input("New Goodreads file? (Y/N) ")
-        LFM = input("New LFM file? (Y/N) ")
-        LBX = input("New Letterboxd file? (Y/N) ")
-
-    app_download = input("Do you want to download new data from mobile apps? (Y/N) ")
-    if app_download == "Y":
-        try:
-            MM, NUT, APH, OFF = download_app_data()
-        except Exception as e:
-            print(f"ERROR during app data download: {str(e)}")
-            MM, NUT, APH, OFF = 'N', 'N', 'N', 'N'
-    else:
-        MM = input("New Money Mgr file? (Y/N) ")
-        NUT = input("New Nutrilio file? (Y/N) ")
-        APH = input("New Apple Health file? (Y/N) ")
-        OFF = input("New OffScreen file? (Y/N) ")
-
-    PCC = input("New Pocket Cast file? (Y/N) ")
-    GAR = input("New Garmin file? (Y/N) ")
-    KIN = input("New Kindle file? (Y/N) ")
-    TRK = input("New Trakt file? (Y/N) ")
-    WEA = input("Use API to download latest weather data? (Y/N) ")
-    LOC = input("Process location data (Google Maps + Manual Excel)? (Y/N) ")
-
-    file_names = []
-    print('\n')
-
-    # Define a helper function for processing steps with error handling
-    def run_process(condition, process_function, process_name, *args, **kwargs):
-        if condition == 'Y':
-            try:
-                print('----------------------------------------------')
-                print(f'Starting the processing of the {process_name} export')
-                process_function(*args, **kwargs)
-                print(f'✅ {process_name} processing completed successfully')
-                print('----------------------------------------------')
-                return True
-            except Exception as e:
-                error_msg = f"Error during {process_name} processing: {str(e)}"
+    return selected
 
 
-                print(f"❌ ERROR: {error_msg}")
-                print("Continuing with next step...")
-                print('----------------------------------------------')
-                failed_steps.append(process_name)
-                return False
-        return None  # If condition wasn't 'Y', nothing to do
+def handle_timezone_dependency(selected_topics, registry):
+    """
+    Check if any selected topics require timezone correction.
+    If yes, automatically run location pipeline to ensure timezone data is current.
 
-    # Run each process with error handling
-    gr_success = run_process(GR, process_gr_export, "Goodreads")
-    kin_success = run_process(KIN, process_kindle_export, "Kindle")
+    Args:
+        selected_topics (list): List of selected topic names
+        registry (dict): Pipeline registry
 
-    # Upload reading files if either Goodreads or Kindle was processed
-    if gr_success or kin_success:
-        upload_file_list(reading_files)
+    Returns:
+        bool: True if timezone dependency handled successfully, False otherwise
+    """
+    # Check if any selected topic requires timezone correction
+    needs_timezone = any(
+        registry[topic]['requires_timezone']
+        for topic in selected_topics
+    )
 
-    # For steps that depend on other steps being successful
-    if (KIN == "Y" or GR == 'Y') and (kin_success is not False or gr_success is not False):
-        try:
-            print('----------------------------------------------')
-            print('Starting the processing of the Books export (combining Goodreads + Kindle)')
-            process_book_exports(upload="N")
-            print('✅ Books processing completed successfully')
-            print('----------------------------------------------')
-            upload_file_list(reading_files)
-        except Exception as e:
-            error_msg = f"Error during Books processing: {str(e)}"
+    if not needs_timezone:
+        print("\n✓ No timezone correction needed for selected topics")
+        return True
 
-
-            print(f"❌ ERROR: {error_msg}")
-            print("Continuing with next step...")
-            print('----------------------------------------------')
-            failed_steps.append("Books")
-
-    # Continue with independent processes
-    if run_process(LFM, full_lfm_pipeline, "Last.fm", auto_full=True):
-        upload_file_list(music_files)
-
-    if run_process(PCC, full_pocket_casts_pipeline, "Pocket Casts", auto_full=False):
-        upload_file_list(podcast_files)
-
-    if run_process(GAR, process_garmin_export, "Garmin", upload="N"):
-        upload_file_list(health_files)
-
-    if run_process(MM, process_moneymgr_export, "Money Manager", upload="N"):
-        upload_file_list(finance_files)
-
-    if run_process(NUT, process_nutrilio_export, "Nutrilio", upload="N"):
-        upload_file_list(nutrilio_files)
-
-    if run_process(APH, process_apple_export, "Apple Health", upload="N"):
-        upload_file_list(health_files)
-
-    if run_process(OFF, process_offscreen_export, "Offscreen", upload="N"):
-        upload_file_list(screentime_files)
-
-    if run_process(LBX, process_letterboxd_export, "Letterboxd", upload="N"):
-        upload_file_list(movies_files)
-
-    if run_process(TRK, create_trakt_processed_file, "Trakt", upload="N"):
-        upload_file_list(movies_files)
-
-    if run_process(WEA, get_weather_data, "Weather", upload="N"):
-        upload_file_list(weather_files)
-
-    if run_process(LOC, full_location_pipeline, "Location", auto_full=False):
-        upload_file_list(location_files)
-
-    # Report on any failures
-    if failed_steps:
-        print(f"\n⚠️  WARNING: The following steps had errors:")
-        for step in failed_steps:
-            print(f"  - {step}")
-        print("\nCheck the log file for details.")
-    else:
-        print("\n🎉 All processing steps completed successfully!")
-
-
-def make_sample_files():
-    """Create sample files for testing or documentation"""
-    file_paths = [
-        'files/processed_files/kindle_gr_processed.csv',
-        'files/processed_files/pocket_casts_processed.csv',
-        'files/processed_files/lfm_processed.csv',
-        'files/processed_files/garmin_activities_list_processed.csv',
-        'files/processed_files/letterboxd_processed.csv',
-        'files/processed_files/moneymgr_processed.csv',
-        'files/processed_files/nutrilio_processed.csv',
-        # Add other file paths as needed
+    # Display which topics need timezone correction
+    tz_topics = [
+        registry[topic]['name']
+        for topic in selected_topics
+        if registry[topic]['requires_timezone']
     ]
 
-    for file_path in file_paths:
-        try:
-            file_name = file_path.split('/')[2].split(".")[0]
-            print(f"📝 Creating sample for {file_name}")
+    print("\n" + "=" * 60)
+    print("⚠️  TIMEZONE CORRECTION REQUIRED")
+    print("=" * 60)
+    print("\nThe following selected topics require timezone correction:")
+    for topic in tz_topics:
+        print(f"  • {topic}")
 
-            try:
-                df = pd.read_csv(file_path, sep='|')
-            except UnicodeDecodeError:
-                # Fall back to encoding detection
-                with open(file_path, 'rb') as file:
-                    encoding = chardet.detect(file.read())['encoding']
-                df = pd.read_csv(file_path, encoding=encoding, sep='|', na_values=[''])
+    print("\n📍 Running Location Pipeline to ensure timezone data is current...")
+    print("This will download Google Timeline data and process location information.")
+    print("=" * 60)
 
-            sample_path = f"files/sample_files/{file_name}_sample.csv"
-            df.head(20).to_csv(sample_path, sep="|", encoding='utf-16', index=False)
-            print(f"✅ Sample created: {sample_path}")
-        except Exception as e:
-
-
-            print(f"❌ ERROR creating sample for {file_path}: {str(e)}")
-
-
-def upload_single_file():
-    """Upload files for a specific data category"""
-    print("-" * 60)
-    print("📤 Choose the data category you want to upload from this list:")
-    for i, key in enumerate(dict_upload.keys(), 1):
-        print(f"  {i}. {key.title()}")
-    print("-" * 60)
-
-    choice = input("Your choice (name or number): ").lower().strip()
-
-    # Handle both numeric and text input
-    if choice.isdigit():
-        choices = list(dict_upload.keys())
-        choice_index = int(choice) - 1
-        if 0 <= choice_index < len(choices):
-            choice = choices[choice_index]
-        else:
-            print("❌ Invalid option. Please run the script again and select a valid option")
-            return
-
-    if choice in dict_upload.keys():
-        print(f"📤 Uploading {choice} files...")
-        success = upload_file_list(dict_upload[choice])
-        if success:
-            print(f"✅ {choice.title()} files uploaded successfully!")
-        else:
-            print(f"⚠️  Some {choice} files failed to upload.")
-    else:
-        print("❌ Invalid option. Please run the script again and select a valid option")
-
-
-# Main execution block
-def main():
-    """Main execution function with enhanced error handling"""
     try:
-        print("\n🚀 LifeLog Data Processing System")
+        # Run location pipeline option 1 (download + process + upload)
+        success = full_location_pipeline(auto_full=True)
+
+        if success:
+            print("\n✅ Location pipeline completed successfully!")
+            print("Timezone correction data is ready for processing.")
+            return True
+        else:
+            print("\n❌ Location pipeline failed!")
+            print("Timezone-dependent topics may not process correctly.")
+            return False
+
+    except Exception as e:
+        print(f"\n❌ ERROR during location pipeline: {str(e)}")
+        print("Timezone-dependent topics may not process correctly.")
+        return False
+
+
+def handle_manual_downloads(selected_topics, registry):
+    """
+    Handle manual downloads individually with detailed instructions for each source.
+    Calls each source's download_*_data() function and moves files immediately after confirmation.
+
+    Args:
+        selected_topics (list): List of selected topic names
+        registry (dict): Pipeline registry
+    """
+    # Expand 'books' into 'goodreads' and 'kindle' for individual download handling
+    download_topics = []
+    for topic in selected_topics:
+        if topic == 'books':
+            # Books is a coordination pipeline - handle Goodreads and Kindle separately
+            download_topics.extend(['goodreads', 'kindle'])
+        else:
+            download_topics.append(topic)
+
+    # Filter topics that require manual downloads
+    manual_topics = [t for t in download_topics
+                     if t in registry and registry[t]['download_method'] in ['manual_web', 'manual_app', 'email']]
+
+    if not manual_topics:
+        print("\n✓ No manual downloads required (API sources only)")
+        return
+
+    print("\n" + "=" * 60)
+    print("📥 MANUAL DOWNLOAD PHASE")
+    print("=" * 60)
+    print(f"\nProcessing {len(manual_topics)} source(s) requiring manual downloads\n")
+
+    # Process each source individually
+    for i, topic in enumerate(manual_topics, 1):
+        config = registry[topic]
+
+        print("\n" + "=" * 60)
+        print(f"[{i}/{len(manual_topics)}] {config['name']}")
         print("=" * 60)
 
-        download = input("""Choose an option:
-    1. Download/process/upload all data
-    2. Upload all existing files
-    3. Create sample files for testing
-    4. Upload files for specific category
-
-    Your choice (1/2/3/4): """)
-
-        if download == "1":
-            print("\n📋 Starting complete data processing workflow...")
-            download_process_upload()
-        elif download == "2":
-            print("\n📤 Starting upload of all processed files...")
+        # Call the download instruction function if it exists
+        if config['download_function']:
             try:
-                upload_files()
+                # The download function shows instructions and asks for user confirmation
+                download_confirmed = config['download_function']()
+
+                if download_confirmed:
+                    # Move files immediately after user confirms download
+                    if config['move_function']:
+                        try:
+                            print(f"\n📁 Moving {config['name']} files...")
+                            config['move_function']()
+                            print(f"✅ Files moved successfully")
+                        except Exception as e:
+                            print(f"⚠️  Error moving files: {str(e)}")
+                            print(f"→ You may need to move files manually to the appropriate export folder")
+                    else:
+                        print(f"✅ Download confirmed (no file movement needed)")
+                else:
+                    print(f"⚠️  Skipping {config['name']} - download not confirmed")
+                    print(f"→ You can process this source later by running its individual pipeline")
+
             except Exception as e:
-
-
-                print(f"❌ ERROR during upload: {str(e)}")
-        elif download == "3":
-            print("\n📝 Creating sample files for testing...")
-            try:
-                make_sample_files()
-            except Exception as e:
-
-
-                print(f"❌ ERROR creating sample files: {str(e)}")
-        elif download == "4":
-            print("\n📤 Starting category-specific upload...")
-            try:
-                upload_single_file()
-            except Exception as e:
-
-
-                print(f"❌ ERROR uploading files: {str(e)}")
+                print(f"❌ Error during {config['name']} download process: {str(e)}")
+                print(f"→ Continuing with next source...")
         else:
-            print("❌ Invalid option. Please run the script again and select 1, 2, 3, or 4.")
+            # This shouldn't happen if registry is configured correctly
+            print(f"⚠️  No download function configured for {config['name']}")
+
+    print("\n" + "=" * 60)
+    print("✅ Manual download phase complete")
+    print("=" * 60)
+
+
+def run_processing_pipelines(selected_topics, registry):
+    """
+    Run processing pipeline (option 2) for each selected topic.
+    Continues processing even if individual pipelines fail.
+
+    Args:
+        selected_topics (list): List of selected topic names
+        registry (dict): Pipeline registry
+
+    Returns:
+        dict: Results with 'success' and 'failed' lists
+    """
+    print("\n" + "=" * 60)
+    print("⚙️  AUTOMATED PROCESSING PHASE")
+    print("=" * 60)
+    print(f"\nProcessing {len(selected_topics)} data source(s)...\n")
+
+    results = {
+        'success': [],
+        'failed': []
+    }
+
+    for i, topic in enumerate(selected_topics, 1):
+        config = registry[topic]
+
+        print("\n" + "=" * 60)
+        print(f"[{i}/{len(selected_topics)}] Processing: {config['name']}")
+        print("=" * 60)
+
+        try:
+            # Call pipeline function with auto_process_only=True to run option 2
+            # Note: weather uses different function signature
+            if topic == 'weather':
+                # Weather function doesn't have auto_process_only, just call it directly
+                config['function'](upload="N")
+                success = True
+            else:
+                # All other pipelines support auto_process_only parameter
+                success = config['function'](auto_process_only=True)
+
+            if success:
+                results['success'].append(topic)
+                print(f"\n✅ {config['name']} processing completed successfully")
+            else:
+                results['failed'].append({
+                    'topic': topic,
+                    'name': config['name'],
+                    'error': 'Pipeline returned failure status'
+                })
+                print(f"\n❌ {config['name']} processing failed")
+
+        except Exception as e:
+            results['failed'].append({
+                'topic': topic,
+                'name': config['name'],
+                'error': str(e)
+            })
+            print(f"\n❌ ERROR processing {config['name']}: {str(e)}")
+            print("Continuing with next topic...")
+
+    return results
+
+
+def generate_report(results, registry):
+    """
+    Generate and display final processing report.
+
+    Args:
+        results (dict): Results from run_processing_pipelines
+        registry (dict): Pipeline registry
+    """
+    print("\n\n" + "=" * 60)
+    print("📊 PROCESSING REPORT")
+    print("=" * 60)
+
+    total = len(results['success']) + len(results['failed'])
+    success_count = len(results['success'])
+    failure_count = len(results['failed'])
+
+    print(f"\nTotal: {total} | ✅ Success: {success_count} | ❌ Failed: {failure_count}")
+
+    if results['success']:
+        print("\n✅ SUCCESSFUL PROCESSING:")
+        for topic in results['success']:
+            print(f"  • {registry[topic]['name']}")
+
+    if results['failed']:
+        print("\n❌ FAILED PROCESSING:")
+        for failure in results['failed']:
+            print(f"  • {failure['name']}")
+            print(f"    Error: {failure['error']}")
+
+    print("\n" + "=" * 60)
+
+    if failure_count == 0:
+        print("🎉 All selected data sources processed successfully!")
+    elif success_count == 0:
+        print("⚠️  All processing attempts failed. Check errors above.")
+    else:
+        print("⚠️  Some processing attempts failed. Check errors above.")
+
+    print("=" * 60)
+
+
+def batch_download_process_upload():
+    """
+    Main orchestration function for batch processing workflow.
+
+    Workflow:
+    1. Collect user selections for all topics
+    2. Handle timezone dependency (run location pipeline if needed)
+    3. Handle all manual downloads in batch
+    4. Run processing pipelines for all selected topics
+    5. Generate final report
+    """
+    try:
+        print("\n" + "=" * 60)
+        print("🚀 LIFELOG BATCH PROCESSING SYSTEM")
+        print("=" * 60)
+        print("\nThis workflow will:")
+        print("  1. Let you select which data sources to process")
+        print("  2. Handle timezone correction if needed")
+        print("  3. Guide you through any manual downloads")
+        print("  4. Automatically process and upload all selected data")
+        print("  5. Provide a summary report")
+
+        # Step 1: Collect user choices
+        selected_topics = collect_user_choices(PIPELINE_REGISTRY)
+
+        if not selected_topics:
+            print("\n⚠️  No topics selected. Exiting.")
+            return
+
+        # Step 2: Handle timezone dependency
+        handle_timezone_dependency(selected_topics, PIPELINE_REGISTRY)
+
+        # Step 3: Handle manual downloads
+        handle_manual_downloads(selected_topics, PIPELINE_REGISTRY)
+
+        # Step 4: Run all processing pipelines
+        results = run_processing_pipelines(selected_topics, PIPELINE_REGISTRY)
+
+        # Step 5: Generate report
+        generate_report(results, PIPELINE_REGISTRY)
 
     except KeyboardInterrupt:
         print("\n\n⚠️  Process interrupted by user.")
+        print("Partial processing may have occurred.")
     except Exception as e:
-        print(f"💥 CRITICAL ERROR: {str(e)}")
+        print(f"\n\n💥 CRITICAL ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
     finally:
-        print(f"\n📋 Processing complete. Check log file for details.")
+        print("\n📋 Processing session complete.")
 
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 
 if __name__ == "__main__":
-    main()
+    batch_download_process_upload()

@@ -705,7 +705,7 @@ def process_goodreads_export(upload="Y"):
         return create_goodreads_file()
 
 
-def full_goodreads_pipeline(auto_full=False):
+def full_goodreads_pipeline(auto_full=False, auto_process_only=False):
     """Complete Goodreads pipeline with JSON-based processing"""
     print("\n" + "="*60)
     print("📚 GOODREADS DATA PIPELINE (JSON-BASED)")
@@ -714,7 +714,10 @@ def full_goodreads_pipeline(auto_full=False):
     # First, migrate any existing Excel data to JSON
     migrate_excel_to_json()
 
-    if auto_full:
+    if auto_process_only:
+        print("🤖 Auto process mode: Processing existing data and uploading...")
+        choice = "2"
+    elif auto_full:
         print("🤖 Auto mode: Running full pipeline...")
         choice = "1"
     else:

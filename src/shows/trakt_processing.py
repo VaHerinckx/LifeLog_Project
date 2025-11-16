@@ -640,12 +640,13 @@ def batch_season_artwork_override():
         return False
 
 
-def full_trakt_pipeline(auto_full=False):
+def full_trakt_pipeline(auto_full=False, auto_process_only=False):
     """
     Complete Trakt processing pipeline with 5 standard options.
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
+        auto_process_only (bool): If True, automatically runs option 2 without user input
 
     Returns:
         bool: True if pipeline completed successfully, False otherwise
@@ -654,7 +655,10 @@ def full_trakt_pipeline(auto_full=False):
     print("🎬 TRAKT PROCESSING PIPELINE")
     print("="*60)
 
-    if auto_full:
+    if auto_process_only:
+        print("🤖 Auto process mode: Processing existing data and uploading...")
+        choice = "2"
+    elif auto_full:
         print("🤖 Auto mode: Running full pipeline...")
         choice = "1"
     else:

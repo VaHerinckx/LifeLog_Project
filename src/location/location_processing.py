@@ -1001,9 +1001,14 @@ def create_hourly_records_from_travel_data(travel_records: List[Dict]) -> List[D
 
     print("🕐 Creating hourly records from travel data...")
 
+    # Load existing geocoding cache from disk
+    print("📦 Loading geocoding cache...")
+    _geocoding_cache = load_geocoding_cache()
+
     # Pre-process all locations to get coordinates and timezones
     print("🌍 Pre-processing location data...")
     location_data = {}
+    new_locations_geocoded = 0
 
     for record in travel_records:
         location_key = f"{record['city']}, {record['country']}"
@@ -1015,6 +1020,7 @@ def create_hourly_records_from_travel_data(travel_records: List[Dict]) -> List[D
                 location_data[location_key] = _geocoding_cache[location_key]
             else:
                 # Get fresh data
+                print(f"🌍 Geocoding {location_key}...")
                 coordinates, timezone_id = geocode_location(record['city'], record['country'])
                 location_data[location_key] = {
                     'coordinates': coordinates,
@@ -1022,11 +1028,17 @@ def create_hourly_records_from_travel_data(travel_records: List[Dict]) -> List[D
                 }
                 # Cache the result
                 _geocoding_cache[location_key] = location_data[location_key]
+                new_locations_geocoded += 1
 
                 # Be respectful to APIs
                 time.sleep(1)
 
-    print(f"✅ Pre-processed {len(location_data)} unique locations")
+    # Save updated cache to disk
+    if new_locations_geocoded > 0:
+        print(f"💾 Saving {new_locations_geocoded} new location(s) to cache...")
+        save_geocoding_cache(_geocoding_cache)
+
+    print(f"✅ Pre-processed {len(location_data)} unique locations ({len(location_data) - new_locations_geocoded} cached, {new_locations_geocoded} new)")
 
     # Determine the overall date range
     start_date = travel_records[0]['date']

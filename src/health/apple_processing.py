@@ -441,7 +441,7 @@ def process_apple_export(upload="Y"):
         return create_apple_file()
 
 
-def full_apple_pipeline(auto_full=False):
+def full_apple_pipeline(auto_full=False, auto_process_only=False):
     """
     Complete Apple Health pipeline with 3 standard options.
 
@@ -452,6 +452,7 @@ def full_apple_pipeline(auto_full=False):
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
+        auto_process_only (bool): If True, automatically runs option 2 without user input
 
     Returns:
         bool: True if pipeline completed successfully, False otherwise
@@ -460,7 +461,10 @@ def full_apple_pipeline(auto_full=False):
     print("🍎 APPLE HEALTH DATA PIPELINE")
     print("="*60)
 
-    if auto_full:
+    if auto_process_only:
+        print("🤖 Auto process mode: Processing existing data and uploading...")
+        choice = "2"
+    elif auto_full:
         print("🤖 Auto mode: Running full pipeline...")
         choice = "1"
     else:
