@@ -244,11 +244,10 @@ def get_existing_season_artwork(processed_file_path):
         return {}
 
 
-def create_trakt_processed_file(fetch_artwork_auto=None):
+def create_trakt_file():
     """
     Processes the history.json file and converts it to CSV format.
-    Args:
-        fetch_artwork_auto: If True/False, skip prompt. If None, prompt user.
+    Automatically fetches missing season artwork from TMDB.
     Returns True if successful, False otherwise.
     """
     print("⚙️  Processing Trakt history data...")
@@ -340,32 +339,24 @@ def create_trakt_processed_file(fetch_artwork_auto=None):
         print(f"🎨 Have artwork for {len(artwork_cache)} seasons")
         print(f"🔍 Need to fetch artwork for {len(seasons_needing_artwork)} seasons")
         
-        # Fetch missing artwork
+        # Fetch missing artwork automatically
         if seasons_needing_artwork:
-            if fetch_artwork_auto is None:
-                fetch_artwork = input(f"Fetch artwork for {len(seasons_needing_artwork)} seasons? (y/N): ").lower() == 'y'
-            else:
-                fetch_artwork = fetch_artwork_auto
-                
-            if fetch_artwork:
-                print("🚀 Fetching season artwork from TMDB...")
-                
-                for season_info in seasons_needing_artwork:
-                    artwork_url = get_tmdb_season_artwork(
-                        season_info['show_title'],
-                        season_info['show_year'],
-                        season_info['season'],
-                        artwork_cache
-                    )
-                    
-                    # Small delay between requests
-                    time.sleep(0.5)
-                
-                # Save updated cache
-                save_season_artwork_cache(artwork_cache)
-                print(f"✅ Updated artwork cache with {len(seasons_needing_artwork)} new entries")
-            else:
-                print("⏭️  Skipping artwork fetching...")
+            print("🚀 Fetching season artwork from TMDB...")
+
+            for season_info in seasons_needing_artwork:
+                artwork_url = get_tmdb_season_artwork(
+                    season_info['show_title'],
+                    season_info['show_year'],
+                    season_info['season'],
+                    artwork_cache
+                )
+
+                # Small delay between requests
+                time.sleep(0.5)
+
+            # Save updated cache
+            save_season_artwork_cache(artwork_cache)
+            print(f"✅ Updated artwork cache with {len(seasons_needing_artwork)} new entries")
         
         # Add season_poster_url column to dataframe
         df['season_poster_url'] = df.apply(
@@ -374,7 +365,7 @@ def create_trakt_processed_file(fetch_artwork_auto=None):
         )
         
         # Save to CSV with pipe separator (consistent with other processors)
-        df.to_csv(output_file, sep='|', index=False, encoding='utf-16')
+        df.to_csv(output_file, sep='|', index=False, encoding='utf-8')
         
         print(f"✅ Successfully processed {len(df)} episodes")
         print(f"📁 Saved to: {output_file}")
@@ -387,6 +378,15 @@ def create_trakt_processed_file(fetch_artwork_auto=None):
         import traceback
         traceback.print_exc()
         return False
+
+
+def create_trakt_processed_file(fetch_artwork_auto=None):
+    """
+    Legacy wrapper for backward compatibility.
+    Use create_trakt_file() instead.
+    Note: fetch_artwork_auto parameter is deprecated and ignored.
+    """
+    return create_trakt_file()
 
 
 def upload_trakt_results():
@@ -514,7 +514,7 @@ def manual_season_artwork_override():
         )
         
         # Save updated CSV
-        df.to_csv(processed_file, sep='|', index=False, encoding='utf-16')
+        df.to_csv(processed_file, sep='|', index=False, encoding='utf-8')
         
         print(f"✅ Successfully updated artwork for {selected_season['show_title']} Season {selected_season['season']}")
         print(f"📊 Updated {selected_season['count']} episode records")
@@ -625,7 +625,7 @@ def batch_season_artwork_override():
             )
             
             # Save updated CSV
-            df.to_csv(processed_file, sep='|', index=False, encoding='utf-16')
+            df.to_csv(processed_file, sep='|', index=False, encoding='utf-8')
             
             print(f"📊 Updated processed CSV file")
         
@@ -640,55 +640,87 @@ def batch_season_artwork_override():
         return False
 
 
-if __name__ == "__main__":
-    print("🎬 Trakt Processing Tool")
-    print("This tool downloads and processes Trakt data.")
-    
-    print("\nSelect an option:")
-    print("1. Full pipeline (download → process → upload)")
-    print("2. Process only (use existing data)")
-    print("3. Manual season artwork override")
-    print("4. Batch season artwork override")
-    
-    choice = input("\nEnter your choice (1-4): ").strip()
-    
+def full_trakt_pipeline(auto_full=False):
+    """
+    Complete Trakt processing pipeline with 5 standard options.
+
+    Args:
+        auto_full (bool): If True, automatically runs option 1 without user input
+
+    Returns:
+        bool: True if pipeline completed successfully, False otherwise
+    """
+    print("\n" + "="*60)
+    print("🎬 TRAKT PROCESSING PIPELINE")
+    print("="*60)
+
+    if auto_full:
+        print("🤖 Auto mode: Running full pipeline...")
+        choice = "1"
+    else:
+        print("\nSelect an option:")
+        print("1. Download new data, process, and upload to Drive")
+        print("2. Process existing data and upload to Drive")
+        print("3. Upload existing processed files to Drive")
+        print("4. Manual season artwork override")
+        print("5. Batch season artwork override")
+
+        choice = input("\nEnter your choice (1-5): ").strip()
+
+    success = False
+
     if choice == "1":
-        # Full pipeline
+        # Option 1: Download new data, process, and upload to Drive
+        print("\n🚀 Running full pipeline...")
         if download_trakt_data():
             if move_trakt_files():
-                if create_trakt_processed_file():  # Will prompt for artwork
-                    if upload_trakt_results():
-                        print("✅ Trakt data processing completed successfully!")
-                        # Record successful run
-                        record_successful_run('movies_trakt', 'active')
-                    else:
-                        print("❌ Failed to upload Trakt results")
+                if create_trakt_file():  # Will prompt for artwork
+                    success = upload_trakt_results()
                 else:
                     print("❌ Failed to process Trakt data")
             else:
                 print("❌ Failed to move Trakt files")
         else:
             print("❌ Download not confirmed")
-    
+
     elif choice == "2":
-        # Process only
-        if create_trakt_processed_file():  # Will prompt for artwork
-            if upload_trakt_results():
-                print("✅ Trakt data processing completed successfully!")
-                # Record successful run
-                record_successful_run('movies_trakt', 'active')
-            else:
-                print("❌ Failed to upload Trakt results")
+        # Option 2: Process existing data and upload to Drive
+        print("\n⚙️  Processing existing data and uploading to Drive...")
+        if create_trakt_file():  # Will prompt for artwork
+            success = upload_trakt_results()
         else:
             print("❌ Failed to process Trakt data")
-    
+
     elif choice == "3":
-        # Manual override
-        manual_season_artwork_override()
-    
+        # Option 3: Upload existing processed files to Drive
+        print("\n⬆️  Uploading existing processed files to Drive...")
+        success = upload_trakt_results()
+
     elif choice == "4":
-        # Batch override
-        batch_season_artwork_override()
-    
+        # Option 4: Manual season artwork override
+        print("\n🎨 Manual season artwork override...")
+        success = manual_season_artwork_override()
+
+    elif choice == "5":
+        # Option 5: Batch season artwork override
+        print("\n🎨 Batch season artwork override...")
+        success = batch_season_artwork_override()
+
     else:
-        print("❌ Invalid choice. Please select 1-4.")
+        print("❌ Invalid choice. Please select 1-5.")
+        return False
+
+    # Final status
+    print("\n" + "="*60)
+    if success:
+        print("✅ Trakt pipeline completed successfully!")
+        record_successful_run('movies_trakt', 'active')
+    else:
+        print("❌ Trakt pipeline failed")
+    print("="*60)
+
+    return success
+
+
+if __name__ == "__main__":
+    full_trakt_pipeline()
