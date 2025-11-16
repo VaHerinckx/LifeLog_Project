@@ -332,6 +332,30 @@ def time_difference_correction(df: pd.DataFrame, timestamp_column: str, source_t
             has_location_data = False
 
         if has_location_data:
+            # CRITICAL FIX: Force all timestamps to be timezone-naive
+            # This handles mixed timezone-aware/naive timestamps in the same column
+            try:
+                # First, try to convert timezone-aware to naive if column has tz attribute
+                if hasattr(location_df['timestamp_parsed'].dtype, 'tz') and location_df['timestamp_parsed'].dtype.tz is not None:
+                    print("   🔧 Converting timezone-aware timestamps to naive...")
+                    location_df['timestamp_parsed'] = location_df['timestamp_parsed'].dt.tz_localize(None)
+                else:
+                    # If dtype doesn't show timezone but we have mixed values, force conversion
+                    # Apply tz_localize(None) to each value individually
+                    print("   🔧 Ensuring all timestamps are timezone-naive...")
+                    location_df['timestamp_parsed'] = pd.to_datetime(
+                        location_df['timestamp_parsed'].apply(
+                            lambda x: x.tz_localize(None) if hasattr(x, 'tz') and x.tz is not None else x
+                        )
+                    )
+            except Exception as e:
+                print(f"   ⚠️  Error ensuring timezone-naive: {e}")
+                # Last resort: re-parse as strings to remove timezone info
+                location_df['timestamp_parsed'] = pd.to_datetime(
+                    location_df['timestamp_parsed'].astype(str).str.replace(r'[\+\-]\d{2}:\d{2}$', '', regex=True),
+                    errors='coerce'
+                )
+
             location_df = location_df.sort_values('timestamp_parsed')
 
             # Parse location timezone offsets

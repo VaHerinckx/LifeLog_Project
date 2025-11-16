@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import re
+import traceback
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
@@ -79,7 +80,7 @@ def screentime_before_sleep(df):
     if not os.path.exists(sleep_file):
         print(f"⚠️  Warning: Sleep data file not found: {sleep_file}")
         print("   Adding empty sleep-related columns")
-        df['within_hour_before_sleep'] = 0
+        df['is_within_hour_before_sleep'] = 0
         df['sleep_start_timestamp_local'] = None
         return df
 
@@ -109,7 +110,7 @@ def screentime_before_sleep(df):
         pd.to_datetime(merged_df['sleep_start_timestamp_local']).dt.tz_localize(None) -
         merged_df['date']
     )
-    merged_df['within_hour_before_sleep'] = merged_df['time_diff'].apply(
+    merged_df['is_within_hour_before_sleep'] = merged_df['time_diff'].apply(
         lambda x: 1 if pd.notna(x) and x <= pd.Timedelta(hours=1) and x >= pd.Timedelta(0) else 0
     )
 
@@ -122,21 +123,26 @@ def download_offscreen_data():
     Prompts user to download Offscreen data from the app.
     Returns True if user confirms download, False otherwise.
     """
-    print("📱 Starting Offscreen data download...")
-    print("📝 Instructions:")
-    print("   1. Open Offscreen app on your phone")
-    print("   2. Go to Settings > Export Data")
-    print("   3. Select 'Pickup.csv' for export")
-    print("   4. Share/export the file to your computer")
-    print("   5. Save the file to Downloads folder")
-    print("   6. File should be named with timestamp (e.g., '2024-01-15 12:30:45 000-Pickup.csv')")
+    try:
+        print("📱 Starting Offscreen data download...")
+        print("📝 Instructions:")
+        print("   1. Open Offscreen app on your phone")
+        print("   2. Go to Settings > Export Data")
+        print("   3. Select 'Pickup.csv' for export")
+        print("   4. Share/export the file to your computer")
+        print("   5. Save the file to Downloads folder")
+        print("   6. File should be named with timestamp (e.g., '2024-01-15 12:30:45 000-Pickup.csv')")
 
-    response = prompt_user_download_status("Offscreen")
+        response = prompt_user_download_status("Offscreen")
 
-    if response:
-        print("✅ Download confirmed")
+        if response:
+            print("✅ Download confirmed")
 
-    return response
+        return response
+
+    except Exception as e:
+        print(f"❌ Error during download process: {e}")
+        return False
 
 
 def move_offscreen_files():
@@ -144,31 +150,36 @@ def move_offscreen_files():
     Moves the downloaded Offscreen Pickup.csv file from Downloads to the correct export folder.
     Returns True if successful, False otherwise.
     """
-    print("📁 Moving Offscreen files...")
+    try:
+        print("📁 Moving Offscreen files...")
 
-    download_folder = os.path.expanduser("~/Downloads")
-    export_folder = "files/exports/offscreen_exports"
-    csv_regex = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*\.csv$'
+        download_folder = os.path.expanduser("~/Downloads")
+        export_folder = "files/exports/offscreen_exports"
+        csv_regex = r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*\.csv$'
 
-    # Ensure export folder exists
-    os.makedirs(export_folder, exist_ok=True)
+        # Ensure export folder exists
+        os.makedirs(export_folder, exist_ok=True)
 
-    # Find and move matching files
-    count_file = 0
-    for f in os.listdir(download_folder):
-        if re.match(csv_regex, f):
-            count_file += 1
-            # Extract the actual filename after the timestamp
-            new_file_name = f.split('000-')[1] if '000-' in f else f
-            clean_rename_move_file(export_folder, download_folder, f, new_file_name, count_file)
+        # Find and move matching files
+        count_file = 0
+        for f in os.listdir(download_folder):
+            if re.match(csv_regex, f):
+                count_file += 1
+                # Extract the actual filename after the timestamp
+                new_file_name = f.split('000-')[1] if '000-' in f else f
+                clean_rename_move_file(export_folder, download_folder, f, new_file_name, count_file)
 
-    if count_file == 0:
-        print(f"❌ No Offscreen export files found in {download_folder}")
-        print(f"   Looking for pattern: YYYY-MM-DD HH:MM:SS*.csv")
+        if count_file == 0:
+            print(f"❌ No Offscreen export files found in {download_folder}")
+            print(f"   Looking for pattern: YYYY-MM-DD HH:MM:SS*.csv")
+            return False
+
+        print(f"✅ Processed {count_file} Offscreen export file(s)")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error moving files: {e}")
         return False
-
-    print(f"✅ Processed {count_file} Offscreen export file(s)")
-    return True
 
 
 def create_offscreen_file():
@@ -205,14 +216,6 @@ def create_offscreen_file():
         print("😴 Computing screentime before sleep...")
         df = screentime_before_sleep(df)
 
-        # Ensure all columns are in snake_case
-        # The functions above should already produce snake_case columns, but we verify here
-        column_mapping = {
-            'sleepStartTimestampLocal': 'sleep_start_timestamp_local',
-            # Add any other non-snake_case columns here if found
-        }
-        df = df.rename(columns=column_mapping)
-
         # Sort by date (descending)
         df = df.sort_values("date", ascending=False)
 
@@ -229,7 +232,6 @@ def create_offscreen_file():
 
     except Exception as e:
         print(f"❌ Error processing Offscreen data: {e}")
-        import traceback
         traceback.print_exc()
         return False
 
@@ -239,37 +241,41 @@ def upload_offscreen_results():
     Uploads the processed Offscreen files to Google Drive.
     Returns True if successful, False otherwise.
     """
-    print("☁️  Uploading Offscreen results to Google Drive...")
+    try:
+        print("⬆️  Uploading Offscreen results to Google Drive...")
 
-    files_to_upload = ['files/processed_files/screentime/offscreen_processed.csv']
+        files_to_upload = ['files/processed_files/screentime/offscreen_processed.csv']
 
-    # Filter to only existing files
-    existing_files = [f for f in files_to_upload if os.path.exists(f)]
+        # Filter to only existing files
+        existing_files = [f for f in files_to_upload if os.path.exists(f)]
 
-    if not existing_files:
-        print("❌ No files found to upload")
+        if not existing_files:
+            print("❌ No files found to upload")
+            return False
+
+        print(f"📤 Uploading {len(existing_files)} file(s)...")
+        success = upload_multiple_files(existing_files)
+
+        if success:
+            print("✅ Offscreen results uploaded successfully!")
+        else:
+            print("❌ Some files failed to upload")
+
+        return success
+
+    except Exception as e:
+        print(f"❌ Error uploading files: {e}")
         return False
-
-    print(f"📤 Uploading {len(existing_files)} file(s)...")
-    success = upload_multiple_files(existing_files)
-
-    if success:
-        print("✅ Offscreen results uploaded successfully!")
-    else:
-        print("❌ Some files failed to upload")
-
-    return success
 
 
 def full_offscreen_pipeline(auto_full=False):
     """
-    Complete Offscreen pipeline with 4 standard options.
+    Complete Offscreen pipeline with 3 standard options.
 
     Options:
     1. Download new data, process, and upload to Drive
     2. Process existing data and upload to Drive
     3. Upload existing processed files to Drive
-    4. Full pipeline (download + process + upload)
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -289,9 +295,8 @@ def full_offscreen_pipeline(auto_full=False):
         print("1. Download new data, process, and upload to Drive")
         print("2. Process existing data and upload to Drive")
         print("3. Upload existing processed files to Drive")
-        print("4. Full pipeline (download + process + upload)")
 
-        choice = input("\nEnter your choice (1-4): ").strip()
+        choice = input("\nEnter your choice (1-3): ").strip()
 
     success = False
 
@@ -336,36 +341,8 @@ def full_offscreen_pipeline(auto_full=False):
         print("\n⬆️  Upload existing processed files to Drive...")
         success = upload_offscreen_results()
 
-    elif choice == "4":
-        print("\n🚀 Full pipeline (download + process + upload)...")
-
-        # Step 1: Download
-        download_success = download_offscreen_data()
-
-        # Step 2: Move files (even if download wasn't confirmed, maybe file exists)
-        if download_success:
-            move_success = move_offscreen_files()
-        else:
-            print("⚠️  Download not confirmed, but checking for existing files...")
-            move_success = move_offscreen_files()
-
-        # Step 3: Process (fallback to existing files if no new files)
-        if move_success:
-            process_success = create_offscreen_file()
-        else:
-            print("⚠️  No new files found, attempting to process existing files...")
-            process_success = create_offscreen_file()
-
-        # Step 4: Upload
-        if process_success:
-            upload_success = upload_offscreen_results()
-            success = upload_success
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
-
     else:
-        print("❌ Invalid choice. Please select 1-4.")
+        print("❌ Invalid choice. Please select 1-3.")
         return False
 
     # Final status

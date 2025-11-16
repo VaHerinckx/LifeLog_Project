@@ -13,6 +13,7 @@ from nltk.stem import WordNetLemmatizer
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.file_operations import check_file_exists
 from src.utils.web_operations import open_web_urls
+from src.utils.utils_functions import record_successful_run
 import requests
 import time
 load_dotenv()
@@ -193,9 +194,10 @@ def parse_table_history(table_str):
     df_history['modified at'] = pd.to_numeric(df_history['modified at'], errors='coerce')
     df_history['published at'] = pd.to_numeric(df_history['published at'], errors='coerce')
 
-    # Convert numeric timestamps to datetime
-    df_history['modified at'] = pd.to_datetime(df_history['modified at'], unit='ms', utc=True, errors='coerce').dt.floor('S')
-    df_history['published at'] = pd.to_datetime(df_history['published at'], unit='s', utc=True, errors='coerce')
+    # Convert numeric timestamps to datetime (timezone-naive UTC for timezone correction)
+    # Note: We create timezone-naive datetimes because time_difference_correction() expects naive timestamps
+    df_history['modified at'] = pd.to_datetime(df_history['modified at'], unit='ms', utc=True, errors='coerce').dt.tz_localize(None).dt.floor('S')
+    df_history['published at'] = pd.to_datetime(df_history['published at'], unit='s', utc=True, errors='coerce').dt.tz_localize(None)
 
     # Remove rows with null 'modified at' timestamps (required for timezone correction)
     initial_count = len(df_history)
@@ -877,58 +879,76 @@ def enrich_podcast_data(df):
 
 
 def create_pocket_casts_file():
-    tables = open_txt_file(EXPORT_DATA_FILE)
-    #Get status of the different episodes I listened
-    table_episodes = tables[3]
-    df_episodes = parse_table_episodes(table_episodes).drop(parse_table_episodes(table_episodes).index[-2:])
-    #Retrieve my listening history + additional information about the episodes
-    table_history = tables[5].split('\n-------')[2]
-    df_history = parse_table_history(table_history).drop(parse_table_history(table_history).index[-2:])
-    df = merge_history_episodes(df_history,df_episodes)
-    df["completion_percent"] = df.apply(lambda x: completion_calculation(x["played up to"], x["duration"]),axis = 1)
-    #print(df_episodes)
-    #list_new = list(df[df["podcast_name"] == "Check"]["podcast"].unique())
-    df, list_new = add_columns(df)
-    df = identify_translate_clean(df, list_new)
-    df.sort_values('modified at', ascending=True, inplace = True)
-    df['is_new_podcast'] = df.groupby('podcast_name').cumcount() == 0
-    df['is_new_podcast'] = df['is_new_podcast'].astype(int)
-    df['is_recurring_podcast'] = df.groupby('podcast_name').cumcount() == 5
-    df['is_recurring_podcast'] = df['is_recurring_podcast'].astype(int)
-    df = enrich_podcast_data(df)
-    df.sort_values('modified at', ascending=False, inplace = True)
+    """Step 3: Process Pocket Casts data and create processed CSV file"""
+    print("\n🔄 Processing Pocket Casts data...")
 
-    # Rename columns to snake_case standard
-    df = df.rename(columns={
-        'uuid': 'episode_uuid',
-        'modified at': 'listened_date',
-        'podcast': 'podcast_id',
-        'published at': 'published_date',
-        'title': 'episode_title',
-        'url': 'episode_url',
-        'played up to': 'listened_seconds',
-        'duration': 'duration_seconds',
-        'title_cleaned_t': 'title_cleaned_translated',
-        'artwork_large': 'artwork_url'
-    })
+    try:
+        # Verify export file exists
+        if not os.path.exists(EXPORT_DATA_FILE):
+            print(f"❌ Export file not found: {EXPORT_DATA_FILE}")
+            return False
 
-    # Reorder columns logically: identifiers → descriptive → numerical → dates → booleans
-    column_order = [
-        'episode_uuid', 'podcast_id', 'podcast_name', 'episode_title', 'episode_url',
-        'genre', 'duration_seconds', 'listened_seconds', 'completion_percent',
-        'published_date', 'listened_date', 'is_new_podcast', 'is_recurring_podcast',
-        'language', 'title_cleaned_translated', 'itunes_name', 'artist', 'artwork_url',
-        'feed_url'
-    ]
+        tables = open_txt_file(EXPORT_DATA_FILE)
 
-    # Only include columns that exist in the dataframe
-    existing_columns = [col for col in column_order if col in df.columns]
-    df = df[existing_columns]
+        # Get status of the different episodes I listened
+        table_episodes = tables[3]
+        df_episodes = parse_table_episodes(table_episodes).drop(parse_table_episodes(table_episodes).index[-2:])
 
-    # Save with UTF-8 encoding (critical for website compatibility)
-    df.to_csv(OUTPUT_FILE, sep="|", encoding="utf-8", index=False)
+        # Retrieve my listening history + additional information about the episodes
+        table_history = tables[5].split('\n-------')[2]
+        df_history = parse_table_history(table_history).drop(parse_table_history(table_history).index[-2:])
+        df = merge_history_episodes(df_history,df_episodes)
+        df["completion_percent"] = df.apply(lambda x: completion_calculation(x["played up to"], x["duration"]),axis = 1)
 
-    return True
+        # Add podcast names and genres
+        df, list_new = add_columns(df)
+        df = identify_translate_clean(df, list_new)
+        df.sort_values('modified at', ascending=True, inplace = True)
+        df['is_new_podcast'] = df.groupby('podcast_name').cumcount() == 0
+        df['is_new_podcast'] = df['is_new_podcast'].astype(int)
+        df['is_recurring_podcast'] = df.groupby('podcast_name').cumcount() == 5
+        df['is_recurring_podcast'] = df['is_recurring_podcast'].astype(int)
+        df = enrich_podcast_data(df)
+        df.sort_values('modified at', ascending=False, inplace = True)
+
+        # Rename columns to snake_case standard
+        df = df.rename(columns={
+            'uuid': 'episode_uuid',
+            'modified at': 'listened_date',
+            'podcast': 'podcast_id',
+            'published at': 'published_date',
+            'title': 'episode_title',
+            'url': 'episode_url',
+            'played up to': 'listened_seconds',
+            'duration': 'duration_seconds',
+            'title_cleaned_t': 'title_cleaned_translated',
+            'artwork_large': 'artwork_url'
+        })
+
+        # Reorder columns logically: identifiers → descriptive → numerical → dates → booleans
+        column_order = [
+            'episode_uuid', 'podcast_id', 'podcast_name', 'episode_title', 'episode_url',
+            'genre', 'duration_seconds', 'listened_seconds', 'completion_percent',
+            'published_date', 'listened_date', 'is_new_podcast', 'is_recurring_podcast',
+            'language', 'title_cleaned_translated', 'itunes_name', 'artist', 'artwork_url',
+            'feed_url'
+        ]
+
+        # Only include columns that exist in the dataframe
+        existing_columns = [col for col in column_order if col in df.columns]
+        df = df[existing_columns]
+
+        # Save with UTF-8 encoding (critical for website compatibility)
+        df.to_csv(OUTPUT_FILE, sep="|", encoding="utf-8", index=False)
+
+        print("✅ Processing completed")
+        return True
+
+    except Exception as e:
+        print(f"❌ Error processing Pocket Casts data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 # ============================================================================
@@ -964,7 +984,7 @@ def move_pocket_casts_files():
 
     try:
         find_unzip_folder("pocket_casts")
-        clean_rename_move_folder("files/exports", "/Users/valen/Downloads", "pocket_casts_export_unzipped", "pocket_casts_exports")
+        clean_rename_move_folder("files/exports", os.path.expanduser("~/Downloads"), "pocket_casts_export_unzipped", "pocket_casts_exports")
         print("✅ Files moved successfully")
         return True
     except Exception as e:
@@ -998,25 +1018,24 @@ def upload_pocket_casts_results():
 
 
 def full_pocket_casts_pipeline(auto_full=False):
-    """Complete Pocket Casts pipeline with 7-option menu including manual iTunes search and overrides"""
+    """Complete Pocket Casts pipeline with 6-option menu including manual iTunes search and overrides"""
     print("\n" + "="*60)
     print("🎙️  POCKET CASTS PROCESSING PIPELINE")
     print("="*60)
 
     if auto_full:
         print("🤖 Auto mode: Running full pipeline...")
-        choice = "4"
+        choice = "1"
     else:
         print("\nSelect an option:")
         print("1. Download new data, process, and upload to Drive")
         print("2. Process existing data and upload to Drive")
         print("3. Upload existing processed files to Drive")
-        print("4. Full pipeline (download + process + upload)")
-        print("5. Manual iTunes API search (fix wrong podcast match)")
-        print("6. Manual artwork override (update podcast cover images)")
-        print("7. Manual genre override (update podcast genres)")
+        print("4. Manual iTunes API search (fix wrong podcast match)")
+        print("5. Manual artwork override (update podcast cover images)")
+        print("6. Manual genre override (update podcast genres)")
 
-        choice = input("\nEnter your choice (1-7): ").strip()
+        choice = input("\nEnter your choice (1-6): ").strip()
 
     success = False
 
@@ -1028,7 +1047,6 @@ def full_pocket_casts_pipeline(auto_full=False):
                     if create_pocket_casts_file():
                         if upload_pocket_casts_results():
                             success = True
-                            from src.utils.utils_functions import record_successful_run
                             record_successful_run('podcasts_pocket_casts', 'active')
 
         elif choice == "2":
@@ -1037,7 +1055,6 @@ def full_pocket_casts_pipeline(auto_full=False):
                 if create_pocket_casts_file():
                     if upload_pocket_casts_results():
                         success = True
-                        from src.utils.utils_functions import record_successful_run
                         record_successful_run('podcasts_pocket_casts', 'active')
 
         elif choice == "3":
@@ -1045,29 +1062,19 @@ def full_pocket_casts_pipeline(auto_full=False):
             success = upload_pocket_casts_results()
 
         elif choice == "4":
-            print("\n🚀 Starting full pipeline...")
-            if download_pocket_casts_data():
-                if move_pocket_casts_files():
-                    if create_pocket_casts_file():
-                        if upload_pocket_casts_results():
-                            success = True
-                            from src.utils.utils_functions import record_successful_run
-                            record_successful_run('podcasts_pocket_casts', 'active')
-
-        elif choice == "5":
             print("\n🔍 Starting manual iTunes API search...")
             success = manual_itunes_search()
 
-        elif choice == "6":
+        elif choice == "5":
             print("\n🎨 Starting artwork override...")
             success = manual_artwork_override()
 
-        elif choice == "7":
+        elif choice == "6":
             print("\n📂 Starting genre override...")
             success = manual_genre_override()
 
         else:
-            print("❌ Invalid choice. Please select 1-7.")
+            print("❌ Invalid choice. Please select 1-6.")
             return False
 
     except Exception as e:
@@ -1076,10 +1083,13 @@ def full_pocket_casts_pipeline(auto_full=False):
         traceback.print_exc()
         return False
 
+    # Final status
+    print("\n" + "="*60)
     if success:
-        print("\n✅ Pocket Casts pipeline completed successfully!")
+        print("✅ Pocket Casts pipeline completed successfully!")
     else:
-        print("\n❌ Pocket Casts pipeline failed")
+        print("❌ Pocket Casts pipeline failed")
+    print("="*60)
 
     return success
 
@@ -1093,7 +1103,7 @@ def process_pocket_casts_export(upload="Y"):
     file_names = []
     print('Starting the processing of the Pocket Casts export \n')
     find_unzip_folder("pocket_casts")
-    clean_rename_move_folder("files/exports", "/Users/valen/Downloads", "pocket_casts_export_unzipped", "pocket_casts_exports")
+    clean_rename_move_folder("files/exports", os.path.expanduser("~/Downloads"), "pocket_casts_export_unzipped", "pocket_casts_exports")
     create_pocket_casts_file()
     file_names.append('files/processed_files/pocket_casts_processed.csv')
     if upload == "Y":
