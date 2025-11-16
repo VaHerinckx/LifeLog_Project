@@ -350,6 +350,13 @@ def scrape_missing_reading_dates(books_needing_dates):
 
             print(f"Found {len(book_rows)} total book rows on page")
 
+            # Debug: Show what we're looking for
+            if books_found < len(books_needing_dates):
+                print(f"🔍 Looking for: {list(books_needing_dates.values())[0]['title']}")
+
+            # Collect all titles on the page for debugging
+            page_titles = []
+
             books_found_this_pass = 0
             for i, row in enumerate(book_rows):
                 try:
@@ -368,11 +375,26 @@ def scrape_missing_reading_dates(books_needing_dates):
                         continue
 
                     title = title_element.text.strip()
+                    page_titles.append(title)
 
                     # Check if this is one of the books we need to scrape
                     matching_book_id = None
                     for book_id, book_info in books_needing_dates.items():
-                        if book_info['title'].lower().strip() == title.lower().strip():
+                        expected_title = book_info['title'].lower().strip()
+                        found_title = title.lower().strip()
+
+                        # Try exact match first
+                        if expected_title == found_title:
+                            matching_book_id = book_id
+                            break
+
+                        # Try fuzzy match: check if one title contains the main part of the other
+                        # Remove common suffixes that might differ
+                        expected_clean = expected_title.split('(')[0].strip()
+                        found_clean = found_title.split('(')[0].strip()
+
+                        if expected_clean in found_title or found_clean in expected_title:
+                            print(f"   🔍 Fuzzy match: '{found_title}' ≈ '{expected_title}'")
                             matching_book_id = book_id
                             break
 
@@ -426,6 +448,11 @@ def scrape_missing_reading_dates(books_needing_dates):
             # If we didn't find any new books this pass, break to avoid infinite loop
             if books_found_this_pass == 0:
                 print(f"⚠️  No new books found in this pass. Stopping with {books_found} books processed.")
+                # Debug: Show what titles were found on this page
+                if page_titles:
+                    print(f"📚 Titles found on page (first 10):")
+                    for i, t in enumerate(page_titles[:10], 1):
+                        print(f"   {i}. {t}")
                 break
                 
             # Stop if we found all books we were looking for
@@ -531,21 +558,23 @@ def create_goodreads_file():
 
         # Scrape missing dates if needed
         if books_needing_dates:
-            should_scrape = input(f"Would you like to scrape dates for {len(books_needing_dates)} books? (y/N): ").lower()
+            # Print the list of books that need scraping
+            print("\n📋 Books that need date scraping:")
+            for i, (book_id, book_info) in enumerate(books_needing_dates.items(), 1):
+                print(f"   {i}. {book_info['title']} (ID: {book_id})")
+            print()  # Add blank line for readability
 
-            if should_scrape == 'y':
-                scraped_data = scrape_missing_reading_dates(books_needing_dates)
+            print(f"🚀 Starting automatic scraping for {len(books_needing_dates)} books...")
+            scraped_data = scrape_missing_reading_dates(books_needing_dates)
 
-                # Merge scraped data into main dates_data
-                for book_id, scraped_info in scraped_data.items():
-                    dates_data[book_id] = scraped_info
-                    books_with_dates[book_id] = scraped_info
+            # Merge scraped data into main dates_data
+            for book_id, scraped_info in scraped_data.items():
+                dates_data[book_id] = scraped_info
+                books_with_dates[book_id] = scraped_info
 
-                # Save updated JSON
-                save_reading_dates_json(dates_data)
-                print(f"✅ Updated JSON with {len(scraped_data)} newly scraped books")
-            else:
-                print("⏭️  Skipping scraping, processing with available data...")
+            # Save updated JSON
+            save_reading_dates_json(dates_data)
+            print(f"✅ Updated JSON with {len(scraped_data)} newly scraped books")
 
         # Now process all books with available dates
         processed_books = []
@@ -691,10 +720,11 @@ def full_goodreads_pipeline(auto_full=False):
     else:
         print("\nSelect an option:")
         print("1. Full pipeline (download → process → upload)")
-        print("2. Process only (use existing data)")
-        print("3. Scrape dates only (for books missing dates)")
+        print("2. Process existing data and upload to Drive")
+        print("3. Upload existing processed files to Drive")
+        print("4. Scrape dates only (for books missing dates)")
 
-        choice = input("\nEnter your choice (1-3): ").strip()
+        choice = input("\nEnter your choice (1-4): ").strip()
 
     success = False
 
@@ -726,7 +756,7 @@ def full_goodreads_pipeline(auto_full=False):
             success = False
 
     elif choice == "2":
-        print("\n⚙️  Processing existing data...")
+        print("\n⚙️  Processing existing data and uploading to Drive...")
         process_success = create_goodreads_file()
         if process_success:
             success = upload_goodreads_results()
@@ -735,6 +765,10 @@ def full_goodreads_pipeline(auto_full=False):
             success = False
 
     elif choice == "3":
+        print("\n⬆️  Uploading existing processed files to Drive...")
+        success = upload_goodreads_results()
+
+    elif choice == "4":
         print("\n🔍 Scraping dates for books missing dates...")
 
         # Load current data to identify missing dates
@@ -755,6 +789,12 @@ def full_goodreads_pipeline(auto_full=False):
                     }
 
             if books_needing_dates:
+                # Print the list of books that need scraping
+                print("\n📋 Books that need date scraping:")
+                for i, (book_id, book_info) in enumerate(books_needing_dates.items(), 1):
+                    print(f"   {i}. {book_info['title']} (ID: {book_id})")
+                print()  # Add blank line for readability
+
                 scraped_data = scrape_missing_reading_dates(books_needing_dates)
 
                 # Update JSON with scraped data
@@ -773,7 +813,7 @@ def full_goodreads_pipeline(auto_full=False):
             success = False
 
     else:
-        print("❌ Invalid choice. Please select 1-3.")
+        print("❌ Invalid choice. Please select 1-4.")
         return False
 
     # Final status

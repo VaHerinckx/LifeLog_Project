@@ -906,11 +906,10 @@ def full_kindle_pipeline(auto_full=False):
 
     Options:
     1. Full pipeline (download → move → map → process → upload)
-    2. Download data only (open web page + move files)
-    3. Create mapping only (ASIN to Book ID mapping)
-    4. Process existing data only (create processed file)
-    5. Process and upload (process → upload)
-    6. Manual ASIN mapping (interactive mapping of failed ASINs)
+    2. Process existing data and upload to Drive
+    3. Upload existing processed files to Drive
+    4. Create ASIN mapping only (timestamp-based mapping)
+    5. Manual ASIN mapping (interactive mapping of failed ASINs)
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -928,13 +927,12 @@ def full_kindle_pipeline(auto_full=False):
     else:
         print("\nSelect an option:")
         print("1. Full pipeline (download → move → map → process → upload)")
-        print("2. Download data only (open web page + move files)")
-        print("3. Create ASIN mapping only (timestamp-based mapping)")
-        print("4. Process existing data only (create processed file)")
-        print("5. Process existing data and upload to Drive")
-        print("6. Manual ASIN mapping (interactive mapping of failed ASINs)")
+        print("2. Process existing data and upload to Drive")
+        print("3. Upload existing processed files to Drive")
+        print("4. Create ASIN mapping only (timestamp-based mapping)")
+        print("5. Manual ASIN mapping (interactive mapping of failed ASINs)")
 
-        choice = input("\nEnter your choice (1-6): ").strip()
+        choice = input("\nEnter your choice (1-5): ").strip()
 
     success = False
 
@@ -972,24 +970,7 @@ def full_kindle_pipeline(auto_full=False):
         success = upload_success
 
     elif choice == "2":
-        print("\n📥 Download Kindle data only...")
-        download_success = download_kindle_data()
-        if download_success:
-            success = move_kindle_files()
-        else:
-            success = False
-
-    elif choice == "3":
-        print("\n🔗 Creating ASIN to Book ID mapping...")
-        mapping_result = create_asin_bookid_mapping()
-        success = bool(mapping_result and mapping_result.get('successful_mappings'))
-
-    elif choice == "4":
-        print("\n⚙️  Processing existing Kindle data...")
-        success = create_kindle_file()
-
-    elif choice == "5":
-        print("\n⚙️  Processing existing data and uploading...")
+        print("\n⚙️  Processing existing data and uploading to Drive...")
         process_success = create_kindle_file()
         if process_success:
             success = upload_kindle_results()
@@ -997,12 +978,21 @@ def full_kindle_pipeline(auto_full=False):
             print("❌ Processing failed, skipping upload")
             success = False
 
-    elif choice == "6":
+    elif choice == "3":
+        print("\n⬆️  Uploading existing processed files to Drive...")
+        success = upload_kindle_results()
+
+    elif choice == "4":
+        print("\n🔗 Creating ASIN to Book ID mapping...")
+        mapping_result = create_asin_bookid_mapping()
+        success = bool(mapping_result and mapping_result.get('successful_mappings'))
+
+    elif choice == "5":
         print("\n🔧 Manual ASIN mapping...")
         success = manual_asin_mapping()
 
     else:
-        print("❌ Invalid choice. Please select 1-6.")
+        print("❌ Invalid choice. Please select 1-5.")
         return False
 
     # Final status
