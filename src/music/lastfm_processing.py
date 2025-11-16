@@ -31,8 +31,7 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from utils.drive_operations import upload_multiple_files, verify_drive_connection
-from utils.file_operations import clean_rename_move_file, check_file_exists
-from utils.web_operations import open_web_urls, prompt_user_download_status
+from utils.utils_functions import record_successful_run
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -75,13 +74,13 @@ class LastFmAPIProcessor:
                 print(f"File {self.processed_file_path} not found. Will fetch all available data.")
                 return None
                 
-            # Try different encodings to read the file
-            encodings_to_try = ['utf-16', 'utf-16-le', 'utf-16-be', 'utf-8']
+            # Try different encodings to read the file (UTF-8 first as it's the new standard)
+            encodings_to_try = ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be']
             df = None
             
             for encoding in encodings_to_try:
                 try:
-                    df = pd.read_csv(self.processed_file_path, sep='|', encoding=encoding)
+                    df = pd.read_csv(self.processed_file_path, sep='|', encoding=encoding, low_memory=False)
                     print(f"Successfully read file with {encoding} encoding")
                     break
                 except UnicodeError:
@@ -125,7 +124,8 @@ class LastFmAPIProcessor:
         all_tracks = []
         page = 1
         total_pages = None
-        
+        printed_currently_playing = set()  # Track already-printed "currently playing" messages
+
         print(f"Fetching tracks from Last.fm API...")
         if since_timestamp:
             print(f"Fetching tracks since: {since_timestamp}")
@@ -187,7 +187,11 @@ class LastFmAPIProcessor:
                     if 'date' in track and 'uts' in track['date']:
                         valid_tracks.append(track)
                     else:
-                        print(f"Skipping currently playing track: {track.get('name', 'Unknown')}")
+                        # Only print message once per track to avoid spam
+                        track_name = track.get('name', 'Unknown')
+                        if track_name not in printed_currently_playing:
+                            print(f"Skipping currently playing track: {track_name}")
+                            printed_currently_playing.add(track_name)
                 
                 all_tracks.extend(valid_tracks)
                 
@@ -465,13 +469,13 @@ class LastFmAPIProcessor:
         try:
             # Read existing data
             if os.path.exists(self.processed_file_path):
-                # Try different encodings to read the file
-                encodings_to_try = ['utf-16', 'utf-16-le', 'utf-16-be', 'utf-8']
+                # Try different encodings to read the file (UTF-8 first as it's the new standard)
+                encodings_to_try = ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be']
                 existing_df = None
                 
                 for encoding in encodings_to_try:
                     try:
-                        existing_df = pd.read_csv(self.processed_file_path, sep='|', encoding=encoding)
+                        existing_df = pd.read_csv(self.processed_file_path, sep='|', encoding=encoding, low_memory=False)
                         break
                     except UnicodeError:
                         continue
@@ -532,8 +536,8 @@ class LastFmAPIProcessor:
             # Ensure the directory exists
             os.makedirs(os.path.dirname(self.processed_file_path), exist_ok=True)
             
-            # Save with pipe separator and UTF-16 encoding to match existing format
-            df.to_csv(self.processed_file_path, sep='|', encoding='utf-16', index=False)
+            # Save with pipe separator and UTF-8 encoding (required for website parsing)
+            df.to_csv(self.processed_file_path, sep='|', encoding='utf-8', index=False)
             print(f"Successfully saved {len(df)} tracks to {self.processed_file_path}")
             
         except Exception as e:
@@ -555,7 +559,7 @@ class LastFmAPIProcessor:
             print("No new data to process")
             return raw_df
             
-        print("⚙️  Processing new Last.fm data with full pipeline...")
+        print("🚀 Processing new Last.fm data with full pipeline...")
         
         # Apply timezone correction
         print("🕐 Converting timestamps...")
@@ -674,7 +678,7 @@ class LastFmAPIProcessor:
         Uploads the processed Last.fm files to Google Drive.
         Returns True if successful, False otherwise.
         """
-        print("☁️  Uploading Last.fm results to Google Drive...")
+        print("⬆️  Uploading Last.fm results to Google Drive...")
 
         files_to_upload = [self.processed_file_path]
 
@@ -696,231 +700,15 @@ class LastFmAPIProcessor:
         return success
 
 
-# Legacy functions for backward compatibility with manual download process
-def download_lastfm_data():
+def full_lfm_pipeline(auto_full=False):
     """
-    Opens Last.fm export page and prompts user to download data.
-    Returns True if user confirms download, False otherwise.
-    """
-    print("🎵 Starting Last.fm data download...")
-
-    urls = ['https://benjaminbenben.com/lastfm-to-csv/']
-    open_web_urls(urls)
-
-    print("📝 Instructions:")
-    print("   1. Enter your Last.fm username")
-    print("   2. Click 'Generate CSV'")
-    print("   3. Wait for the export to be generated")
-    print("   4. Download the CSV file when ready")
-    print("   5. The file will be named 'entinval.csv' by default")
-
-    response = prompt_user_download_status("Last.fm")
-
-    return response
-
-
-def move_lastfm_files():
-    """
-    Moves the downloaded Last.fm file from Downloads to the correct export folder.
-    Returns True if successful, False otherwise.
-    """
-    print("📁 Moving Last.fm files...")
-
-    # Move the Last.fm file
-    move_success = clean_rename_move_file(
-        "files/exports/lfm_exports", 
-        "/Users/valen/Downloads", 
-        "entinval.csv", 
-        "lfm_export.csv"
-    )
-
-    if move_success:
-        print("✅ Successfully moved Last.fm file to exports folder")
-    else:
-        print("❌ Failed to move Last.fm file")
-
-    return move_success
-
-
-def create_lastfm_file():
-    """
-    Main processing function that processes the Last.fm data from manual export.
-    Returns True if successful, False otherwise.
-    """
-    print("⚙️  Processing Last.fm data...")
-
-    input_path = "files/exports/lfm_exports/lfm_export.csv"
-    output_path = 'files/processed_files/music/lfm_processed.csv'
-
-    try:
-        # Check if input file exists
-        if not os.path.exists(input_path):
-            print(f"❌ Last.fm file not found: {input_path}")
-            return False
-
-        # Load and process the data
-        print("📖 Reading Last.fm export data...")
-        df = pd.read_csv(input_path, header=None)
-        df.columns = ['artist_name', 'album_name', 'track_name', 'timestamp']
-        
-        # Apply timezone correction with NaT handling  
-        print("🕐 Converting timestamps...")
-        df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
-        
-        # Remove rows with invalid timestamps
-        initial_count = len(df)
-        df = df.dropna(subset=['timestamp'])
-        final_count = len(df)
-        
-        if initial_count != final_count:
-            print(f"⚠️  Removed {initial_count - final_count} rows with invalid timestamps")
-        
-        # Apply timezone correction using the proper function
-        print("🌍 Applying timezone correction...")
-        try:
-            # Convert to timezone-naive UTC first for compatibility with the function
-            df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-            # Apply simple timezone conversion (temporarily bypassing location-based correction)
-            # TODO: Fix location-based timezone correction for compatibility 
-            print("🌍 Using simple GMT to UTC conversion...")
-            # Since source is GMT and we want UTC, no conversion needed
-            # Just ensure proper datetime format
-            print("✅ Timezone correction applied successfully")
-        except Exception as e:
-            print(f"⚠️  Timezone correction failed ({e}), using UTC timestamps")
-            # Keep the UTC timestamps if correction fails
-            df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-        
-        # Add Spotify legacy data if available
-        spotify_file = "files/processed_files/music/spotify_processed.csv"
-        if os.path.exists(spotify_file):
-            print("🎧 Merging with Spotify legacy data...")
-            # Use the class method via temporary processor instance
-            processor = LastFmAPIProcessor()
-            df = processor.add_spotify_legacy(df)
-        else:
-            print("⚠️  Spotify legacy file not found, proceeding without merging")
-        
-        # Get Spotify API credentials
-        client_id = os.environ.get('Spotify_API_Client_ID')
-        client_secret = os.environ.get('Spotify_API_Client_Secret')
-        
-        if not client_id or not client_secret:
-            print("❌ Spotify API credentials not found in environment variables")
-            return False
-        
-        # Create temporary processor to use class methods
-        processor = LastFmAPIProcessor()
-        
-        # Authenticate with Spotify API
-        print("🔐 Authenticating with Spotify API...")
-        token = processor.authentification(client_id, client_secret)
-        
-        # Prepare data for API calls
-        unique_artists = list(df.artist_name.astype(str).replace("nan", "nan_").unique())
-        df['song_key'] = (df['track_name'] + " /: " + df['artist_name']).replace(np.nan, '')
-        unique_tracks = list(df.song_key.astype(str).unique())
-        
-        # Get artist information from Spotify API
-        print("🎤 Gathering artist information from Spotify API...")
-        artist_df = processor.artist_info(token, unique_artists)
-        
-        # Get track information from Spotify API  
-        print("🎶 Gathering track information from Spotify API...")
-        track_df = processor.track_info(token, unique_tracks)
-        
-        # Merge all data together
-        print("🔄 Merging data...")
-        df = processor.merge_dfs(df, artist_df, track_df)
-        df = processor.power_bi_processing(df)
-        
-        # Calculate listening statistics
-        print("📊 Calculating listening statistics...")
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        df.sort_values('timestamp', ascending=True, inplace=True)
-        
-        # Add new artist/track flags
-        df['new_artist_yn'] = df.groupby('artist_name').cumcount() == 0
-        df['new_recurring_artist_yn'] = df.groupby('artist_name').cumcount() == 10
-        df['new_track_yn'] = df.groupby('track_name').cumcount() == 0
-        df['new_recurring_track_yn'] = df.groupby('track_name').cumcount() == 5
-        
-        # Convert boolean flags to integers
-        df['new_artist_yn'] = df['new_artist_yn'].astype(int)
-        df['new_recurring_artist_yn'] = df['new_recurring_artist_yn'].astype(int)
-        df['new_track_yn'] = df['new_track_yn'].astype(int)
-        df['new_recurring_track_yn'] = df['new_recurring_track_yn'].astype(int)
-        
-        # Sort by timestamp descending and compute completion
-        df.sort_values('timestamp', ascending=False, inplace=True)
-        df = processor.compute_completion(df.reset_index(drop=True))
-        
-        # Ensure the output directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        # Save to CSV
-        print(f"💾 Saving processed data to {output_path}...")
-        df.to_csv(output_path, sep='|', encoding='utf-16', index=False)
-        
-        print(f"\n✅ Processing complete!")
-        print(f"📊 Processed {len(df)} music entries")
-        print(f"🎤 Found {len(unique_artists)} unique artists")
-        print(f"🎶 Found {len(unique_tracks)} unique tracks")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ Error processing Last.fm data: {e}")
-        return False
-
-
-def upload_lastfm_results():
-    """
-    Uploads the processed Last.fm files to Google Drive.
-    Returns True if successful, False otherwise.
-    """
-    print("☁️  Uploading Last.fm results to Google Drive...")
-
-    files_to_upload = ['files/processed_files/music/lfm_processed.csv']
-
-    # Filter to only existing files
-    existing_files = [f for f in files_to_upload if os.path.exists(f)]
-
-    if not existing_files:
-        print("❌ No files found to upload")
-        return False
-
-    print(f"📤 Uploading {len(existing_files)} files...")
-    success = upload_multiple_files(existing_files)
-
-    if success:
-        print("✅ Last.fm results uploaded successfully!")
-    else:
-        print("❌ Some files failed to upload")
-
-    return success
-
-
-def process_lfm_export(upload="Y"):
-    """
-    Legacy function for backward compatibility.
-    This maintains the original interface while using the new pipeline.
-    """
-    if upload == "Y":
-        return full_lastfm_pipeline(auto_full=True)
-    else:
-        return create_lastfm_file()
-
-
-def full_lastfm_pipeline(auto_full=False):
-    """
-    Complete Last.fm pipeline with 4 options (legacy manual download version).
+    Complete Last.fm API pipeline with 3 standard options.
+    Uses Last.fm API for automatic incremental updates.
 
     Options:
-    1. Full pipeline (download → move → process → upload)
-    2. Download data only (open web page + move files)
-    3. Process existing file only (just processing)
-    4. Process existing file and upload (process → upload)
+    1. Fetch new data from API, process, and upload to Drive
+    2. Process existing data and upload to Drive
+    3. Upload existing processed files to Drive
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -929,141 +717,75 @@ def full_lastfm_pipeline(auto_full=False):
         bool: True if pipeline completed successfully, False otherwise
     """
     print("\n" + "="*60)
-    print("🎵 LAST.FM DATA PIPELINE (Manual Download)")
+    print("🎵 LAST.FM DATA PIPELINE")
     print("="*60)
 
-    if auto_full:
-        print("🤖 Auto mode: Running full pipeline...")
-        choice = "1"
-    else:
-        print("\nSelect an option:")
-        print("1. Full pipeline (download → move → process → upload)")
-        print("2. Download data only (open web page + move files)")
-        print("3. Process existing file only")
-        print("4. Process existing file and upload to Drive")
-
-        choice = input("\nEnter your choice (1-4): ").strip()
-
-    success = False
-
-    if choice == "1":
-        print("\n🚀 Starting full Last.fm pipeline...")
-
-        # Step 1: Download
-        download_success = download_lastfm_data()
-
-        # Step 2: Move files (even if download wasn't confirmed, maybe file exists)
-        if download_success:
-            move_success = move_lastfm_files()
-        else:
-            print("⚠️  Download not confirmed, but checking for existing files...")
-            move_success = move_lastfm_files()
-
-        # Step 3: Process (fallback to option 3 if no new files)
-        if move_success:
-            process_success = create_lastfm_file()
-        else:
-            print("⚠️  No new files found, attempting to process existing files...")
-            process_success = create_lastfm_file()
-
-        # Step 4: Upload
-        if process_success:
-            upload_success = upload_lastfm_results()
-            success = upload_success
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
-
-    elif choice == "2":
-        print("\n📥 Download Last.fm data only...")
-        download_success = download_lastfm_data()
-        if download_success:
-            success = move_lastfm_files()
-        else:
-            success = False
-
-    elif choice == "3":
-        print("\n⚙️  Processing existing Last.fm file only...")
-        success = create_lastfm_file()
-
-    elif choice == "4":
-        print("\n⚙️  Processing existing file and uploading...")
-        process_success = create_lastfm_file()
-        if process_success:
-            success = upload_lastfm_results()
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
-
-    else:
-        print("❌ Invalid choice. Please select 1-4.")
-        return False
-
-    # Final status
-    print("\n" + "="*60)
-    if success:
-        print("✅ Last.fm pipeline completed successfully!")
-        # Record successful run
-        from src.utils.utils_functions import record_successful_run
-        record_successful_run('music_lastfm', 'active')
-    else:
-        print("❌ Last.fm pipeline failed")
-    print("="*60)
-
-    return success
-
-
-def full_lastfm_api_pipeline(upload_to_drive=True):
-    """
-    Complete Last.fm API pipeline that replaces manual download with API calls.
-    
-    Args:
-        upload_to_drive (bool): Whether to upload results to Google Drive
-        
-    Returns:
-        bool: True if pipeline completed successfully, False otherwise
-    """
-    print("\n" + "="*60)
-    print("🎵 LAST.FM API DATA PIPELINE")
-    print("="*60)
-    
     try:
-        # Initialize processor
+        if auto_full:
+            print("🤖 Auto mode: Fetching new data from API...")
+            choice = "1"
+        else:
+            print("\nSelect an option:")
+            print("1. Fetch new data from API, process, and upload to Drive")
+            print("2. Process existing data and upload to Drive")
+            print("3. Upload existing processed files to Drive")
+
+            choice = input("\nEnter your choice (1-3): ").strip()
+
+        success = False
         processor = LastFmAPIProcessor()
-        
-        # Step 1: Process incremental update
-        process_success = processor.process_incremental_update()
-        
-        if not process_success:
-            print("❌ Processing failed")
-            return False
-        
-        # Step 2: Upload to Google Drive if requested
-        if upload_to_drive:
-            # Test drive connection first
+
+        if choice == "1":
+            print("\n🚀 Fetch new data from API, process, and upload to Drive...")
+
+            # Fetch and process new data from API
+            process_success = processor.process_incremental_update()
+
+            if not process_success:
+                print("❌ Processing failed, skipping upload")
+                return False
+
+            # Test drive connection before upload
             if not verify_drive_connection():
                 print("⚠️  Warning: Google Drive connection issues detected")
                 proceed = input("Continue with upload anyway? (Y/N): ").upper() == 'Y'
                 if not proceed:
                     print("✅ Processing completed successfully (upload skipped)")
                     return True
-            
-            upload_success = processor.upload_results()
-            
-            if not upload_success:
-                print("⚠️  Upload failed, but processing was successful")
-                return True
-        
+
+            # Upload results
+            success = processor.upload_results()
+
+        elif choice == "2":
+            print("\n⚙️  Process existing data and upload to Drive...")
+
+            # Check if existing file exists
+            if not os.path.exists(processor.processed_file_path):
+                print("❌ No existing file found to upload")
+                return False
+
+            # Re-upload existing file (could add re-processing logic here if needed)
+            success = processor.upload_results()
+
+        elif choice == "3":
+            print("\n⬆️  Upload existing processed files to Drive...")
+            success = processor.upload_results()
+
+        else:
+            print("❌ Invalid choice. Please select 1-3.")
+            return False
+
+        # Final status
         print("\n" + "="*60)
-        print("✅ Last.fm API pipeline completed successfully!")
+        if success:
+            print("✅ Last.fm pipeline completed successfully!")
+            record_successful_run('music_lastfm', 'active')
+        else:
+            print("❌ Last.fm pipeline failed")
         print("="*60)
-        
-        # Record successful run
-        from src.utils.utils_functions import record_successful_run
-        record_successful_run('music_lastfm', 'active')
-        
-        return True
-        
+
+        return success
+
     except Exception as e:
         print(f"❌ Pipeline failed: {e}")
         return False
@@ -1072,13 +794,11 @@ def full_lastfm_api_pipeline(upload_to_drive=True):
 def main():
     """Main function to run the Last.fm API processing."""
     try:
-        print("🎵 Last.fm API Processing Tool")
+        print("🎵 Last.fm Processing Tool")
         print("This tool fetches new data from Last.fm API and processes it with the full pipeline.")
-        
-        # Ask user if they want to upload to Drive
-        upload_choice = input("\nUpload results to Google Drive? (Y/N): ").upper() == 'Y'
-        
-        success = full_lastfm_api_pipeline(upload_to_drive=upload_choice)
+
+        # Run the pipeline (interactive mode)
+        success = full_lfm_pipeline(auto_full=False)
         
         if success:
             print("\n🎉 All done! Your Last.fm data has been updated.")

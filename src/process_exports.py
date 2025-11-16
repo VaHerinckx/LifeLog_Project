@@ -5,7 +5,7 @@ import sys
 import traceback
 import logging
 from datetime import datetime
-from src.music.lastfm_processing import process_lfm_export
+from src.music.lastfm_processing import full_lfm_pipeline
 from src.books.goodreads_processing import process_gr_export
 from src.books.books_processing import process_book_exports
 from src.books.kindle_processing import process_kindle_export
@@ -247,7 +247,7 @@ def download_process_upload():
             failed_steps.append("Books")
 
     # Continue with independent processes
-    if run_process(LFM, process_lfm_export, "Last.fm", upload="N"):
+    if run_process(LFM, full_lfm_pipeline, "Last.fm", auto_full=True):
         upload_file_list(music_files)
 
     if run_process(PCC, full_pocket_casts_pipeline, "Pocket Casts", auto_full=False):
