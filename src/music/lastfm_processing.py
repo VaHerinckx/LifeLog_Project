@@ -31,7 +31,7 @@ project_root = current_dir.parent
 sys.path.append(str(project_root))
 
 from utils.drive_operations import upload_multiple_files, verify_drive_connection
-from utils.utils_functions import record_successful_run
+from utils.utils_functions import record_successful_run, enforce_snake_case
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -528,22 +528,64 @@ class LastFmAPIProcessor:
     def save_data(self, df):
         """
         Save the processed data to the CSV file.
-        
+
         Args:
             df (pandas.DataFrame): Data to save
         """
         try:
             # Ensure the directory exists
             os.makedirs(os.path.dirname(self.processed_file_path), exist_ok=True)
-            
+
+            # Enforce snake_case before saving
+            df = enforce_snake_case(df, "processed file")
+
             # Save with pipe separator and UTF-8 encoding (required for website parsing)
             df.to_csv(self.processed_file_path, sep='|', encoding='utf-8', index=False)
             print(f"Successfully saved {len(df)} tracks to {self.processed_file_path}")
-            
+
+            # Generate website files
+            self.generate_music_website_page_files(df)
+
         except Exception as e:
             print(f"Error saving data: {e}")
             raise
-    
+
+    def generate_music_website_page_files(self, df):
+        """
+        Generate website-optimized files for the Music page.
+
+        Args:
+            df: Processed dataframe (already in snake_case)
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        print("\n🌐 Generating website files for Music page...")
+
+        try:
+            # Ensure output directory exists
+            website_dir = 'files/website_files/music'
+            os.makedirs(website_dir, exist_ok=True)
+
+            # Work with copy to avoid modifying original
+            df_web = df.copy()
+
+            # Enforce snake_case before saving
+            df_web = enforce_snake_case(df_web, "music_page_data")
+
+            # Save website file
+            website_path = f'{website_dir}/music_page_data.csv'
+            df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+            print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+
+            return True
+
+        except Exception as e:
+            print(f"❌ Error generating website files: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def process_new_data_with_pipeline(self, raw_df):
         """
         Apply the complete processing pipeline to new data from the API.
@@ -680,7 +722,7 @@ class LastFmAPIProcessor:
         """
         print("⬆️  Uploading Last.fm results to Google Drive...")
 
-        files_to_upload = [self.processed_file_path]
+        files_to_upload = ['files/website_files/music/music_page_data.csv']
 
         # Filter to only existing files
         existing_files = [f for f in files_to_upload if os.path.exists(f)]

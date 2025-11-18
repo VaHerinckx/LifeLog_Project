@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
-from src.utils.utils_functions import record_successful_run
+from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
 load_dotenv()
 
@@ -363,18 +363,61 @@ def create_trakt_file():
             lambda row: artwork_cache.get(f"{row['show_title']}_{row['show_year']}_S{row['season']}", ''),
             axis=1
         )
-        
+
+        # Enforce snake_case before saving
+        df = enforce_snake_case(df, "processed file")
+
         # Save to CSV with pipe separator (consistent with other processors)
         df.to_csv(output_file, sep='|', index=False, encoding='utf-8')
         
         print(f"✅ Successfully processed {len(df)} episodes")
         print(f"📁 Saved to: {output_file}")
         print(f"📊 Date range: {df['watched_at'].min()} to {df['watched_at'].max()}")
-        
+
+        # Generate website files
+        generate_shows_website_page_files(df)
+
         return True
-        
+
     except Exception as e:
         print(f"❌ Error processing Trakt data: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def generate_shows_website_page_files(df):
+    """
+    Generate website-optimized files for the Shows page.
+
+    Args:
+        df: Processed dataframe (already in snake_case)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n🌐 Generating website files for Shows page...")
+
+    try:
+        # Ensure output directory exists
+        website_dir = 'files/website_files/shows'
+        os.makedirs(website_dir, exist_ok=True)
+
+        # Work with copy to avoid modifying original
+        df_web = df.copy()
+
+        # Enforce snake_case before saving
+        df_web = enforce_snake_case(df_web, "shows_page_data")
+
+        # Save website file
+        website_path = f'{website_dir}/shows_page_data.csv'
+        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error generating website files: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -392,10 +435,9 @@ def create_trakt_processed_file(fetch_artwork_auto=None):
 def upload_trakt_results():
     """Upload the processed Trakt files to Google Drive"""
     print("☁️  Uploading Trakt results to Google Drive...")
-    
+
     files_to_upload = [
-        'files/processed_files/movies/trakt_processed.csv',
-        'files/work_files/trakt_work_files/season_artwork_cache.json'
+        'files/website_files/shows/shows_page_data.csv'
     ]
     
     # Filter to only existing files

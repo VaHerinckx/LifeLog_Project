@@ -4,7 +4,7 @@ from datetime import date
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
-from src.utils.utils_functions import record_successful_run
+from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
 
 def add_sorting_columns(df):
@@ -178,6 +178,9 @@ def create_moneymgr_file():
         df = df.drop(columns=['Income/Expense'])
         print("✅ Removed old Income/Expense column")
 
+        # Enforce snake_case before saving
+        df = enforce_snake_case(df, "processed file")
+
         # Save as CSV with UTF-8 encoding (easier for website to handle)
         print(f"💾 Saving processed data to {output_file}...")
         df.to_csv(output_file, sep='|', index=False, encoding='utf-8')
@@ -185,10 +188,50 @@ def create_moneymgr_file():
         print(f"✅ Successfully processed {len(df)} records")
         print(f"📊 Data range: {df['date'].min()} to {df['date'].max()}")
 
+        # Generate website files
+        generate_finance_website_page_files(df)
+
         return True
 
     except Exception as e:
         print(f"❌ Error processing Money Manager data: {e}")
+        return False
+
+
+def generate_finance_website_page_files(df):
+    """
+    Generate website-optimized files for the Finance page.
+
+    Args:
+        df: Processed dataframe (already in snake_case)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n🌐 Generating website files for Finance page...")
+
+    try:
+        # Ensure output directory exists
+        website_dir = 'files/website_files/finance'
+        os.makedirs(website_dir, exist_ok=True)
+
+        # Work with copy to avoid modifying original
+        df_web = df.copy()
+
+        # Enforce snake_case before saving
+        df_web = enforce_snake_case(df_web, "finance_page_data")
+
+        # Save website file
+        website_path = f'{website_dir}/finance_page_data.csv'
+        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error generating website files: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -199,7 +242,7 @@ def upload_moneymgr_results():
     """
     print("☁️  Uploading Money Manager results to Google Drive...")
 
-    files_to_upload = ['files/processed_files/finance/moneymgr_processed.csv']
+    files_to_upload = ['files/website_files/finance/finance_page_data.csv']
 
     # Filter to only existing files
     existing_files = [f for f in files_to_upload if os.path.exists(f)]

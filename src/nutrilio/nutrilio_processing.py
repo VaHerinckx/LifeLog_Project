@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from src.utils.file_operations import clean_rename_move_file
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
-from src.utils.utils_functions import record_successful_run
+from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
 from src.nutrilio.usda_nutrition_scoring import (
     create_usda_nutrition_scorer,
@@ -515,8 +515,14 @@ def create_nutrilio_files():
     df['Work_duration_est'] = df["Work - duration_text"].apply(lambda x: dict_work_duration[x] if x in dict_work_duration.keys() else None)
     df['Work - good day_text'] = df['Work - good day_text'].apply(lambda x: "Average" if x =="Ok" else x)
 
+    # Drop list columns BEFORE enforcing snake_case (list_col has original names)
+    df = df.drop(list_col, axis=1)
+
+    # Enforce snake_case before saving
+    df = enforce_snake_case(df, "processed file")
+
     print("💾 Saving main processed file...")
-    df.drop(list_col, axis = 1).to_csv("files/processed_files/nutrilio/nutrilio_processed.csv", sep = '|', index = False, encoding='utf-8')
+    df.to_csv("files/processed_files/nutrilio/nutrilio_processed.csv", sep = '|', index = False, encoding='utf-8')
 
     # Create optimized nutrition file for frontend performance
     optimized_nutrition_file = create_optimized_nutrition_file(df)
@@ -533,8 +539,48 @@ def create_nutrilio_files():
         generate_pbi_files(df, value)
         drive_list.append(f"files/processed_files/nutrilio/nutrilio_{value}_pbi_processed_file.csv")
 
+    # Generate website files
+    generate_nutrition_website_page_files(df)
+
     print(f"✅ Processing complete! Generated {len(drive_list)} files.")
     return drive_list
+
+
+def generate_nutrition_website_page_files(df):
+    """
+    Generate website-optimized files for the Nutrition page.
+
+    Args:
+        df: Processed dataframe (already in snake_case)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n🌐 Generating website files for Nutrition page...")
+
+    try:
+        # Ensure output directory exists
+        website_dir = 'files/website_files/nutrition'
+        os.makedirs(website_dir, exist_ok=True)
+
+        # Work with copy to avoid modifying original
+        df_web = df.copy()
+
+        # Enforce snake_case before saving
+        df_web = enforce_snake_case(df_web, "nutrition_page_data")
+
+        # Save website file
+        website_path = f'{website_dir}/nutrition_page_data.csv'
+        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error generating website files: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 
@@ -619,21 +665,9 @@ def upload_nutrilio_results():
     """
     print("☁️ Uploading Nutrilio results to Google Drive...")
 
-    # Define expected output files
+    # Define expected output files (only website file)
     files_to_upload = [
-        "files/processed_files/nutrilio/nutrilio_processed.csv",
-        "files/processed_files/nutrilio/nutrilio_meals_optimized.csv",
-        "files/work_files/nutrilio_work_files/ingredient_scores_database.json",
-        "files/work_files/nutrilio_work_files/flagged_default_ingredients.json",
-        "files/work_files/nutrilio_work_files/drink_scores_database.json",
-        "files/work_files/nutrilio_work_files/flagged_default_drinks.json",
-        "files/processed_files/nutrilio/nutrilio_food_pbi_processed_file.csv",
-        "files/processed_files/nutrilio/nutrilio_drinks_pbi_processed_file.csv",
-        "files/processed_files/nutrilio/nutrilio_body_sensations_pbi_processed_file.csv",
-        "files/processed_files/nutrilio/nutrilio_dreams_pbi_processed_file.csv",
-        "files/processed_files/nutrilio/nutrilio_work_content_pbi_processed_file.csv",
-        "files/processed_files/nutrilio/nutrilio_self_improvement_pbi_processed_file.csv",
-        "files/processed_files/nutrilio/nutrilio_social_activity_pbi_processed_file.csv"
+        "files/website_files/nutrition/nutrition_page_data.csv"
     ]
 
     # Filter to only existing files

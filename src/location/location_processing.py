@@ -11,7 +11,7 @@ import pytz
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
-from src.utils.utils_functions import record_successful_run
+from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
 # Geocoding cache file path (shared between Google and Manual processing)
 GEOCODING_CACHE_FILE = 'files/work_files/geocoding_cache.json'
@@ -1263,6 +1263,9 @@ def merge_timezone_files():
         # Sort final dataframe by timestamp string
         deduplicated_df = deduplicated_df.sort_values('timestamp')
 
+        # Enforce snake_case before saving
+        deduplicated_df = enforce_snake_case(deduplicated_df, "processed file")
+
         # Save merged file with UTF-8 encoding (FIXED from no encoding spec)
         print(f"💾 Saving merged file to {merged_path}...")
         deduplicated_df.to_csv(merged_path, sep='|', index=False, encoding='utf-8')
@@ -1280,10 +1283,50 @@ def merge_timezone_files():
             home_status = "🏠" if row['is_home'] else "📍"
             print(f"  • {row['timestamp'][:16]} | {row['timezone']} | {row['city']}, {row['country']} {home_status}")
 
+        # Generate website files
+        generate_location_website_page_files(deduplicated_df)
+
         return True
 
     except Exception as e:
         print(f"❌ Error merging timezone files: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def generate_location_website_page_files(df):
+    """
+    Generate website-optimized files for the Location page.
+
+    Args:
+        df: Processed dataframe (already in snake_case)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n🌐 Generating website files for Location page...")
+
+    try:
+        # Ensure output directory exists
+        website_dir = 'files/website_files/location'
+        os.makedirs(website_dir, exist_ok=True)
+
+        # Work with copy to avoid modifying original
+        df_web = df.copy()
+
+        # Enforce snake_case before saving
+        df_web = enforce_snake_case(df_web, "location_page_data")
+
+        # Save website file
+        website_path = f'{website_dir}/location_page_data.csv'
+        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error generating website files: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -1301,7 +1344,7 @@ def upload_location_results():
     print("☁️  Uploading location results to Google Drive...")
 
     files_to_upload = [
-        'files/processed_files/location/combined_timezone_processed.csv'
+        'files/website_files/location/location_page_data.csv'
     ]
 
     # Filter to only existing files

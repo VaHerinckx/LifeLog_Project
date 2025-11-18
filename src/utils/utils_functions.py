@@ -697,5 +697,40 @@ def display_tracking_summary():
                         last_run_str = "Invalid date"
                 
                 print(f"  {status_icon} {row['source_name']:<20} | {last_run_str}")
-    
+
     print("=" * 50)
+
+
+def enforce_snake_case(df, context=""):
+    """
+    Enforce snake_case naming for all DataFrame columns.
+    Logs any conversions made for visibility.
+
+    Args:
+        df: DataFrame to process
+        context: Description for logging (e.g., "processed file", "website file")
+
+    Returns:
+        DataFrame with snake_case columns
+    """
+    original_columns = df.columns.tolist()
+
+    # Convert to snake_case
+    new_columns = []
+    for col in original_columns:
+        # Replace spaces with underscores, convert to lowercase
+        snake_col = col.strip().replace(' ', '_').lower()
+        # Remove duplicate underscores
+        snake_col = '_'.join(filter(None, snake_col.split('_')))
+        new_columns.append(snake_col)
+
+    # Check if any changes were made
+    changes = [(orig, new) for orig, new in zip(original_columns, new_columns) if orig != new]
+
+    if changes:
+        print(f"🔄 Converting to snake_case for {context}:")
+        for orig, new in changes:
+            print(f"   '{orig}' → '{new}'")
+
+    df.columns = new_columns
+    return df

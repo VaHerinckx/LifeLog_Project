@@ -7,7 +7,7 @@ import time
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
-from src.utils.utils_functions import record_successful_run
+from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
 # Disable pandas warning about chained assignment
 pd.options.mode.chained_assignment = None  # default='warn'
@@ -369,6 +369,10 @@ def create_apple_files():
     for col in list(apple_df.columns[1:-2]):
         apple_df[col] = apple_df[col].astype(float)
     apple_df.sort_values('date', inplace=True)
+
+    # Enforce snake_case before saving
+    apple_df = enforce_snake_case(apple_df, "processed file")
+
     apple_df.to_csv('files/processed_files/apple/apple_processed.csv', sep='|', index=False, encoding='utf-8')
 
     print(f"\n🎉 Apple Health processing completed!")
@@ -376,6 +380,9 @@ def create_apple_files():
     print(f"📊 Final merged dataset: {len(apple_df)} daily records")
     print(f"📅 Date range: {apple_df['date'].min()} to {apple_df['date'].max()}")
     print("=" * 60)
+
+    # Generate website files
+    generate_health_website_page_files(apple_df)
 
 
 def create_apple_file():
@@ -403,6 +410,43 @@ def create_apple_file():
         return False
 
 
+def generate_health_website_page_files(df):
+    """
+    Generate website-optimized files for the Health page.
+
+    Args:
+        df: Processed dataframe (already in snake_case)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n🌐 Generating website files for Health page...")
+
+    try:
+        # Ensure output directory exists
+        website_dir = 'files/website_files/health'
+        os.makedirs(website_dir, exist_ok=True)
+
+        # Work with copy to avoid modifying original
+        df_web = df.copy()
+
+        # Enforce snake_case before saving
+        df_web = enforce_snake_case(df_web, "health_page_apple_data")
+
+        # Save website file
+        website_path = f'{website_dir}/health_page_apple_data.csv'
+        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error generating website files: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def upload_apple_results():
     """
     Uploads the processed Apple Health files to Google Drive.
@@ -410,7 +454,7 @@ def upload_apple_results():
     """
     print("☁️  Uploading Apple Health results to Google Drive...")
 
-    files_to_upload = ['files/processed_files/apple/apple_processed.csv']
+    files_to_upload = ['files/website_files/health/health_page_apple_data.csv']
 
     # Filter to only existing files
     existing_files = [f for f in files_to_upload if os.path.exists(f)]

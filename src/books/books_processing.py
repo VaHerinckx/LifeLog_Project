@@ -10,6 +10,7 @@ from datetime import datetime
 from src.books.goodreads_processing import full_goodreads_pipeline
 from src.books.kindle_processing import full_kindle_pipeline
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
 
 def check_prerequisite_files():
@@ -516,6 +517,9 @@ def create_books_file():
         # Reset index
         final_df = final_df.reset_index(drop=True)
 
+        # Enforce snake_case before saving
+        final_df = enforce_snake_case(final_df, "processed file")
+
         # Save the final processed file
         output_path = 'files/processed_files/books/kindle_gr_processed.csv'
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -526,9 +530,9 @@ def create_books_file():
         print(f"📁 Saved to: {output_path}")
         print(f"📊 Final statistics:")
         print(f"   📚 Total records: {len(final_df):,}")
-        print(f"   📖 Unique books: {final_df['Book Id'].nunique():,}")
-        print(f"   📱 Kindle records: {len(final_df[final_df['Source'] == 'Kindle']):,}")
-        print(f"   📚 Goodreads-only records: {len(final_df[final_df['Source'] == 'GoodReads']):,}")
+        print(f"   📖 Unique books: {final_df['book_id'].nunique():,}")
+        print(f"   📱 Kindle records: {len(final_df[final_df['source'] == 'Kindle']):,}")
+        print(f"   📚 Goodreads-only records: {len(final_df[final_df['source'] == 'GoodReads']):,}")
 
         # Check cover URL availability
         if 'cover_url' in final_df.columns:
@@ -536,7 +540,14 @@ def create_books_file():
             print(f"   🖼️  Records with covers: {covers_count:,}")
 
         if len(final_df) > 0:
-            print(f"   📅 Date range: {final_df['Timestamp'].min().date()} to {final_df['Timestamp'].max().date()}")
+            print(f"   📅 Date range: {final_df['timestamp'].min().date()} to {final_df['timestamp'].max().date()}")
+
+        # Generate website files
+        print("\n🌐 Generating website-optimized files...")
+        website_success = generate_reading_website_page_files(final_df)
+
+        if not website_success:
+            print("⚠️  Warning: Website files generation failed, but processed file was saved")
 
         return True
 
@@ -547,33 +558,115 @@ def create_books_file():
         return False
 
 
-def upload_books_results():
+def generate_reading_website_page_files(df):
     """
-    Upload the processed books files to Google Drive.
+    Generate website-optimized files for the Reading page.
+    Creates dual outputs: sessions (all records) + aggregated books (unique books).
+
+    Args:
+        df: Processed dataframe (already in snake_case)
 
     Returns:
         bool: True if successful, False otherwise
     """
-    print("☁️  Uploading books results to Google Drive...")
+    print("\n🌐 Generating website files for Reading page...")
 
+    try:
+        # Ensure output directory exists
+        website_dir = 'files/website_files/reading'
+        os.makedirs(website_dir, exist_ok=True)
+
+        # Work with copy to avoid modifying original
+        df_web = df.copy()
+
+        # Ensure timestamp is datetime
+        df_web['timestamp'] = pd.to_datetime(df_web['timestamp'], errors='coerce')
+
+        # Add derived date columns
+        print("📅 Adding derived date columns...")
+        df_web['reading_year'] = df_web['timestamp'].dt.year.astype('Int64').astype(str)
+        df_web['reading_month'] = df_web['timestamp'].dt.month.astype('Int64').astype(str)
+        df_web['reading_quarter'] = df_web['timestamp'].dt.quarter.astype('Int64').astype(str)
+
+        # FILE 1: Sessions (all reading sessions)
+        sessions_columns = [
+            'book_id', 'title', 'author', 'timestamp', 'source', 'genre',
+            'page_split', 'reading_year', 'reading_month', 'reading_quarter'
+        ]
+
+        sessions_df = df_web[sessions_columns].copy()
+
+        # Enforce snake_case before saving
+        sessions_df = enforce_snake_case(sessions_df, "reading_page_sessions")
+
+        sessions_path = f'{website_dir}/reading_page_sessions.csv'
+        sessions_df.to_csv(sessions_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Sessions file: {len(sessions_df):,} records → {sessions_path}")
+
+        # FILE 2: Books (aggregated unique books)
+        print("📚 Aggregating unique books...")
+
+        # Group by book_id + title + author, take most recent record
+        books_df = df_web.sort_values('timestamp', ascending=False) \
+                         .groupby(['book_id', 'title', 'author'], as_index=False) \
+                         .first()
+
+        books_columns = [
+            'book_id', 'title', 'author', 'original_publication_year',
+            'my_rating', 'average_rating', 'genre', 'fiction_yn',
+            'number_of_pages', 'reading_duration_final', 'cover_url',
+            'timestamp', 'reading_year', 'reading_month', 'reading_quarter'
+        ]
+
+        books_df = books_df[books_columns].copy()
+
+        # Enforce snake_case before saving
+        books_df = enforce_snake_case(books_df, "reading_page_books")
+
+        books_path = f'{website_dir}/reading_page_books.csv'
+        books_df.to_csv(books_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Books file: {len(books_df):,} unique books → {books_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error generating website files: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def upload_books_results():
+    """
+    Upload the website-ready books files to Google Drive.
+    Only uploads website files (not processed files).
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("☁️  Uploading Reading page website files to Google Drive...")
+
+    # Only upload website files
     files_to_upload = [
-        'files/processed_files/books/kindle_gr_processed.csv'
+        'files/website_files/reading/reading_page_sessions.csv',
+        'files/website_files/reading/reading_page_books.csv'
     ]
 
     # Filter to only existing files
     existing_files = [f for f in files_to_upload if os.path.exists(f)]
 
     if not existing_files:
-        print("❌ No books files found to upload")
+        print("❌ No website files found to upload")
+        print("💡 Make sure generate_reading_website_page_files() ran successfully")
         return False
 
-    print(f"📤 Uploading {len(existing_files)} files...")
+    print(f"📤 Uploading {len(existing_files)} website files...")
     success = upload_multiple_files(existing_files)
 
     if success:
-        print("✅ Books results uploaded successfully!")
+        print("✅ Website files uploaded successfully!")
     else:
-        print("❌ Some books files failed to upload")
+        print("❌ Some website files failed to upload")
 
     return success
 
@@ -586,7 +679,7 @@ def update_cover_url():
     print("\n" + "="*50)
     print("📖 UPDATE BOOK COVER URLs")
     print("="*50)
-    
+
     # Load the CSV file
     csv_path = 'files/processed_files/books/kindle_gr_processed.csv'
     try:
@@ -599,29 +692,29 @@ def update_cover_url():
     except Exception as e:
         print(f"❌ Error loading file: {e}")
         return False
-    
+
     updated_books = []
-    
+
     # Loop to allow multiple cover updates
     while True:
         # Get search term from user
         search_term = input("\nEnter part of book title to search (or 'quit' to finish): ").strip()
         if not search_term or search_term.lower() == 'quit':
             break
-        
+
         # Find matching books (case-insensitive)
         matches = df[df['Title'].str.lower().str.contains(search_term.lower(), na=False)]
-        
+
         if matches.empty:
             print(f"❌ No books found containing '{search_term}'")
             continue
-        
+
         # Deduplicate by Title + Author to show unique books only
         unique_matches = matches.drop_duplicates(subset=['Title', 'Author'], keep='first')
-        
+
         print(f"\n📚 Found {len(unique_matches)} unique books:")
         print("-" * 50)
-        
+
         # Display unique matches with numbers
         for i, (_, row) in enumerate(unique_matches.iterrows(), 1):
             current_url = row.get('cover_url', 'No cover URL')
@@ -630,7 +723,7 @@ def update_cover_url():
             print(f"{i}. {row['Title']} by {row['Author']}")
             print(f"   Current cover: {current_url}")
             print()
-        
+
         # Get user selection
         try:
             choice = int(input(f"Select book (1-{len(unique_matches)}): "))
@@ -640,39 +733,39 @@ def update_cover_url():
         except ValueError:
             print("❌ Invalid input. Please enter a number.")
             continue
-        
+
         # Get the selected book info from unique matches
         selected_unique_book = unique_matches.iloc[choice - 1]
         selected_title = selected_unique_book['Title']
         selected_author = selected_unique_book['Author']
-        
+
         print(f"\n✅ Selected: {selected_title} by {selected_author}")
         print(f"Current cover URL: {selected_unique_book.get('cover_url', 'None')}")
-        
+
         # Get new URL
         new_url = input("\nEnter new cover URL: ").strip()
         if not new_url:
             print("❌ No URL provided, skipping this book")
             continue
-        
+
         # Update ALL rows for this book (Title + Author combination)
         book_mask = (df['Title'] == selected_title) & (df['Author'] == selected_author)
         rows_updated = df.loc[book_mask].shape[0]
         df.loc[book_mask, 'cover_url'] = new_url
-        
+
         print(f"✅ Updated cover URL for '{selected_title}' ({rows_updated} records)")
         updated_books.append(selected_title)
-        
+
         # Ask if user wants to continue
         continue_choice = input("\nUpdate another book cover? (y/n): ").strip().lower()
         if continue_choice not in ['y', 'yes']:
             break
-    
+
     # If no books were updated, exit
     if not updated_books:
         print("❌ No books were updated")
         return False
-    
+
     # Save the updated CSV
     try:
         df.to_csv(csv_path, sep='|', index=False, encoding='utf-8')
@@ -680,7 +773,7 @@ def update_cover_url():
     except Exception as e:
         print(f"❌ Error saving CSV: {e}")
         return False
-    
+
     # Upload to Google Drive
     try:
         print("📤 Uploading to Google Drive...")
