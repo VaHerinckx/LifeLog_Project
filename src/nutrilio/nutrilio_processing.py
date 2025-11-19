@@ -477,6 +477,11 @@ def create_optimized_nutrition_file(df):
 
 def create_nutrilio_files():
     df = pd.read_csv(f'files/exports/nutrilio_exports/nutrilio_export.csv', sep = ',')
+
+    # Create keep columns to preserve original Food and Drinks with amounts
+    df['Food_keep'] = df['Food']
+    df['Drinks_keep'] = df['Drinks']
+
     #Remove quantity when unnecessary
     for col in col_unnecessary_qty:
         df[col] = df[col].apply(lambda x: extract_data(x))
@@ -583,9 +588,9 @@ def generate_nutrition_website_page_files(df):
         df_web = df_web[df_web['meal'].notna() & (df_web['meal'] != '')].copy()
         print(f"📊 Filtered to {len(df_web)} meal entries from {len(df)} total rows")
 
-        # Select specific columns for website
+        # Select specific columns for website (use keep columns instead of list columns)
         columns_to_keep = [
-            'date', 'weekday', 'time', 'meal', 'food_list', 'drinks_list',
+            'date', 'weekday', 'time', 'meal', 'food_keep', 'drinks_keep',
             'usda_meal_score', 'places', 'origin', 'amount', 'amount_text',
             'meal_assessment', 'meal_assessment_text'
         ]
@@ -593,6 +598,12 @@ def generate_nutrition_website_page_files(df):
         # Keep only columns that exist in the dataframe
         existing_columns = [col for col in columns_to_keep if col in df_web.columns]
         df_web = df_web[existing_columns].copy()
+
+        # Rename keep columns to list columns for website
+        df_web.rename(columns={
+            'food_keep': 'food_list',
+            'drinks_keep': 'drinks_list'
+        }, inplace=True)
 
         # Add meal_id as sequential integer starting from 0
         df_web.insert(0, 'meal_id', range(len(df_web)))
