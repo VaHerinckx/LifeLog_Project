@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import time
 import re
+import json
 from dotenv import load_dotenv
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
@@ -10,6 +11,45 @@ from src.utils.drive_operations import upload_multiple_files, verify_drive_conne
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
 load_dotenv()
+
+# Path to TMDB cache file
+TMDB_CACHE_PATH = 'files/work_files/letterboxd_work_files/tmdb_cache.json'
+
+
+def load_tmdb_cache():
+    """Load TMDB cache from JSON file"""
+    try:
+        if os.path.exists(TMDB_CACHE_PATH):
+            with open(TMDB_CACHE_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"⚠️  Error loading TMDB cache: {e}")
+    return {}
+
+
+def save_to_tmdb_cache(movie_key, poster_url, genres):
+    """Save movie data to TMDB cache"""
+    try:
+        # Load existing cache
+        cache = load_tmdb_cache()
+
+        # Update cache
+        cache[movie_key] = {
+            'poster_url': poster_url,
+            'genres': genres
+        }
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(TMDB_CACHE_PATH), exist_ok=True)
+
+        # Save back to file
+        with open(TMDB_CACHE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, indent=2, ensure_ascii=False)
+
+        return True
+    except Exception as e:
+        print(f"⚠️  Error saving to TMDB cache: {e}")
+        return False
 
 
 def get_genre(title, release_year):
@@ -19,26 +59,21 @@ def get_genre(title, release_year):
 
 
 def get_tmdb_movie_info(title, release_year):
-    """Retrieves both poster URL and genres from TMDB API"""
-    # Check if we already have this data cached in the processed file
-    try:
-        df_processed = pd.read_csv('files/processed_files/movies/letterboxd_processed.csv', sep='|', encoding='utf-8')
-        if 'poster_url' in df_processed.columns and 'genre' in df_processed.columns:
-            df_processed["key"] = df_processed["name"].astype(str) + df_processed["year"].astype(str)
-            key_input = str(title) + str(release_year)
-            if key_input in list(df_processed["key"].unique()):
-                existing_row = df_processed[df_processed["key"] == key_input].iloc[0]
-                existing_poster = existing_row['poster_url']
-                existing_genre = existing_row['genre']
-                if pd.notna(existing_poster) and existing_poster != 'No poster found' and pd.notna(existing_genre) and existing_genre != 'Unknown':
-                    print(f"Using cached data for {title} ({release_year})")
-                    return {
-                        'poster_url': existing_poster,
-                        'genres': existing_genre
-                    }
-    except (FileNotFoundError, KeyError, IndexError):
-        # File doesn't exist yet or doesn't have the columns we need
-        pass
+    """Retrieves both poster URL and genres from TMDB API (with JSON cache)"""
+    # Create cache key
+    movie_key = f"{title}_{release_year}"
+
+    # Check JSON cache first (primary cache)
+    cache = load_tmdb_cache()
+    if movie_key in cache:
+        cached_data = cache[movie_key]
+        if (cached_data.get('poster_url') != 'No poster found' and
+            cached_data.get('genres') != 'Unknown'):
+            print(f"📦 Using cached data for {title} ({release_year})")
+            return {
+                'poster_url': cached_data['poster_url'],
+                'genres': cached_data['genres']
+            }
 
     # Get TMDB API key from environment
     api_key = os.environ.get('TMDB_Key')
@@ -96,6 +131,9 @@ def get_tmdb_movie_info(title, release_year):
                 genres_string = ', '.join(genres_list) if genres_list else 'Unknown'
 
                 print(f"Found data - Poster: {'✅' if poster_url != 'No poster found' else '❌'}, Genres: {genres_string}")
+
+                # Save to JSON cache for future use
+                save_to_tmdb_cache(movie_key, poster_url, genres_string)
 
                 return {
                     'poster_url': poster_url,
@@ -328,6 +366,35 @@ def generate_movies_website_page_files(df):
 
         # Work with copy to avoid modifying original
         df_web = df.copy()
+
+        # Add movie_id column BEFORE genre splitting
+        # movie_id uniquely identifies each watch (same movie watched multiple times = different IDs)
+        print("🔢 Adding movie_id to website file...")
+        df_web['movie_id'] = range(len(df_web))
+
+        # Split comma-separated genres into individual rows for website filtering
+        # This allows filtering by individual genres on the website
+        print("📊 Splitting genres into individual rows for website...")
+        rows = []
+        for _, row in df_web.iterrows():
+            genres = str(row['genre']).split(',')
+            for genre in genres:
+                genre = genre.strip()
+                if genre and genre != 'Unknown':
+                    new_row = row.copy()
+                    new_row['genre'] = genre
+                    rows.append(new_row)
+
+        if rows:
+            df_web = pd.DataFrame(rows)
+            print(f"✅ Expanded website file to {len(df_web)} rows (one per genre)")
+
+        # Reorder columns to put movie_id first for clarity
+        cols = df_web.columns.tolist()
+        if 'movie_id' in cols:
+            cols.remove('movie_id')
+            cols = ['movie_id'] + cols
+            df_web = df_web[cols]
 
         # Enforce snake_case before saving
         df_web = enforce_snake_case(df_web, "movies_page_letterboxd_data")

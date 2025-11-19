@@ -10,11 +10,11 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from src.utils.file_operations import clean_rename_move_file, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
-from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.drive_operations import verify_drive_connection
 from src.utils.utils_functions import record_successful_run
 
 # Fiction genres classification
-fiction_genres = ['drama', 'horror', 'thriller']
+fiction_genres = ['drama', 'horror', 'thriller', 'classics', 'science-fiction']
 
 
 def load_reading_dates_json():
@@ -340,7 +340,7 @@ def scrape_missing_reading_dates(books_needing_dates):
 
         books_found = 0
         processed_books = set()  # Track which books we've already processed to avoid duplicates
-        
+
         while books_found < len(books_needing_dates):
             # Find all book rows on current page
             book_rows = driver.find_elements(By.CSS_SELECTOR, "tr[id*='review_'], tr.bookalike")
@@ -444,7 +444,7 @@ def scrape_missing_reading_dates(books_needing_dates):
                 except Exception as e:
                     print(f"Error processing row {i}: {e}")
                     continue
-            
+
             # If we didn't find any new books this pass, break to avoid infinite loop
             if books_found_this_pass == 0:
                 print(f"⚠️  No new books found in this pass. Stopping with {books_found} books processed.")
@@ -454,7 +454,7 @@ def scrape_missing_reading_dates(books_needing_dates):
                     for i, t in enumerate(page_titles[:10], 1):
                         print(f"   {i}. {t}")
                 break
-                
+
             # Stop if we found all books we were looking for
             if books_found >= len(books_needing_dates):
                 print("✅ Found all books we were looking for!")
@@ -670,31 +670,6 @@ def create_goodreads_file():
         return False
 
 
-def upload_goodreads_results():
-    """Upload the processed Goodreads files to Google Drive"""
-    print("☁️  Uploading Goodreads results to Google Drive...")
-
-    files_to_upload = [
-        'files/processed_files/books/gr_processed.csv',
-        'files/work_files/gr_work_files/reading_dates.json'
-    ]
-
-    # Filter to only existing files
-    existing_files = [f for f in files_to_upload if os.path.exists(f)]
-
-    if not existing_files:
-        print("❌ No files found to upload")
-        return False
-
-    print(f"📤 Uploading {len(existing_files)} files...")
-    success = upload_multiple_files(existing_files)
-
-    if success:
-        print("✅ Goodreads results uploaded successfully!")
-    else:
-        print("❌ Some files failed to upload")
-
-    return success
 
 
 def process_goodreads_export(upload="Y"):
@@ -722,17 +697,16 @@ def full_goodreads_pipeline(auto_full=False, auto_process_only=False):
         choice = "1"
     else:
         print("\nSelect an option:")
-        print("1. Full pipeline (download → process → upload)")
-        print("2. Process existing data and upload to Drive")
-        print("3. Upload existing processed files to Drive")
-        print("4. Scrape dates only (for books missing dates)")
+        print("1. Download and process new data")
+        print("2. Process existing data")
+        print("3. Scrape dates only (for books missing dates)")
 
-        choice = input("\nEnter your choice (1-4): ").strip()
+        choice = input("\nEnter your choice (1-3): ").strip()
 
     success = False
 
     if choice == "1":
-        print("\n🚀 Starting full Goodreads pipeline...")
+        print("\n🚀 Starting Goodreads pipeline...")
 
         # Step 1: Download
         download_success = download_goodreads_data()
@@ -746,32 +720,16 @@ def full_goodreads_pipeline(auto_full=False, auto_process_only=False):
 
         # Step 3: Process (includes scraping if needed)
         if move_success or os.path.exists("files/exports/goodreads_exports/gr_export.csv"):
-            process_success = create_goodreads_file()
+            success = create_goodreads_file()
         else:
             print("❌ No Goodreads export file found")
-            process_success = False
-
-        # Step 4: Upload
-        if process_success:
-            success = upload_goodreads_results()
-        else:
-            print("❌ Processing failed, skipping upload")
             success = False
 
     elif choice == "2":
-        print("\n⚙️  Processing existing data and uploading to Drive...")
-        process_success = create_goodreads_file()
-        if process_success:
-            success = upload_goodreads_results()
-        else:
-            print("❌ Processing failed")
-            success = False
+        print("\n⚙️  Processing existing data...")
+        success = create_goodreads_file()
 
     elif choice == "3":
-        print("\n⬆️  Uploading existing processed files to Drive...")
-        success = upload_goodreads_results()
-
-    elif choice == "4":
         print("\n🔍 Scraping dates for books missing dates...")
 
         # Load current data to identify missing dates
@@ -816,7 +774,7 @@ def full_goodreads_pipeline(auto_full=False, auto_process_only=False):
             success = False
 
     else:
-        print("❌ Invalid choice. Please select 1-4.")
+        print("❌ Invalid choice. Please select 1-3.")
         return False
 
     # Final status

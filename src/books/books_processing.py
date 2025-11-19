@@ -588,6 +588,16 @@ def generate_reading_website_page_files(df):
         df_web['reading_month'] = df_web['timestamp'].dt.month.astype('Int64').astype(str)
         df_web['reading_quarter'] = df_web['timestamp'].dt.quarter.astype('Int64').astype(str)
 
+        # Standardize fiction_yn field to consistent casing
+        print("🔧 Standardizing fiction_yn field...")
+        if 'fiction_yn' in df_web.columns:
+            df_web['fiction_yn'] = df_web['fiction_yn'].apply(
+                lambda x: 'Fiction' if str(x).lower() == 'fiction' else 'Non-Fiction'
+            )
+
+        # Sort by timestamp descending (most recent first)
+        df_web = df_web.sort_values('timestamp', ascending=False)
+
         # FILE 1: Sessions (all reading sessions)
         sessions_columns = [
             'book_id', 'title', 'author', 'timestamp', 'source', 'genre',
@@ -606,10 +616,8 @@ def generate_reading_website_page_files(df):
         # FILE 2: Books (aggregated unique books)
         print("📚 Aggregating unique books...")
 
-        # Group by book_id + title + author, take most recent record
-        books_df = df_web.sort_values('timestamp', ascending=False) \
-                         .groupby(['book_id', 'title', 'author'], as_index=False) \
-                         .first()
+        # Group by book_id + title + author, take most recent record (already sorted above)
+        books_df = df_web.groupby(['book_id', 'title', 'author'], as_index=False).first()
 
         books_columns = [
             'book_id', 'title', 'author', 'original_publication_year',
@@ -867,23 +875,40 @@ def full_books_pipeline(auto_full=False, auto_process_only=False):
         success = upload_books_results()
 
     elif choice == "2":
-        print("\n⚙️  Processing with existing files...")
+        print("\n⚙️  Processing existing export files and uploading...")
 
-        # Check if prerequisite files exist
-        file_status = check_prerequisite_files()
-        missing_files = [source for source, info in file_status.items() if not info['exists']]
-
-        if missing_files:
-            print(f"⚠️  Missing prerequisite files: {', '.join(missing_files)}")
-            print("💡 Tip: Run option 1 or 3 to download and process the missing data first")
+        # Step 1: Process Goodreads data from existing exports
+        print("\n📚 Step 1: Processing Goodreads data from existing exports...")
+        try:
+            gr_success = full_goodreads_pipeline(auto_process_only=True)
+            if not gr_success:
+                print("❌ Goodreads processing failed, stopping books pipeline")
+                return False
+        except Exception as e:
+            print(f"❌ Error in Goodreads processing: {e}")
             return False
 
-        # Merge existing files
+        # Step 2: Process Kindle data from existing exports
+        print("\n📱 Step 2: Processing Kindle data from existing exports...")
+        try:
+            kindle_success = full_kindle_pipeline(auto_process_only=True)
+            if not kindle_success:
+                print("❌ Kindle processing failed, stopping books pipeline")
+                return False
+        except Exception as e:
+            print(f"❌ Error in Kindle processing: {e}")
+            return False
+
+        # Step 3: Merge the processed data
+        print("\n🔗 Step 3: Merging Goodreads and Kindle data...")
         merge_success = create_books_file()
-        if merge_success:
-            success = upload_books_results()
-        else:
-            success = False
+        if not merge_success:
+            print("❌ Books merge failed, stopping pipeline")
+            return False
+
+        # Step 4: Upload results
+        print("\n☁️  Step 4: Uploading results...")
+        success = upload_books_results()
 
     elif choice == "3":
         print("\n🔄 Force refresh: Re-running all pipelines...")

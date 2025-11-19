@@ -10,7 +10,7 @@ from pathlib import Path
 
 from src.utils.file_operations import find_unzip_folder, clean_rename_move_folder, check_file_exists
 from src.utils.web_operations import open_web_urls, prompt_user_download_status
-from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
+from src.utils.drive_operations import verify_drive_connection
 from src.utils.utils_functions import record_successful_run
 
 
@@ -859,34 +859,6 @@ def create_kindle_file():
         return False
 
 
-def upload_kindle_results():
-    """
-    Uploads the processed Kindle files to Google Drive.
-    Returns True if successful, False otherwise.
-    """
-    print("☁️  Uploading Kindle results to Google Drive...")
-
-    files_to_upload = [
-        'files/processed_files/books/kindle_processed.csv',
-        'files/work_files/kindle_work_files/asin_bookid_mapping.json'
-    ]
-
-    # Filter to only existing files
-    existing_files = [f for f in files_to_upload if os.path.exists(f)]
-
-    if not existing_files:
-        print("❌ No files found to upload")
-        return False
-
-    print(f"📤 Uploading {len(existing_files)} files...")
-    success = upload_multiple_files(existing_files)
-
-    if success:
-        print("✅ Kindle results uploaded successfully!")
-    else:
-        print("❌ Some files failed to upload")
-
-    return success
 
 
 def process_kindle_export(upload="Y"):
@@ -923,25 +895,24 @@ def full_kindle_pipeline(auto_full=False, auto_process_only=False):
     print("="*60)
 
     if auto_process_only:
-        print("🤖 Auto process mode: Processing existing data and uploading...")
+        print("🤖 Auto process mode: Processing existing data...")
         choice = "2"
     elif auto_full:
         print("🤖 Auto mode: Running full pipeline...")
         choice = "1"
     else:
         print("\nSelect an option:")
-        print("1. Full pipeline (download → move → map → process → upload)")
-        print("2. Process existing data and upload to Drive")
-        print("3. Upload existing processed files to Drive")
-        print("4. Create ASIN mapping only (timestamp-based mapping)")
-        print("5. Manual ASIN mapping (interactive mapping of failed ASINs)")
+        print("1. Download, move, and process new data")
+        print("2. Process existing data")
+        print("3. Create ASIN mapping only (timestamp-based mapping)")
+        print("4. Manual ASIN mapping (interactive mapping of failed ASINs)")
 
-        choice = input("\nEnter your choice (1-5): ").strip()
+        choice = input("\nEnter your choice (1-4): ").strip()
 
     success = False
 
     if choice == "1":
-        print("\n🚀 Starting full Kindle pipeline...")
+        print("\n🚀 Starting Kindle pipeline...")
 
         # Step 1: Download
         download_success = download_kindle_data()
@@ -964,39 +935,23 @@ def full_kindle_pipeline(auto_full=False, auto_process_only=False):
             return False
 
         # Step 4: Process data
-        process_success = create_kindle_file()
-        if not process_success:
-            print("❌ Processing failed, stopping pipeline")
-            return False
-
-        # Step 5: Upload
-        upload_success = upload_kindle_results()
-        success = upload_success
+        success = create_kindle_file()
 
     elif choice == "2":
-        print("\n⚙️  Processing existing data and uploading to Drive...")
-        process_success = create_kindle_file()
-        if process_success:
-            success = upload_kindle_results()
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
+        print("\n⚙️  Processing existing data...")
+        success = create_kindle_file()
 
     elif choice == "3":
-        print("\n⬆️  Uploading existing processed files to Drive...")
-        success = upload_kindle_results()
-
-    elif choice == "4":
         print("\n🔗 Creating ASIN to Book ID mapping...")
         mapping_result = create_asin_bookid_mapping()
         success = bool(mapping_result and mapping_result.get('successful_mappings'))
 
-    elif choice == "5":
+    elif choice == "4":
         print("\n🔧 Manual ASIN mapping...")
         success = manual_asin_mapping()
 
     else:
-        print("❌ Invalid choice. Please select 1-5.")
+        print("❌ Invalid choice. Please select 1-4.")
         return False
 
     # Final status
