@@ -192,7 +192,7 @@ def add_usda_meal_scoring_efficient(df, use_usda_scoring=False):
 
     print("🥗 Starting efficient USDA-based meal scoring...")
 
-    meal_rows = df[df['Meal'].notna() & (df['Meal'] != '')].copy()
+    meal_rows = df[df['meal'].notna() & (df['meal'] != '')].copy()
 
     if len(meal_rows) == 0:
         print("ℹ️  No meal data found for USDA scoring")
@@ -235,7 +235,7 @@ def add_usda_meal_scoring_legacy(df, use_usda_scoring=False):
 
     print("🥗 Using legacy USDA meal scoring method...")
 
-    meal_rows = df[df['Meal'].notna() & (df['Meal'] != '')].copy()
+    meal_rows = df[df['meal'].notna() & (df['meal'] != '')].copy()
 
     if len(meal_rows) == 0:
         return df
@@ -331,7 +331,7 @@ def extract_data_count(df):
             if indicator == "food":
                 start_point +=1
                 meal = matches[0][0].strip()
-                df.loc[index, "Meal"] = meal
+                df.loc[index, "meal"] = meal
             for match in matches[start_point:]:
                 word = match[0].strip()
                 value = int(match[1])
@@ -424,12 +424,12 @@ def create_optimized_nutrition_file(df):
     print("Creating optimized nutrition file...")
 
     # Filter only meal entries (exclude non-meal data)
-    meal_df = df[df['Meal'].notna() & (df['Meal'] != '')].copy()
+    meal_df = df[df['meal'].notna() & (df['meal'] != '')].copy()
     print(f"Filtered to {len(meal_df)} meal entries from {len(df)} total rows")
 
     # Select only nutrition-relevant columns
     nutrition_cols = [
-        'date', 'Time', 'Meal', 'amount_text', 'food_list', 'Source'
+        'date', 'time', 'meal', 'amount_text', 'food_list', 'source'
     ]
 
     # Add USDA score column if it exists
@@ -438,8 +438,8 @@ def create_optimized_nutrition_file(df):
 
     meal_df = meal_df[nutrition_cols].copy()
 
-    # Create proper timestamp from date and Time
-    meal_df['timestamp'] = pd.to_datetime(meal_df['date'] + ' ' + meal_df['Time'],
+    # Create proper timestamp from date and time
+    meal_df['timestamp'] = pd.to_datetime(meal_df['date'] + ' ' + meal_df['time'],
                                          format='%Y-%m-%d %H:%M', errors='coerce')
     meal_df['timestamp'] = meal_df['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S')
 
@@ -448,12 +448,12 @@ def create_optimized_nutrition_file(df):
 
     # Rename columns for frontend consistency
     meal_df.rename(columns={
-        'Meal': 'meal_type'
+        'meal': 'meal_type'
     }, inplace=True)
 
     # Select final columns in optimized order
     final_cols = [
-        'timestamp', 'meal_type', 'amount_text', 'food_items', 'Source'
+        'timestamp', 'meal_type', 'amount_text', 'food_items', 'source'
     ]
 
     # Add USDA score column if it exists
@@ -482,6 +482,26 @@ def create_nutrilio_files():
         df[col] = df[col].apply(lambda x: extract_data(x))
     #Extract all values & quantities
     df, list_col = extract_data_count(df)
+
+    # Rename columns to follow snake_case standards BEFORE enforce_snake_case
+    rename_dict = {}
+    if 'Full Date' in df.columns:
+        rename_dict['Full Date'] = 'date'
+    if 'Amount_text' in df.columns:
+        rename_dict['Amount_text'] = 'amount_text'
+    if rename_dict:
+        df.rename(columns=rename_dict, inplace=True)
+
+    # Drop redundant 'Date' column before enforce_snake_case to avoid duplicate 'date' columns
+    if 'Date' in df.columns:
+        df.drop('Date', axis=1, inplace=True)
+
+    # Enforce snake_case EARLY so list_col contains snake_case column names
+    df = enforce_snake_case(df, "processed file")
+
+    # Update list_col to contain snake_case versions of column names
+    list_col = [enforce_snake_case(pd.DataFrame(columns=[col]), "temp").columns[0] for col in list_col]
+
     #Put the newly created columns at the end of the df to simplify checks
     columns_to_concat = []
     for _, val in dict_extract_data.items():
@@ -490,16 +510,7 @@ def create_nutrilio_files():
     df = pd.concat([df.copy()] + columns_to_concat, axis=1)
     # Legacy ingredient checking and meal score migration removed
     # All scoring is now handled by the USDA pipeline
-    df['Source'] = 'Nutrilio'
-
-    # Rename columns to follow snake_case standards
-    rename_dict = {}
-    if 'Full Date' in df.columns:
-        rename_dict['Full Date'] = 'date'
-    if 'Amount_text' in df.columns:
-        rename_dict['Amount_text'] = 'amount_text'
-    if rename_dict:
-        df.rename(columns=rename_dict, inplace=True)
+    df['source'] = 'Nutrilio'
 
     # Legacy ingredient categorization removed - now handled by USDA pipeline
 
@@ -512,14 +523,19 @@ def create_nutrilio_files():
     df = add_usda_drink_scoring_efficient(df, use_usda_scoring=True)
 
     print("⚙️  Finalizing data processing...")
-    df['Work_duration_est'] = df["Work - duration_text"].apply(lambda x: dict_work_duration[x] if x in dict_work_duration.keys() else None)
-    df['Work - good day_text'] = df['Work - good day_text'].apply(lambda x: "Average" if x =="Ok" else x)
+    df['work_duration_est'] = df["work_-_duration_text"].apply(lambda x: dict_work_duration[x] if x in dict_work_duration.keys() else None)
+    df['work_-_good_day_text'] = df['work_-_good_day_text'].apply(lambda x: "Average" if x =="Ok" else x)
 
-    # Drop list columns BEFORE enforcing snake_case (list_col has original names)
+    # Generate Power BI files BEFORE dropping list columns (PBI files need these columns)
+    print("📊 Generating Power BI files...")
+    drive_list = ["files/processed_files/nutrilio/nutrilio_processed.csv"]
+
+    for _, value in dict_extract_data.items():
+        generate_pbi_files(df, value)
+        drive_list.append(f"files/processed_files/nutrilio/nutrilio_{value}_pbi_processed_file.csv")
+
+    # Drop list columns AFTER generating PBI files (cleanup for main processed file)
     df = df.drop(list_col, axis=1)
-
-    # Enforce snake_case before saving
-    df = enforce_snake_case(df, "processed file")
 
     print("💾 Saving main processed file...")
     df.to_csv("files/processed_files/nutrilio/nutrilio_processed.csv", sep = '|', index = False, encoding='utf-8')
@@ -527,19 +543,16 @@ def create_nutrilio_files():
     # Create optimized nutrition file for frontend performance
     optimized_nutrition_file = create_optimized_nutrition_file(df)
 
-    print("📊 Generating Power BI files...")
-    drive_list = ["files/processed_files/nutrilio/nutrilio_processed.csv",
-                  optimized_nutrition_file,
-                  "files/work_files/nutrilio_work_files/ingredient_scores_database.json",
-                  "files/work_files/nutrilio_work_files/flagged_default_ingredients.json",
-                  "files/work_files/nutrilio_work_files/drink_scores_database.json",
-                  "files/work_files/nutrilio_work_files/flagged_default_drinks.json"]
+    # Add additional files to drive_list
+    drive_list.extend([
+        optimized_nutrition_file,
+        "files/work_files/nutrilio_work_files/ingredient_scores_database.json",
+        "files/work_files/nutrilio_work_files/flagged_default_ingredients.json",
+        "files/work_files/nutrilio_work_files/drink_scores_database.json",
+        "files/work_files/nutrilio_work_files/flagged_default_drinks.json"
+    ])
 
-    for _, value in dict_extract_data.items():
-        generate_pbi_files(df, value)
-        drive_list.append(f"files/processed_files/nutrilio/nutrilio_{value}_pbi_processed_file.csv")
-
-    # Generate website files
+    # Generate website files for Nutrition page
     generate_nutrition_website_page_files(df)
 
     print(f"✅ Processing complete! Generated {len(drive_list)} files.")
@@ -565,6 +578,24 @@ def generate_nutrition_website_page_files(df):
 
         # Work with copy to avoid modifying original
         df_web = df.copy()
+
+        # Filter to only keep rows where meal is not null
+        df_web = df_web[df_web['meal'].notna() & (df_web['meal'] != '')].copy()
+        print(f"📊 Filtered to {len(df_web)} meal entries from {len(df)} total rows")
+
+        # Select specific columns for website
+        columns_to_keep = [
+            'date', 'weekday', 'time', 'meal', 'food_list', 'drinks_list',
+            'usda_meal_score', 'places', 'origin', 'amount', 'amount_text',
+            'meal_assessment', 'meal_assessment_text'
+        ]
+
+        # Keep only columns that exist in the dataframe
+        existing_columns = [col for col in columns_to_keep if col in df_web.columns]
+        df_web = df_web[existing_columns].copy()
+
+        # Add meal_id as sequential integer starting from 0
+        df_web.insert(0, 'meal_id', range(len(df_web)))
 
         # Enforce snake_case before saving
         df_web = enforce_snake_case(df_web, "nutrition_page_data")
@@ -665,7 +696,7 @@ def upload_nutrilio_results():
     """
     print("☁️ Uploading Nutrilio results to Google Drive...")
 
-    # Define expected output files (only website file)
+    # Upload only the website file (single source of truth)
     files_to_upload = [
         "files/website_files/nutrition/nutrition_page_data.csv"
     ]
@@ -677,7 +708,7 @@ def upload_nutrilio_results():
         print("❌ No files found to upload")
         return False
 
-    print(f"📤 Uploading {len(existing_files)} files...")
+    print(f"📤 Uploading {len(existing_files)} file(s)...")
     success = upload_multiple_files(existing_files)
 
     if success:

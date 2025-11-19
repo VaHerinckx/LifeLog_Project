@@ -601,7 +601,7 @@ def generate_reading_website_page_files(df):
         # FILE 1: Sessions (all reading sessions)
         sessions_columns = [
             'book_id', 'title', 'author', 'timestamp', 'source', 'genre',
-            'page_split', 'reading_year', 'reading_month', 'reading_quarter'
+            'page_split', 'my_rating', 'reading_year', 'reading_month', 'reading_quarter'
         ]
 
         sessions_df = df_web[sessions_columns].copy()

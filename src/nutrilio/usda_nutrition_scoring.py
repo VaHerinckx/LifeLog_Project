@@ -403,10 +403,10 @@ def extract_unique_ingredients_from_dataframe(df) -> List[str]:
         List[str]: List of unique ingredients found across all meals
     """
     unique_ingredients = set()
-    
+
     # Filter to rows with meal data
-    meal_rows = df[df['Meal'].notna() & (df['Meal'] != '') & df['food_list'].notna()]
-    
+    meal_rows = df[df['meal'].notna() & (df['meal'] != '') & df['food_list'].notna()]
+
     for _, row in meal_rows.iterrows():
         ingredients_str = row.get('food_list', '')
         if pd.isna(ingredients_str) or not ingredients_str:
@@ -645,14 +645,14 @@ def calculate_meal_scores_from_ingredients(df, ingredient_scores: Dict[str, Tupl
         DataFrame: Dataframe with usda_meal_score column added
     """
     print(f"\n🍽️ Calculating meal scores using pre-computed ingredient data...")
-    
+
     # Add USDA scores column
     df['usda_meal_score'] = None
-    
-    meal_rows = df[df['Meal'].notna() & (df['Meal'] != '')].copy()
+
+    meal_rows = df[df['meal'].notna() & (df['meal'] != '')].copy()
     scored_count = 0
     total_meals = len(meal_rows)
-    
+
     for idx, row in meal_rows.iterrows():
         ingredients_str = row.get('food_list', '')
         if pd.isna(ingredients_str) or not ingredients_str:
