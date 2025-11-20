@@ -750,10 +750,7 @@ def explode_food_and_drinks(df_web):
 
 def generate_nutrition_website_page_files(df):
     """
-    Generate website-optimized files for the Nutrition page.
-    Creates TWO files following Reading page pattern:
-    1. Meals file (grouped, for display and meal-level filtering)
-    2. Items file (exploded, for ingredient-level filtering)
+    Generate website-optimized file for the Nutrition page.
 
     Args:
         df: Processed dataframe (already in snake_case)
@@ -761,7 +758,7 @@ def generate_nutrition_website_page_files(df):
     Returns:
         bool: True if successful, False otherwise
     """
-    print("\n🌐 Generating website files for Nutrition page (dual-file strategy)...")
+    print("\n🌐 Generating website files for Nutrition page...")
 
     try:
         # Ensure output directory exists
@@ -799,32 +796,18 @@ def generate_nutrition_website_page_files(df):
         print(f"🧹 Removing meal type identifiers from food_list...")
         df_web = remove_meal_type_from_food_list(df_web)
 
-        # ========== FILE 1: MEALS (Pre-grouped for display) ==========
-        print(f"\n📦 Creating meals file (grouped by meal_id)...")
-        df_meals = df_web.copy()
-        df_meals = enforce_snake_case(df_meals, "nutrition_page_meals")
-
-        meals_path = f'{website_dir}/nutrition_page_meals.csv'
-        df_meals.to_csv(meals_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Meals file: {len(df_meals):,} records → {meals_path}")
-
-        # ========== FILE 2: ITEMS (Exploded for ingredient filtering) ==========
-        print(f"\n🔄 Creating items file (exploded ingredients)...")
-        df_items = df_web.copy()
-
         # Explode food_list and drinks_list into individual rows
-        df_items = explode_food_and_drinks(df_items)
-        print(f"📊 Exploded to {len(df_items)} rows (from individual ingredients/drinks)")
+        print(f"🔄 Exploding food and drinks into individual rows...")
+        df_web = explode_food_and_drinks(df_web)
+        print(f"📊 Exploded to {len(df_web)} rows (from individual ingredients/drinks)")
 
-        df_items = enforce_snake_case(df_items, "nutrition_page_items")
+        # Enforce snake_case before saving
+        df_web = enforce_snake_case(df_web, "nutrition_page_data")
 
-        items_path = f'{website_dir}/nutrition_page_items.csv'
-        df_items.to_csv(items_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Items file: {len(df_items):,} records → {items_path}")
-
-        print(f"\n✨ Dual-file strategy complete:")
-        print(f"   • Meals: {len(df_meals):,} rows (for display & meal filters)")
-        print(f"   • Items: {len(df_items):,} rows (for ingredient filters)")
+        # Save website file
+        website_path = f'{website_dir}/nutrition_page_data.csv'
+        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
 
         return True
 
@@ -917,10 +900,9 @@ def upload_nutrilio_results():
     """
     print("☁️ Uploading Nutrilio results to Google Drive...")
 
-    # Upload both website files (dual-file strategy)
+    # Upload only the website file (single source of truth)
     files_to_upload = [
-        "files/website_files/nutrition/nutrition_page_meals.csv",
-        "files/website_files/nutrition/nutrition_page_items.csv"
+        "files/website_files/nutrition/nutrition_page_data.csv"
     ]
 
     # Filter to only existing files

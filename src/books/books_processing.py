@@ -577,7 +577,7 @@ def generate_reading_website_page_files(df):
         os.makedirs(website_dir, exist_ok=True)
 
         # Work with copy to avoid modifying original
-        df_web = df.copy()
+        df_web = df[df["title"] != "Unknown Title"].copy()
 
         # Ensure timestamp is datetime
         df_web['timestamp'] = pd.to_datetime(df_web['timestamp'], errors='coerce')
@@ -610,7 +610,7 @@ def generate_reading_website_page_files(df):
         sessions_df = enforce_snake_case(sessions_df, "reading_page_sessions")
 
         sessions_path = f'{website_dir}/reading_page_sessions.csv'
-        sessions_df.to_csv(sessions_path, sep='|', index=False, encoding='utf-8')
+        sessions_df.sort_values('timestamp', ascending=False).to_csv(sessions_path, sep='|', index=False, encoding='utf-8')
         print(f"✅ Sessions file: {len(sessions_df):,} records → {sessions_path}")
 
         # FILE 2: Books (aggregated unique books)
@@ -632,7 +632,7 @@ def generate_reading_website_page_files(df):
         books_df = enforce_snake_case(books_df, "reading_page_books")
 
         books_path = f'{website_dir}/reading_page_books.csv'
-        books_df.to_csv(books_path, sep='|', index=False, encoding='utf-8')
+        books_df.sort_values('timestamp', ascending=False).to_csv(books_path, sep='|', index=False, encoding='utf-8')
         print(f"✅ Books file: {len(books_df):,} unique books → {books_path}")
 
         return True
