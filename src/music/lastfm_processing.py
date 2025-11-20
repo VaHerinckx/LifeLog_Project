@@ -356,6 +356,8 @@ class LastFmAPIProcessor:
                 dict_info_artists['artist_popularity'] = artist_info['popularity']
                 for i in range(len(artist_info['genres'])):
                     dict_info_artists[f'genre_{i+1}'] = artist_info['genres'][i]
+                # Extract artist artwork URL (largest image)
+                dict_info_artists['artist_artwork_url'] = artist_info['images'][0]['url'] if artist_info.get('images') else None
                 dict_artists[artist_name] = dict_info_artists
                 df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
                 df_artist.to_csv(self.artists_work_file, sep='|', index=False)
@@ -412,7 +414,7 @@ class LastFmAPIProcessor:
                     dict_info_tracks['artist_name'] = artist_name
                     list_keys = ['album_name', 'album_release_date', 'track_duration', 'track_popularity', \
                                  'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',\
-                                 'instrumentalness', 'liveness', 'valence', 'tempo']
+                                 'instrumentalness', 'liveness', 'valence', 'tempo', 'album_artwork_url']
                     for key in list_keys:
                         dict_info_tracks[key] = "No API result"
                     dict_tracks[song_key] = dict_info_tracks
@@ -427,6 +429,8 @@ class LastFmAPIProcessor:
                     dict_info_tracks['album_release_date'] = response['album']['release_date']
                     dict_info_tracks['track_duration'] = response['duration_ms']
                     dict_info_tracks['track_popularity'] = response['popularity']
+                    # Extract album artwork URL (largest image)
+                    dict_info_tracks['album_artwork_url'] = response['album']['images'][0]['url'] if response['album'].get('images') else None
                     track_url = f"https://api.spotify.com/v1/audio-features/{track_id}"
                     response_track_details = requests.get(track_url, headers=headers).json()
                     for info in response_track_details.keys():
@@ -573,6 +577,60 @@ class LastFmAPIProcessor:
             # Enforce snake_case before saving
             df_web = enforce_snake_case(df_web, "music_page_data")
 
+            # Add toggle_id - unique identifier for each listening event
+            df_web['toggle_id'] = range(1, len(df_web) + 1)
+            print(f"✅ Added toggle_id column ({len(df_web):,} toggles)")
+
+            # Add listening_seconds - calculated from completion and track_duration
+            # listening_seconds = (completion * track_duration_ms) / 1000
+            df_web['listening_seconds'] = (df_web['completion'] * df_web['track_duration']) / 1000
+            df_web['listening_seconds'] = df_web['listening_seconds'].fillna(0).astype(int)
+            print(f"✅ Added listening_seconds column")
+
+            # Combine genres from genre_1 through genre_14 into single 'genres' column
+            # Use comma separator (not pipe, which is the CSV delimiter)
+            genre_cols = [f'genre_{i}' for i in range(1, 15)]
+            df_web['genres'] = df_web[genre_cols].apply(
+                lambda row: ', '.join([str(g) for g in row if pd.notna(g) and str(g) != '' and str(g) != 'nan']),
+                axis=1
+            )
+            print(f"✅ Combined genres from genre_1-14 into single column (comma-separated)")
+
+            # Select columns for website file
+            website_columns = [
+                'toggle_id',
+                'song_key',
+                'artist_name',
+                'album_name',
+                'track_name',
+                'timestamp',
+                'album_release_date',
+                'followers',
+                'artist_popularity',
+                'genres',
+                'track_duration',
+                'track_popularity',
+                'completion',
+                'skip_next_track',
+                'listening_seconds',
+                'new_artist_yn',
+                'new_track_yn'
+            ]
+
+            # Add album_artwork_url if it exists in the data
+            if 'album_artwork_url' in df_web.columns:
+                website_columns.append('album_artwork_url')
+                print(f"✅ Including album_artwork_url column")
+
+            # Add artist_artwork_url if it exists in the data
+            if 'artist_artwork_url' in df_web.columns:
+                website_columns.append('artist_artwork_url')
+                print(f"✅ Including artist_artwork_url column")
+
+            # Filter to only website columns
+            df_web = df_web[website_columns]
+            print(f"✅ Removed {len(df.columns) - len(website_columns)} unused columns")
+
             # Save website file
             website_path = f'{website_dir}/music_page_data.csv'
             df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
@@ -676,41 +734,54 @@ class LastFmAPIProcessor:
         """
         print("Starting Last.fm incremental update with full pipeline...")
         print("=" * 60)
-        
+
         try:
             # Step 1: Get latest timestamp from existing file
             latest_timestamp = self.get_latest_timestamp_from_file()
-            
+
             # Step 2: Fetch new tracks from API
             new_tracks = self.fetch_tracks_since_timestamp(latest_timestamp)
-            
+
             if not new_tracks:
-                print("No new tracks found. Your data is up to date!")
+                print("No new tracks found. Data is up to date!")
+                print("Re-generating website files from existing data...")
+                # Still regenerate website files even if no new data
+                if os.path.exists(self.processed_file_path):
+                    df = pd.read_csv(self.processed_file_path, sep='|', encoding='utf-8', low_memory=False)
+                    self.generate_music_website_page_files(df)
+                    print("✅ Website files regenerated")
+                else:
+                    print("⚠️  No existing processed file found")
                 return True
-            
+
             # Step 3: Parse the new track data into basic DataFrame
             new_data_df = self.parse_api_tracks_to_dataframe(new_tracks)
-            
+
             if new_data_df.empty:
-                print("No valid new tracks after parsing. Your data is up to date!")
+                print("No valid new tracks after parsing. Data is up to date!")
+                print("Re-generating website files from existing data...")
+                if os.path.exists(self.processed_file_path):
+                    df = pd.read_csv(self.processed_file_path, sep='|', encoding='utf-8', low_memory=False)
+                    self.generate_music_website_page_files(df)
+                    print("✅ Website files regenerated")
                 return True
-            
+
             # Step 4: Apply full processing pipeline to new data
             processed_new_data = self.process_new_data_with_pipeline(new_data_df)
-            
+
             # Step 5: Merge with existing data and remove duplicates
             final_df = self.merge_and_deduplicate(processed_new_data)
-            
+
             # Step 6: Save the updated data
             self.save_data(final_df)
-            
+
             print("=" * 60)
             print("Last.fm incremental update completed successfully!")
             print(f"📊 Added {len(new_tracks)} new tracks")
             print(f"📊 Final dataset contains {len(final_df)} total tracks")
-            
+
             return True
-            
+
         except Exception as e:
             print(f"Error during incremental update: {e}")
             return False
@@ -807,10 +878,18 @@ def full_lfm_pipeline(auto_full=False, auto_process_only=False):
 
             # Check if existing file exists
             if not os.path.exists(processor.processed_file_path):
-                print("❌ No existing file found to upload")
+                print("❌ No existing processed file found")
                 return False
 
-            # Re-upload existing file (could add re-processing logic here if needed)
+            # Re-process existing file to regenerate website files
+            print("📊 Reading existing processed file...")
+            df = pd.read_csv(processor.processed_file_path, sep='|', encoding='utf-8', low_memory=False)
+            print(f"✅ Loaded {len(df):,} existing tracks")
+
+            # Regenerate website files
+            processor.generate_music_website_page_files(df)
+
+            # Upload results
             success = processor.upload_results()
 
         elif choice == "3":
