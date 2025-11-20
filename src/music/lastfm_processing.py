@@ -135,85 +135,117 @@ class LastFmAPIProcessor:
             print("Fetching all available tracks (no existing data found)")
 
         while True:
-            try:
-                params = {
-                    'method': 'user.getrecenttracks',
-                    'user': self.username,
-                    'api_key': self.api_key,
-                    'format': 'json',
-                    'limit': 200,  # Maximum allowed by API
-                    'page': page
-                }
+            retry_count = 0
+            max_retries = 3
+            success = False
 
-                # Add timestamp filter if provided
-                if since_timestamp:
-                    # Convert to Unix timestamp
-                    unix_timestamp = int(since_timestamp.timestamp())
-                    params['from'] = unix_timestamp
+            while retry_count < max_retries and not success:
+                try:
+                    params = {
+                        'method': 'user.getrecenttracks',
+                        'user': self.username,
+                        'api_key': self.api_key,
+                        'format': 'json',
+                        'limit': 200,  # Maximum allowed by API
+                        'page': page
+                    }
 
-                response = requests.get(self.base_url, params=params)
-                response.raise_for_status()
+                    # Add timestamp filter if provided
+                    if since_timestamp:
+                        # Convert to Unix timestamp
+                        unix_timestamp = int(since_timestamp.timestamp())
+                        params['from'] = unix_timestamp
 
-                data = response.json()
+                    response = requests.get(self.base_url, params=params)
+                    response.raise_for_status()
 
-                # Check for API errors
-                if 'error' in data:
-                    print(f"API Error: {data['message']}")
-                    break
+                    data = response.json()
 
-                # Check if we have track data
-                if 'recenttracks' not in data or 'track' not in data['recenttracks']:
-                    print("No track data found in API response")
-                    break
+                    # Check for API errors
+                    if 'error' in data:
+                        print(f"API Error: {data['message']}")
+                        return all_tracks  # Return what we have so far
 
-                tracks = data['recenttracks']['track']
-                attr = data['recenttracks']['@attr']
+                    # Check if we have track data
+                    if 'recenttracks' not in data or 'track' not in data['recenttracks']:
+                        print("No track data found in API response")
+                        return all_tracks  # Return what we have so far
 
-                # Get total pages from first response
-                if total_pages is None:
-                    total_pages = int(attr['totalPages'])
-                    total_tracks = int(attr['total'])
-                    print(f"Total tracks to fetch: {total_tracks} across {total_pages} pages")
+                    tracks = data['recenttracks']['track']
+                    attr = data['recenttracks']['@attr']
 
-                # If no tracks on this page, we're done
-                if not tracks:
-                    break
+                    # Get total pages from first response
+                    if total_pages is None:
+                        total_pages = int(attr['totalPages'])
+                        total_tracks = int(attr['total'])
+                        print(f"Total tracks to fetch: {total_tracks} across {total_pages} pages")
 
-                # Handle case where only one track is returned (not a list)
-                if isinstance(tracks, dict):
-                    tracks = [tracks]
+                    # If no tracks on this page, we're done
+                    if not tracks:
+                        return all_tracks  # Return what we have
 
-                # Filter out currently playing tracks (they have no timestamp)
-                valid_tracks = []
-                for track in tracks:
-                    if 'date' in track and 'uts' in track['date']:
-                        valid_tracks.append(track)
+                    # Handle case where only one track is returned (not a list)
+                    if isinstance(tracks, dict):
+                        tracks = [tracks]
+
+                    # Filter out currently playing tracks (they have no timestamp)
+                    valid_tracks = []
+                    for track in tracks:
+                        if 'date' in track and 'uts' in track['date']:
+                            valid_tracks.append(track)
+                        else:
+                            # Only print message once per track to avoid spam
+                            track_name = track.get('name', 'Unknown')
+                            if track_name not in printed_currently_playing:
+                                print(f"Skipping currently playing track: {track_name}")
+                                printed_currently_playing.add(track_name)
+
+                    all_tracks.extend(valid_tracks)
+
+                    print(f"Fetched page {page}/{total_pages} ({len(valid_tracks)} tracks)")
+
+                    success = True  # Mark as successful
+
+                except requests.exceptions.RequestException as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print(f"❌ Network error on page {page} after {max_retries} retries: {e}")
+                        if total_pages:
+                            estimated_missing = (total_pages - page + 1) * 200
+                            print(f"⚠️  WARNING: Incomplete fetch - successfully retrieved {len(all_tracks)} tracks")
+                            print(f"    Failed at page {page} of {total_pages}")
+                            print(f"    Estimated missing tracks: ~{estimated_missing}")
+                            print(f"    Next incremental update will capture missing data")
+                        return all_tracks  # Return partial data
                     else:
-                        # Only print message once per track to avoid spam
-                        track_name = track.get('name', 'Unknown')
-                        if track_name not in printed_currently_playing:
-                            print(f"Skipping currently playing track: {track_name}")
-                            printed_currently_playing.add(track_name)
+                        wait_time = 2 ** retry_count  # Exponential backoff: 2, 4, 8 seconds
+                        print(f"⚠️  Error on page {page}, retry {retry_count}/{max_retries} in {wait_time}s: {e}")
+                        time.sleep(wait_time)
 
-                all_tracks.extend(valid_tracks)
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        print(f"❌ Error processing page {page} after {max_retries} retries: {e}")
+                        if total_pages:
+                            print(f"⚠️  WARNING: Returning {len(all_tracks)} tracks fetched so far")
+                        return all_tracks  # Return partial data
+                    else:
+                        wait_time = 2 ** retry_count
+                        print(f"⚠️  Error on page {page}, retry {retry_count}/{max_retries} in {wait_time}s: {e}")
+                        time.sleep(wait_time)
 
-                print(f"Fetched page {page}/{total_pages} ({len(valid_tracks)} tracks)")
-
-                # Check if we've reached the end
-                if page >= total_pages:
-                    break
-
-                page += 1
-
-                # Be nice to the API - small delay between requests
-                time.sleep(0.2)
-
-            except requests.exceptions.RequestException as e:
-                print(f"Network error on page {page}: {e}")
+            # If we didn't succeed after retries, move on
+            if not success:
                 break
-            except Exception as e:
-                print(f"Error processing page {page}: {e}")
+
+            # Check if we've reached the end
+            if page >= total_pages:
                 break
+
+            page += 1
+
+            # Be nice to the API - small delay between requests
+            time.sleep(0.2)
 
         print(f"Successfully fetched {len(all_tracks)} new tracks")
         return all_tracks
@@ -322,7 +354,7 @@ class LastFmAPIProcessor:
 
         # Initialize or load existing artist data
         if os.path.exists(self.artists_work_file):
-            artist_df = pd.read_csv(self.artists_work_file, sep='|')
+            artist_df = pd.read_csv(self.artists_work_file, sep='|', low_memory=False)
         else:
             artist_df = pd.DataFrame(columns=['artist_name'])
 
@@ -340,20 +372,93 @@ class LastFmAPIProcessor:
             else:
                 count += 1
                 print(f"new artist {count} : {artist_name}")
-                endpoint_url = 'https://api.spotify.com/v1/search'
-                headers = {'Authorization': f'Bearer {token}'}
-                params = {'q': artist_name,'type': 'artist', 'limit': 1}
-                response = requests.get(endpoint_url, headers=headers, params=params)
-                response_json = response.json()
                 dict_info_artists = {}
-                if response_json['artists']['items'] == []:
-                    dict_info_artists['followers'] = "Unknown"
+
+                try:
+                    endpoint_url = 'https://api.spotify.com/v1/search'
+                    headers = {'Authorization': f'Bearer {token}'}
+                    params = {'q': artist_name,'type': 'artist', 'limit': 1}
+                    response = requests.get(endpoint_url, headers=headers, params=params)
+
+                    # Check for rate limiting FIRST (before raise_for_status which would throw exception)
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get('Retry-After', 60))
+                        print(f"⚠️  Rate limited by Spotify. Waiting {retry_after} seconds before retry...")
+                        # Save progress before waiting
+                        df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
+                        df_artist.to_csv(self.artists_work_file, sep='|', index=False)
+                        time.sleep(retry_after)
+                        # Decrement count so we retry this artist
+                        count -= 1
+                        continue
+
+                    # Validate response before parsing JSON
+                    if not response.text or response.text.strip() == '':
+                        print(f"⚠️  Empty response for artist: {artist_name}, skipping...")
+                        dict_info_artists['followers'] = "No API result"
+                        dict_artists[artist_name] = dict_info_artists
+                        continue
+
+                    # Raise for other HTTP errors (4xx, 5xx) - after checking 429
+                    response.raise_for_status()
+
+                    response_json = response.json()
+
+                    if response_json['artists']['items'] == []:
+                        dict_info_artists['followers'] = "Unknown"
+                        dict_artists[artist_name] = dict_info_artists
+                        # Add small delay to avoid rate limiting
+                        time.sleep(0.15)
+                        continue
+
+                    artist_id = response_json['artists']['items'][0]['id']
+                    endpoint_url = f'https://api.spotify.com/v1/artists/{artist_id}'
+                    response = requests.get(endpoint_url, headers=headers)
+
+                    # Check for rate limiting on second API call
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get('Retry-After', 60))
+                        print(f"⚠️  Rate limited by Spotify. Waiting {retry_after} seconds before retry...")
+                        # Save progress before waiting
+                        df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
+                        df_artist.to_csv(self.artists_work_file, sep='|', index=False)
+                        time.sleep(retry_after)
+                        # Decrement count so we retry this artist
+                        count -= 1
+                        continue
+
+                    # Validate second API call response
+                    if not response.text or response.text.strip() == '':
+                        print(f"⚠️  Empty response for artist details: {artist_name}, skipping...")
+                        dict_info_artists['followers'] = "No API result"
+                        dict_artists[artist_name] = dict_info_artists
+                        continue
+
+                    # Raise for other HTTP errors - after checking 429
+                    response.raise_for_status()
+                    artist_info = response.json()
+
+                except requests.exceptions.JSONDecodeError as e:
+                    print(f"❌ JSON parsing error for artist '{artist_name}'")
+                    print(f"   Error: {e}")
+                    print(f"   Response status: {response.status_code}")
+                    print(f"   Response headers: {dict(response.headers)}")
+                    print(f"   Response body (first 500 chars): {response.text[:500]}")
+                    dict_info_artists['followers'] = "API Error - JSON Parse Failed"
                     dict_artists[artist_name] = dict_info_artists
                     continue
-                artist_id = response_json['artists']['items'][0]['id']
-                endpoint_url = f'https://api.spotify.com/v1/artists/{artist_id}'
-                response = requests.get(endpoint_url, headers=headers)
-                artist_info = response.json()
+
+                except requests.exceptions.RequestException as e:
+                    print(f"❌ Network error for artist '{artist_name}': {e}")
+                    dict_info_artists['followers'] = "Network Error"
+                    dict_artists[artist_name] = dict_info_artists
+                    continue
+
+                except Exception as e:
+                    print(f"❌ Unexpected error for artist '{artist_name}': {e}")
+                    dict_info_artists['followers'] = "Unknown Error"
+                    dict_artists[artist_name] = dict_info_artists
+                    continue
 
                 # Store ALL Spotify artist fields (future-proof)
                 dict_info_artists['spotify_id'] = artist_info.get('id')
@@ -385,8 +490,14 @@ class LastFmAPIProcessor:
                     dict_info_artists[f'artist_artwork_{size}'] = img.get('url')
 
                 dict_artists[artist_name] = dict_info_artists
-                df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
-                df_artist.to_csv(self.artists_work_file, sep='|', index=False)
+
+                # Add small delay to avoid rate limiting
+                time.sleep(0.15)
+
+                # Save progress every 50 artists (performance optimization)
+                if count % 50 == 0:
+                    df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
+                    df_artist.to_csv(self.artists_work_file, sep='|', index=False)
         print(f"{count} new artist(s) were added to the artist dictionnary")
         df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
         df_artist.drop_duplicates().to_csv(self.artists_work_file, sep='|', index=False)
@@ -401,7 +512,7 @@ class LastFmAPIProcessor:
 
         # Initialize or load existing track data
         if os.path.exists(self.tracks_work_file):
-            track_df = pd.read_csv(self.tracks_work_file, sep='|')
+            track_df = pd.read_csv(self.tracks_work_file, sep='|', low_memory=False)
         else:
             track_df = pd.DataFrame(columns=['song_key'])
 
@@ -426,42 +537,126 @@ class LastFmAPIProcessor:
             else:
                 count += 1
                 print(f"Info gathered for {count} out of {count_API_requests} new songs")
-                search_url = "https://api.spotify.com/v1/search"
-                track_name = song_key.split("/:")[0].strip()
-                artist_name = song_key.split("/:")[1].strip()
-                params = {"q": f"{track_name} artist:{artist_name}", "type": "track"}
-                headers = {"Authorization": "Bearer " + token}
-                response = requests.get(search_url, params=params, headers=headers).json()
-                # Get the first track from the search results
                 dict_info_tracks = {}
-                if not response["tracks"]["items"]:
-                    print(f"No API result for {track_name} - {artist_name}")
-                    dict_info_tracks['track_name'] = track_name
-                    dict_info_tracks['artist_name'] = artist_name
-                    # Set all new fields to "No API result" for consistency
-                    list_keys = [
-                        # Track identifiers
-                        'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
-                        'track_href', 'isrc', 'preview_url',
-                        # Track properties
-                        'track_number', 'disc_number', 'track_duration', 'track_popularity', 'explicit', 'is_local',
-                        # Album info
-                        'album_name', 'album_type', 'album_release_date', 'album_release_date_precision',
-                        'album_total_tracks', 'album_spotify_url', 'album_uri',
-                        # Album images
-                        'album_images_json', 'album_artwork_url',
-                        # Audio features
-                        'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
-                        'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
-                    ]
-                    for key in list_keys:
-                        dict_info_tracks[key] = "No API result"
-                    dict_tracks[song_key] = dict_info_tracks
-                else:
-                    track_id = response["tracks"]["items"][0]["id"]
+
+                try:
+                    search_url = "https://api.spotify.com/v1/search"
+                    track_name = song_key.split("/:")[0].strip()
+                    artist_name = song_key.split("/:")[1].strip()
+                    params = {"q": f"{track_name} artist:{artist_name}", "type": "track"}
+                    headers = {"Authorization": "Bearer " + token}
+                    response = requests.get(search_url, params=params, headers=headers)
+
+                    # Check for rate limiting FIRST (before raise_for_status which would throw exception)
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get('Retry-After', 60))
+                        print(f"⚠️  Rate limited by Spotify. Waiting {retry_after} seconds before retry...")
+                        # Save progress before waiting
+                        df_tracks = pd.DataFrame.from_dict(dict_tracks, orient='index').reset_index().rename(columns={'index':'song_key'})
+                        df_tracks.to_csv(self.tracks_work_file, sep='|', index=False)
+                        time.sleep(retry_after)
+                        # Decrement count so we retry this track
+                        count -= 1
+                        continue
+
+                    # Validate response before parsing JSON
+                    if not response.text or response.text.strip() == '':
+                        print(f"⚠️  Empty response for track: {track_name} - {artist_name}, skipping...")
+                        dict_info_tracks['track_name'] = track_name
+                        dict_info_tracks['artist_name'] = artist_name
+                        # Set all new fields to "No API result" for consistency
+                        list_keys = [
+                            # Track identifiers
+                            'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
+                            'track_href', 'isrc', 'preview_url',
+                            # Track properties
+                            'track_number', 'disc_number', 'track_duration', 'track_popularity', 'explicit', 'is_local',
+                            # Album info
+                            'album_name', 'album_type', 'album_release_date', 'album_release_date_precision',
+                            'album_total_tracks', 'album_spotify_url', 'album_uri',
+                            # Album images
+                            'album_images_json', 'album_artwork_url',
+                            # Audio features
+                            'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
+                            'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
+                        ]
+                        for key in list_keys:
+                            dict_info_tracks[key] = "No API result"
+                        dict_tracks[song_key] = dict_info_tracks
+                        continue
+
+                    # Raise for other HTTP errors (4xx, 5xx) - after checking 429
+                    response.raise_for_status()
+
+                    response_json = response.json()
+
+                    # Get the first track from the search results
+                    if not response_json["tracks"]["items"]:
+                        print(f"No API result for {track_name} - {artist_name}")
+                        dict_info_tracks['track_name'] = track_name
+                        dict_info_tracks['artist_name'] = artist_name
+                        # Set all new fields to "No API result" for consistency
+                        list_keys = [
+                            # Track identifiers
+                            'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
+                            'track_href', 'isrc', 'preview_url',
+                            # Track properties
+                            'track_number', 'disc_number', 'track_duration', 'track_popularity', 'explicit', 'is_local',
+                            # Album info
+                            'album_name', 'album_type', 'album_release_date', 'album_release_date_precision',
+                            'album_total_tracks', 'album_spotify_url', 'album_uri',
+                            # Album images
+                            'album_images_json', 'album_artwork_url',
+                            # Audio features
+                            'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
+                            'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
+                        ]
+                        for key in list_keys:
+                            dict_info_tracks[key] = "No API result"
+                        dict_tracks[song_key] = dict_info_tracks
+                        # Add small delay to avoid rate limiting
+                        time.sleep(0.15)
+                        continue
+
+                    # Process successful track search result
+                    track_id = response_json["tracks"]["items"][0]["id"]
                     # Get the track info using the track ID
                     track_url = f"https://api.spotify.com/v1/tracks/{track_id}"
-                    response = requests.get(track_url, headers=headers).json()
+                    response = requests.get(track_url, headers=headers)
+
+                    # Check for rate limiting on track details API call
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get('Retry-After', 60))
+                        print(f"⚠️  Rate limited by Spotify. Waiting {retry_after} seconds before retry...")
+                        # Save progress before waiting
+                        df_tracks = pd.DataFrame.from_dict(dict_tracks, orient='index').reset_index().rename(columns={'index':'song_key'})
+                        df_tracks.to_csv(self.tracks_work_file, sep='|', index=False)
+                        time.sleep(retry_after)
+                        # Decrement count so we retry this track
+                        count -= 1
+                        continue
+
+                    # Validate track details response
+                    if not response.text or response.text.strip() == '':
+                        print(f"⚠️  Empty response for track details: {track_name} - {artist_name}, skipping...")
+                        dict_info_tracks['track_name'] = track_name
+                        dict_info_tracks['artist_name'] = artist_name
+                        list_keys = [
+                            'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
+                            'track_href', 'isrc', 'preview_url', 'track_number', 'disc_number', 'track_duration',
+                            'track_popularity', 'explicit', 'is_local', 'album_name', 'album_type',
+                            'album_release_date', 'album_release_date_precision', 'album_total_tracks',
+                            'album_spotify_url', 'album_uri', 'album_images_json', 'album_artwork_url',
+                            'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
+                            'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
+                        ]
+                        for key in list_keys:
+                            dict_info_tracks[key] = "No API result"
+                        dict_tracks[song_key] = dict_info_tracks
+                        continue
+
+                    response.raise_for_status()
+                    response = response.json()
 
                     # Store ALL Spotify track fields (future-proof)
                     dict_info_tracks['track_name'] = track_name
@@ -504,20 +699,99 @@ class LastFmAPIProcessor:
 
                     # Get audio features
                     track_url = f"https://api.spotify.com/v1/audio-features/{track_id}"
-                    response_track_details = requests.get(track_url, headers=headers).json()
+                    response_track_details = requests.get(track_url, headers=headers)
 
-                    # Store ALL audio features (not just some)
-                    audio_features = ['danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness',
-                                     'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
-                                     'time_signature', 'duration_ms', 'analysis_url']
-                    for feature in audio_features:
-                        if feature in response_track_details:
-                            dict_info_tracks[feature] = response_track_details[feature]
+                    # Check for rate limiting on audio features API call
+                    if response_track_details.status_code == 429:
+                        retry_after = int(response_track_details.headers.get('Retry-After', 60))
+                        print(f"⚠️  Rate limited by Spotify. Waiting {retry_after} seconds before retry...")
+                        # Save progress before waiting
+                        df_tracks = pd.DataFrame.from_dict(dict_tracks, orient='index').reset_index().rename(columns={'index':'song_key'})
+                        df_tracks.to_csv(self.tracks_work_file, sep='|', index=False)
+                        time.sleep(retry_after)
+                        # Decrement count so we retry this track
+                        count -= 1
+                        continue
+
+                    # Validate audio features response
+                    if response_track_details.text and response_track_details.text.strip() != '':
+                        response_track_details.raise_for_status()
+                        response_track_details = response_track_details.json()
+
+                        # Store ALL audio features (not just some)
+                        audio_features = ['danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness',
+                                         'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
+                                         'time_signature', 'duration_ms', 'analysis_url']
+                        for feature in audio_features:
+                            if feature in response_track_details:
+                                dict_info_tracks[feature] = response_track_details[feature]
 
                     dict_tracks[song_key] = dict_info_tracks
+
+                    # Add small delay to avoid rate limiting
+                    time.sleep(0.15)
+
                     if count % 50 == 0:
                         df_tracks = pd.DataFrame.from_dict(dict_tracks, orient='index').reset_index().rename(columns={'index':'song_key'})
                         df_tracks.to_csv(self.tracks_work_file, sep='|', index=False)
+
+                except requests.exceptions.JSONDecodeError as e:
+                    print(f"❌ JSON parsing error for track '{track_name} - {artist_name}'")
+                    print(f"   Error: {e}")
+                    print(f"   Response status: {response.status_code}")
+                    print(f"   Response headers: {dict(response.headers)}")
+                    print(f"   Response body (first 500 chars): {response.text[:500]}")
+                    dict_info_tracks['track_name'] = track_name
+                    dict_info_tracks['artist_name'] = artist_name
+                    list_keys = [
+                        'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
+                        'track_href', 'isrc', 'preview_url', 'track_number', 'disc_number', 'track_duration',
+                        'track_popularity', 'explicit', 'is_local', 'album_name', 'album_type',
+                        'album_release_date', 'album_release_date_precision', 'album_total_tracks',
+                        'album_spotify_url', 'album_uri', 'album_images_json', 'album_artwork_url',
+                        'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
+                        'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
+                    ]
+                    for key in list_keys:
+                        dict_info_tracks[key] = "API Error - JSON Parse Failed"
+                    dict_tracks[song_key] = dict_info_tracks
+                    continue
+
+                except requests.exceptions.RequestException as e:
+                    print(f"❌ Network error for track '{track_name} - {artist_name}': {e}")
+                    dict_info_tracks['track_name'] = track_name
+                    dict_info_tracks['artist_name'] = artist_name
+                    list_keys = [
+                        'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
+                        'track_href', 'isrc', 'preview_url', 'track_number', 'disc_number', 'track_duration',
+                        'track_popularity', 'explicit', 'is_local', 'album_name', 'album_type',
+                        'album_release_date', 'album_release_date_precision', 'album_total_tracks',
+                        'album_spotify_url', 'album_uri', 'album_images_json', 'album_artwork_url',
+                        'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
+                        'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
+                    ]
+                    for key in list_keys:
+                        dict_info_tracks[key] = "Network Error"
+                    dict_tracks[song_key] = dict_info_tracks
+                    continue
+
+                except Exception as e:
+                    print(f"❌ Unexpected error for track '{track_name} - {artist_name}': {e}")
+                    dict_info_tracks['track_name'] = track_name
+                    dict_info_tracks['artist_name'] = artist_name
+                    list_keys = [
+                        'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
+                        'track_href', 'isrc', 'preview_url', 'track_number', 'disc_number', 'track_duration',
+                        'track_popularity', 'explicit', 'is_local', 'album_name', 'album_type',
+                        'album_release_date', 'album_release_date_precision', 'album_total_tracks',
+                        'album_spotify_url', 'album_uri', 'album_images_json', 'album_artwork_url',
+                        'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
+                        'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
+                    ]
+                    for key in list_keys:
+                        dict_info_tracks[key] = "Unknown Error"
+                    dict_tracks[song_key] = dict_info_tracks
+                    continue
         print(f"{count} new tracks were added to the track dictionnary \n")
         df_tracks = pd.DataFrame.from_dict(dict_tracks, orient='index').reset_index().rename(columns={'index':'song_key'})
         df_tracks.to_csv(self.tracks_work_file, sep='|', index=False)

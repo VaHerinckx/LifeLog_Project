@@ -218,6 +218,13 @@ def generate_finance_website_page_files(df):
         # Work with copy to avoid modifying original
         df_web = df.copy()
 
+        # Set category to null for transfer transactions
+        print("🔄 Clearing category for transfer transactions...")
+        transfer_mask = df_web['transaction_type'].isin(['incoming_transfer', 'outgoing_transfer'])
+        transfer_count = transfer_mask.sum()
+        df_web.loc[transfer_mask, 'category'] = pd.NA
+        print(f"   Cleared category for {transfer_count} transfer transactions")
+
         # Enforce snake_case before saving
         df_web = enforce_snake_case(df_web, "finance_page_data")
 
