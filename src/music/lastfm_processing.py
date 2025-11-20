@@ -18,6 +18,7 @@ import requests
 import pandas as pd
 import time
 import os
+import json
 import sys
 import base64
 import math
@@ -32,6 +33,7 @@ sys.path.append(str(project_root))
 
 from utils.drive_operations import upload_multiple_files, verify_drive_connection
 from utils.utils_functions import record_successful_run, enforce_snake_case
+from music.genre_mapping import get_simplified_genre, analyze_unmapped_genres
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,31 +43,31 @@ load_dotenv()
 
 class LastFmAPIProcessor:
     """Handles Last.fm API data processing and incremental updates."""
-    
+
     def __init__(self):
         """Initialize the processor with API credentials from environment variables."""
         # Load LastFM credentials from environment variables
         self.api_key = os.environ.get('LAST_FM_API_KEY')
         self.api_secret = os.environ.get('LAST_FM_API_SECRET')  # Available if needed for write operations
         self.username = os.environ.get('LAST_FM_API_USERNAME')
-        
+
         if not self.api_key:
             raise ValueError("LAST_FM_API_KEY environment variable is required")
         if not self.username:
             raise ValueError("LAST_FM_API_USERNAME environment variable is required")
-            
+
         self.base_url = "http://ws.audioscrobbler.com/2.0/"
-        
+
         # File paths
         self.processed_file_path = "files/processed_files/music/lfm_processed.csv"
         self.spotify_file_path = "files/processed_files/music/spotify_processed.csv"
         self.artists_work_file = "files/work_files/lfm_work_files/artists_infos.csv"
         self.tracks_work_file = "files/work_files/lfm_work_files/tracks_infos.csv"
-        
+
     def get_latest_timestamp_from_file(self):
         """
         Read the existing processed file and return the latest timestamp.
-        
+
         Returns:
             datetime: Latest timestamp from the file, or None if file doesn't exist
         """
@@ -73,11 +75,11 @@ class LastFmAPIProcessor:
             if not os.path.exists(self.processed_file_path):
                 print(f"File {self.processed_file_path} not found. Will fetch all available data.")
                 return None
-                
+
             # Try different encodings to read the file (UTF-8 first as it's the new standard)
             encodings_to_try = ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be']
             df = None
-            
+
             for encoding in encodings_to_try:
                 try:
                     df = pd.read_csv(self.processed_file_path, sep='|', encoding=encoding, low_memory=False)
@@ -89,35 +91,35 @@ class LastFmAPIProcessor:
                     if encoding == encodings_to_try[-1]:  # Last encoding attempt
                         raise e
                     continue
-            
+
             if df is None:
                 raise Exception("Could not read file with any supported encoding")
-            
+
             if df.empty:
                 print("Existing file is empty. Will fetch all available data.")
                 return None
-                
+
             # Convert timestamp column to datetime
             df['timestamp'] = pd.to_datetime(df['timestamp'])
-            
+
             # Get the latest timestamp
             latest_timestamp = df['timestamp'].max()
             print(f"Latest timestamp in existing file: {latest_timestamp}")
-            
+
             return latest_timestamp
-            
+
         except Exception as e:
             print(f"Error reading existing file: {e}")
             print("Will fetch all available data.")
             return None
-    
+
     def fetch_tracks_since_timestamp(self, since_timestamp=None):
         """
         Fetch tracks from Last.fm API since the given timestamp.
-        
+
         Args:
             since_timestamp (datetime): Fetch tracks after this timestamp
-            
+
         Returns:
             list: List of track dictionaries
         """
@@ -131,7 +133,7 @@ class LastFmAPIProcessor:
             print(f"Fetching tracks since: {since_timestamp}")
         else:
             print("Fetching all available tracks (no existing data found)")
-        
+
         while True:
             try:
                 params = {
@@ -142,45 +144,45 @@ class LastFmAPIProcessor:
                     'limit': 200,  # Maximum allowed by API
                     'page': page
                 }
-                
+
                 # Add timestamp filter if provided
                 if since_timestamp:
                     # Convert to Unix timestamp
                     unix_timestamp = int(since_timestamp.timestamp())
                     params['from'] = unix_timestamp
-                
+
                 response = requests.get(self.base_url, params=params)
                 response.raise_for_status()
-                
+
                 data = response.json()
-                
+
                 # Check for API errors
                 if 'error' in data:
                     print(f"API Error: {data['message']}")
                     break
-                
+
                 # Check if we have track data
                 if 'recenttracks' not in data or 'track' not in data['recenttracks']:
                     print("No track data found in API response")
                     break
-                
+
                 tracks = data['recenttracks']['track']
                 attr = data['recenttracks']['@attr']
-                
+
                 # Get total pages from first response
                 if total_pages is None:
                     total_pages = int(attr['totalPages'])
                     total_tracks = int(attr['total'])
                     print(f"Total tracks to fetch: {total_tracks} across {total_pages} pages")
-                
+
                 # If no tracks on this page, we're done
                 if not tracks:
                     break
-                
+
                 # Handle case where only one track is returned (not a list)
                 if isinstance(tracks, dict):
                     tracks = [tracks]
-                
+
                 # Filter out currently playing tracks (they have no timestamp)
                 valid_tracks = []
                 for track in tracks:
@@ -192,42 +194,42 @@ class LastFmAPIProcessor:
                         if track_name not in printed_currently_playing:
                             print(f"Skipping currently playing track: {track_name}")
                             printed_currently_playing.add(track_name)
-                
+
                 all_tracks.extend(valid_tracks)
-                
+
                 print(f"Fetched page {page}/{total_pages} ({len(valid_tracks)} tracks)")
-                
+
                 # Check if we've reached the end
                 if page >= total_pages:
                     break
-                
+
                 page += 1
-                
+
                 # Be nice to the API - small delay between requests
                 time.sleep(0.2)
-                
+
             except requests.exceptions.RequestException as e:
                 print(f"Network error on page {page}: {e}")
                 break
             except Exception as e:
                 print(f"Error processing page {page}: {e}")
                 break
-        
+
         print(f"Successfully fetched {len(all_tracks)} new tracks")
         return all_tracks
-    
+
     def parse_api_tracks_to_dataframe(self, tracks):
         """
         Parse raw API track data into a DataFrame with the basic structure.
-        
+
         Args:
             tracks (list): List of track dictionaries from API
-            
+
         Returns:
             pandas.DataFrame: Parsed track data in basic format
         """
         parsed_tracks = []
-        
+
         for track in tracks:
             try:
                 # Extract basic track information
@@ -237,13 +239,13 @@ class LastFmAPIProcessor:
                     'track_name': track['name'],
                     'timestamp': datetime.fromtimestamp(int(track['date']['uts']))
                 }
-                
+
                 parsed_tracks.append(track_data)
-                
+
             except Exception as e:
                 print(f"Error parsing track {track.get('name', 'Unknown')}: {e}")
                 continue
-        
+
         df = pd.DataFrame(parsed_tracks)
         return df
 
@@ -254,17 +256,17 @@ class LastFmAPIProcessor:
         if not os.path.exists(self.spotify_file_path):
             print("⚠️  Spotify legacy file not found, proceeding without merging")
             return df
-            
+
         df_spot = pd.read_csv(self.spotify_file_path, sep="|")
         df_spot['timestamp'] = pd.to_datetime(df_spot['timestamp'], utc=True)
-        
+
         # Convert to timezone-naive for consistency
         df_spot['timestamp'] = df_spot['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-        
+
         # Ensure both DataFrames have timezone-naive timestamps
         if hasattr(df['timestamp'].dtype, 'tz') and df['timestamp'].dtype.tz is not None:
             df['timestamp'] = df['timestamp'].dt.tz_convert('UTC').dt.tz_localize(None)
-        
+
         max_timestamp = df_spot["timestamp"].max()
         filtered_df = df[df["timestamp"] > max_timestamp]
         concat_df = pd.concat([df_spot, filtered_df], ignore_index=True)
@@ -317,13 +319,13 @@ class LastFmAPIProcessor:
         """Retrieves information about the artist genre, followers, popularity, etc."""
         # Ensure work directory exists
         os.makedirs(os.path.dirname(self.artists_work_file), exist_ok=True)
-        
+
         # Initialize or load existing artist data
         if os.path.exists(self.artists_work_file):
             artist_df = pd.read_csv(self.artists_work_file, sep='|')
         else:
             artist_df = pd.DataFrame(columns=['artist_name'])
-            
+
         count = 0
         dict_artists = {}
         for _, row in artist_df.iterrows():
@@ -331,7 +333,7 @@ class LastFmAPIProcessor:
             for col in list(artist_df.columns)[1:]:
                 dict_info_artists[col] = row[col]
             dict_artists[row['artist_name']] = dict_info_artists
-            
+
         for artist_name in artist_names:
             if str(artist_name) in dict_artists.keys():
                 pass
@@ -352,12 +354,36 @@ class LastFmAPIProcessor:
                 endpoint_url = f'https://api.spotify.com/v1/artists/{artist_id}'
                 response = requests.get(endpoint_url, headers=headers)
                 artist_info = response.json()
-                dict_info_artists['followers'] = artist_info['followers']['total']
-                dict_info_artists['artist_popularity'] = artist_info['popularity']
-                for i in range(len(artist_info['genres'])):
-                    dict_info_artists[f'genre_{i+1}'] = artist_info['genres'][i]
-                # Extract artist artwork URL (largest image)
-                dict_info_artists['artist_artwork_url'] = artist_info['images'][0]['url'] if artist_info.get('images') else None
+
+                # Store ALL Spotify artist fields (future-proof)
+                dict_info_artists['spotify_id'] = artist_info.get('id')
+                dict_info_artists['spotify_url'] = artist_info.get('external_urls', {}).get('spotify')
+                dict_info_artists['artist_type'] = artist_info.get('type')
+                dict_info_artists['spotify_uri'] = artist_info.get('uri')
+                dict_info_artists['href'] = artist_info.get('href')
+
+                # Followers (keep original column name for backward compatibility)
+                dict_info_artists['followers'] = artist_info.get('followers', {}).get('total')
+                dict_info_artists['followers_total'] = artist_info.get('followers', {}).get('total')
+
+                # Popularity (keep both names for backward compatibility)
+                dict_info_artists['artist_popularity'] = artist_info.get('popularity')
+                dict_info_artists['popularity'] = artist_info.get('popularity')
+
+                # Genres - store as both individual columns AND JSON array
+                genres = artist_info.get('genres', [])
+                dict_info_artists['genres_json'] = json.dumps(genres)
+                for i in range(len(genres[:14])):  # Keep first 14 for backward compatibility
+                    dict_info_artists[f'genre_{i+1}'] = genres[i]
+
+                # Images - store as JSON array AND flattened by size
+                images = artist_info.get('images', [])
+                dict_info_artists['images_json'] = json.dumps(images)
+                dict_info_artists['artist_artwork_url'] = images[0].get('url') if images else None  # Backward compat
+                for idx, img in enumerate(images[:3]):  # Store up to 3 image sizes
+                    size = img.get('height', f'size{idx}')
+                    dict_info_artists[f'artist_artwork_{size}'] = img.get('url')
+
                 dict_artists[artist_name] = dict_info_artists
                 df_artist = pd.DataFrame.from_dict(dict_artists, orient='index').reset_index().rename(columns={'index':'artist_name'})
                 df_artist.to_csv(self.artists_work_file, sep='|', index=False)
@@ -372,13 +398,13 @@ class LastFmAPIProcessor:
         """
         # Ensure work directory exists
         os.makedirs(os.path.dirname(self.tracks_work_file), exist_ok=True)
-        
+
         # Initialize or load existing track data
         if os.path.exists(self.tracks_work_file):
             track_df = pd.read_csv(self.tracks_work_file, sep='|')
         else:
             track_df = pd.DataFrame(columns=['song_key'])
-            
+
         count = 0
         # Rebuilding the dictionnary
         dict_tracks = {}
@@ -412,9 +438,22 @@ class LastFmAPIProcessor:
                     print(f"No API result for {track_name} - {artist_name}")
                     dict_info_tracks['track_name'] = track_name
                     dict_info_tracks['artist_name'] = artist_name
-                    list_keys = ['album_name', 'album_release_date', 'track_duration', 'track_popularity', \
-                                 'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',\
-                                 'instrumentalness', 'liveness', 'valence', 'tempo', 'album_artwork_url']
+                    # Set all new fields to "No API result" for consistency
+                    list_keys = [
+                        # Track identifiers
+                        'spotify_track_id', 'spotify_album_id', 'spotify_track_url', 'spotify_track_uri',
+                        'track_href', 'isrc', 'preview_url',
+                        # Track properties
+                        'track_number', 'disc_number', 'track_duration', 'track_popularity', 'explicit', 'is_local',
+                        # Album info
+                        'album_name', 'album_type', 'album_release_date', 'album_release_date_precision',
+                        'album_total_tracks', 'album_spotify_url', 'album_uri',
+                        # Album images
+                        'album_images_json', 'album_artwork_url',
+                        # Audio features
+                        'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness', 'acousticness',
+                        'instrumentalness', 'liveness', 'valence', 'tempo', 'time_signature', 'analysis_url'
+                    ]
                     for key in list_keys:
                         dict_info_tracks[key] = "No API result"
                     dict_tracks[song_key] = dict_info_tracks
@@ -423,20 +462,58 @@ class LastFmAPIProcessor:
                     # Get the track info using the track ID
                     track_url = f"https://api.spotify.com/v1/tracks/{track_id}"
                     response = requests.get(track_url, headers=headers).json()
+
+                    # Store ALL Spotify track fields (future-proof)
                     dict_info_tracks['track_name'] = track_name
                     dict_info_tracks['artist_name'] = artist_name
-                    dict_info_tracks['album_name'] = response['album']['name']
-                    dict_info_tracks['album_release_date'] = response['album']['release_date']
-                    dict_info_tracks['track_duration'] = response['duration_ms']
-                    dict_info_tracks['track_popularity'] = response['popularity']
-                    # Extract album artwork URL (largest image)
-                    dict_info_tracks['album_artwork_url'] = response['album']['images'][0]['url'] if response['album'].get('images') else None
+
+                    # Track identifiers and metadata
+                    dict_info_tracks['spotify_track_id'] = response.get('id')
+                    dict_info_tracks['spotify_album_id'] = response.get('album', {}).get('id')
+                    dict_info_tracks['spotify_track_url'] = response.get('external_urls', {}).get('spotify')
+                    dict_info_tracks['spotify_track_uri'] = response.get('uri')
+                    dict_info_tracks['track_href'] = response.get('href')
+                    dict_info_tracks['isrc'] = response.get('external_ids', {}).get('isrc')
+                    dict_info_tracks['preview_url'] = response.get('preview_url')
+
+                    # Track properties
+                    dict_info_tracks['track_number'] = response.get('track_number')
+                    dict_info_tracks['disc_number'] = response.get('disc_number')
+                    dict_info_tracks['track_duration'] = response.get('duration_ms')
+                    dict_info_tracks['track_popularity'] = response.get('popularity')
+                    dict_info_tracks['explicit'] = response.get('explicit')
+                    dict_info_tracks['is_local'] = response.get('is_local')
+
+                    # Album information
+                    album = response.get('album', {})
+                    dict_info_tracks['album_name'] = album.get('name')
+                    dict_info_tracks['album_type'] = album.get('album_type')
+                    dict_info_tracks['album_release_date'] = album.get('release_date')
+                    dict_info_tracks['album_release_date_precision'] = album.get('release_date_precision')
+                    dict_info_tracks['album_total_tracks'] = album.get('total_tracks')
+                    dict_info_tracks['album_spotify_url'] = album.get('external_urls', {}).get('spotify')
+                    dict_info_tracks['album_uri'] = album.get('uri')
+
+                    # Album images - store as JSON array AND flattened by size
+                    album_images = album.get('images', [])
+                    dict_info_tracks['album_images_json'] = json.dumps(album_images)
+                    dict_info_tracks['album_artwork_url'] = album_images[0].get('url') if album_images else None  # Backward compat
+                    for idx, img in enumerate(album_images[:3]):  # Store up to 3 image sizes
+                        size = img.get('height', f'size{idx}')
+                        dict_info_tracks[f'album_artwork_{size}'] = img.get('url')
+
+                    # Get audio features
                     track_url = f"https://api.spotify.com/v1/audio-features/{track_id}"
                     response_track_details = requests.get(track_url, headers=headers).json()
-                    for info in response_track_details.keys():
-                        if info == 'type':
-                            break
-                        dict_info_tracks[info] = response_track_details[info]
+
+                    # Store ALL audio features (not just some)
+                    audio_features = ['danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness',
+                                     'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
+                                     'time_signature', 'duration_ms', 'analysis_url']
+                    for feature in audio_features:
+                        if feature in response_track_details:
+                            dict_info_tracks[feature] = response_track_details[feature]
+
                     dict_tracks[song_key] = dict_info_tracks
                     if count % 50 == 0:
                         df_tracks = pd.DataFrame.from_dict(dict_tracks, orient='index').reset_index().rename(columns={'index':'song_key'})
@@ -454,19 +531,76 @@ class LastFmAPIProcessor:
         df_merge_artist_track = pd.merge(df_merge_artist, track_df[cols_to_use], how='left', on='song_key')
         return df_merge_artist_track
 
+    def select_output_columns(self, df):
+        """
+        Select only the columns needed for final output from the full work file data.
+        This allows work files to store ALL API fields while keeping output files clean.
+
+        Work files contain ~60+ columns (all Spotify API fields).
+        Output files contain ~30-35 columns (only what's needed for website/analysis).
+
+        Args:
+            df (pandas.DataFrame): Merged dataframe with all columns from work files
+
+        Returns:
+            pandas.DataFrame: Dataframe with only output columns
+        """
+        # Define columns needed for processed output file
+        output_columns = [
+            # Core identifiers
+            'timestamp', 'song_key', 'artist_name', 'album_name', 'track_name',
+
+            # Album metadata
+            'album_release_date', 'album_type',
+
+            # Artist metadata
+            'followers', 'followers_total', 'artist_popularity', 'popularity',
+
+            # Genres (keep first 14 for display, plus JSON for future use)
+            'genre_1', 'genre_2', 'genre_3', 'genre_4', 'genre_5', 'genre_6',
+            'genre_7', 'genre_8', 'genre_9', 'genre_10', 'genre_11', 'genre_12',
+            'genre_13', 'genre_14', 'genres_json',
+
+            # Track metadata
+            'track_duration', 'track_popularity', 'track_number', 'explicit',
+
+            # Audio features
+            'danceability', 'energy', 'key', 'loudness', 'mode', 'speechiness',
+            'acousticness', 'instrumentalness', 'liveness', 'valence', 'tempo',
+
+            # Artwork URLs
+            'album_artwork_url', 'artist_artwork_url',
+
+            # Listening behavior (calculated fields)
+            'completion', 'skip_next_track',
+
+            # Discovery flags
+            'new_artist_yn', 'new_track_yn', 'new_recurring_artist_yn', 'new_recurring_track_yn'
+        ]
+
+        # Keep only columns that exist in the dataframe
+        existing_output_columns = [col for col in output_columns if col in df.columns]
+
+        # Log how many columns are being filtered out
+        removed_count = len(df.columns) - len(existing_output_columns)
+        if removed_count > 0:
+            print(f"📊 Filtered output: keeping {len(existing_output_columns)} columns, removing {removed_count} work-file-only columns")
+
+        return df[existing_output_columns]
+
     def power_bi_processing(self, df):
         """Changes some results for better display in PBI"""
         df['genre_1'].fillna('Unknown')
         df['track_duration'] = df['track_duration'].replace('No API result', '0').astype(float)
         return df
-    
+
     def merge_and_deduplicate(self, new_data_df):
         """
         Merge new data with existing data and remove duplicates.
-        
+
         Args:
             new_data_df (pandas.DataFrame): New track data
-            
+
         Returns:
             pandas.DataFrame: Merged and deduplicated data
         """
@@ -476,7 +610,7 @@ class LastFmAPIProcessor:
                 # Try different encodings to read the file (UTF-8 first as it's the new standard)
                 encodings_to_try = ['utf-8', 'utf-16', 'utf-16-le', 'utf-16-be']
                 existing_df = None
-                
+
                 for encoding in encodings_to_try:
                     try:
                         existing_df = pd.read_csv(self.processed_file_path, sep='|', encoding=encoding, low_memory=False)
@@ -487,48 +621,48 @@ class LastFmAPIProcessor:
                         if encoding == encodings_to_try[-1]:  # Last encoding attempt
                             raise e
                         continue
-                
+
                 if existing_df is None:
                     raise Exception("Could not read existing file with any supported encoding")
-                    
+
                 existing_df['timestamp'] = pd.to_datetime(existing_df['timestamp'])
                 print(f"Loaded {len(existing_df)} existing tracks")
             else:
                 existing_df = pd.DataFrame()
                 print("No existing data file found")
-            
+
             if new_data_df.empty:
                 print("No new data to merge")
                 return existing_df
-            
+
             print(f"Merging {len(new_data_df)} new tracks")
-            
+
             # Combine dataframes
             if not existing_df.empty:
                 combined_df = pd.concat([existing_df, new_data_df], ignore_index=True)
             else:
                 combined_df = new_data_df.copy()
-            
+
             # Remove duplicates based on song_key and timestamp
             # Keep the first occurrence (existing data takes precedence)
             initial_count = len(combined_df)
             combined_df = combined_df.drop_duplicates(subset=['song_key', 'timestamp'], keep='first')
             final_count = len(combined_df)
-            
+
             duplicates_removed = initial_count - final_count
             if duplicates_removed > 0:
                 print(f"Removed {duplicates_removed} duplicate tracks")
-            
+
             # Sort by timestamp (newest first, matching your existing file structure)
             combined_df = combined_df.sort_values('timestamp', ascending=False)
-            
+
             print(f"Final dataset contains {len(combined_df)} tracks")
             return combined_df
-            
+
         except Exception as e:
             print(f"Error merging data: {e}")
             return new_data_df
-    
+
     def save_data(self, df):
         """
         Save the processed data to the CSV file.
@@ -596,6 +730,14 @@ class LastFmAPIProcessor:
             )
             print(f"✅ Combined genres from genre_1-14 into single column (comma-separated)")
 
+            # Add simplified_genre column using genre_1
+            df_web['simplified_genre'] = df_web['genre_1'].apply(get_simplified_genre)
+            print(f"✅ Created simplified_genre from genre_1 using genre mapping")
+
+            # Optionally run analysis to show unmapped genres
+            # Uncomment to see which genres need mapping:
+            # analyze_unmapped_genres(df_web, top_n=20)
+
             # Select columns for website file
             website_columns = [
                 'toggle_id',
@@ -607,6 +749,8 @@ class LastFmAPIProcessor:
                 'album_release_date',
                 'followers',
                 'artist_popularity',
+                'genre_1',
+                'simplified_genre',
                 'genres',
                 'track_duration',
                 'track_popularity',
@@ -648,86 +792,90 @@ class LastFmAPIProcessor:
         """
         Apply the complete processing pipeline to new data from the API.
         This replicates the processing logic from create_lastfm_file().
-        
+
         Args:
             raw_df (pandas.DataFrame): Raw data from Last.fm API
-            
+
         Returns:
             pandas.DataFrame: Fully processed data
         """
         if raw_df.empty:
             print("No new data to process")
             return raw_df
-            
+
         print("🚀 Processing new Last.fm data with full pipeline...")
-        
+
         # Apply timezone correction
         print("🕐 Converting timestamps...")
         raw_df['timestamp'] = pd.to_datetime(raw_df['timestamp'])
-        
+
         # Add Spotify legacy data if available
         if os.path.exists(self.spotify_file_path):
             print("🎧 Merging with Spotify legacy data...")
             raw_df = self.add_spotify_legacy(raw_df)
         else:
             print("⚠️  Spotify legacy file not found, proceeding without merging")
-        
+
         # Get Spotify API credentials
         client_id = os.environ.get('Spotify_API_Client_ID')
         client_secret = os.environ.get('Spotify_API_Client_Secret')
-        
+
         if not client_id or not client_secret:
             print("❌ Spotify API credentials not found in environment variables")
             print("Proceeding with basic Last.fm data only...")
             # Return basic data without Spotify enrichment
             raw_df['song_key'] = (raw_df['track_name'] + " /: " + raw_df['artist_name']).replace(np.nan, '')
             return raw_df
-        
+
         # Authenticate with Spotify API
         print("🔐 Authenticating with Spotify API...")
         token = self.authentification(client_id, client_secret)
-        
+
         # Prepare data for API calls
         unique_artists = list(raw_df.artist_name.astype(str).replace("nan", "nan_").unique())
         raw_df['song_key'] = (raw_df['track_name'] + " /: " + raw_df['artist_name']).replace(np.nan, '')
         unique_tracks = list(raw_df.song_key.astype(str).unique())
-        
+
         # Get artist information from Spotify API
         print("🎤 Gathering artist information from Spotify API...")
         artist_df = self.artist_info(token, unique_artists)
-        
-        # Get track information from Spotify API  
+
+        # Get track information from Spotify API
         print("🎶 Gathering track information from Spotify API...")
         track_df = self.track_info(token, unique_tracks)
-        
+
         # Merge all data together
         print("🔄 Merging data...")
         processed_df = self.merge_dfs(raw_df, artist_df, track_df)
+
+        # Select only output columns (reduces from ~60 work file columns to ~35 output columns)
+        processed_df = self.select_output_columns(processed_df)
+
         processed_df = self.power_bi_processing(processed_df)
-        
+
         # Calculate listening statistics
         print("📊 Calculating listening statistics...")
         processed_df['timestamp'] = pd.to_datetime(processed_df['timestamp'])
         processed_df.sort_values('timestamp', ascending=True, inplace=True)
-        
+
         # Add new artist/track flags
         processed_df['new_artist_yn'] = processed_df.groupby('artist_name').cumcount() == 0
         processed_df['new_recurring_artist_yn'] = processed_df.groupby('artist_name').cumcount() == 10
         processed_df['new_track_yn'] = processed_df.groupby('track_name').cumcount() == 0
         processed_df['new_recurring_track_yn'] = processed_df.groupby('track_name').cumcount() == 5
-        
+
         # Convert boolean flags to integers
         processed_df['new_artist_yn'] = processed_df['new_artist_yn'].astype(int)
         processed_df['new_recurring_artist_yn'] = processed_df['new_recurring_artist_yn'].astype(int)
         processed_df['new_track_yn'] = processed_df['new_track_yn'].astype(int)
         processed_df['new_recurring_track_yn'] = processed_df['new_recurring_track_yn'].astype(int)
-        
+
         # Sort by timestamp descending and compute completion
         processed_df.sort_values('timestamp', ascending=False, inplace=True)
         processed_df = self.compute_completion(processed_df.reset_index(drop=True))
-        
+
         return processed_df
-    
+
     def process_incremental_update(self):
         """
         Main method to perform incremental update of Last.fm data with full pipeline processing.
@@ -924,17 +1072,17 @@ def main():
 
         # Run the pipeline (interactive mode)
         success = full_lfm_pipeline(auto_full=False)
-        
+
         if success:
             print("\n🎉 All done! Your Last.fm data has been updated.")
         else:
             print("\n❌ Pipeline failed. Check the output above for details.")
             return 1
-        
+
     except Exception as e:
         print(f"Fatal error: {e}")
         return 1
-    
+
     return 0
 
 
