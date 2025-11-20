@@ -412,11 +412,11 @@ def time_difference_correction(df: pd.DataFrame, timestamp_column: str, source_t
         # Simple fallback: just return the UTC timestamps (since source is GMT/UTC, no adjustment needed)
         print("🌍 Using simple timezone conversion (no location-based adjustments)")
         result_df[timestamp_column] = result_df['temp_utc_timestamp']
-        
+
         # Clean up temporary columns
         temp_columns = [col for col in result_df.columns if col.startswith('temp_')]
         result_df = result_df.drop(columns=temp_columns)
-        
+
         print(f"✅ Successfully converted {len(result_df)} timestamps")
         return result_df
 
@@ -590,25 +590,25 @@ def clean_rename_move_file(export_folder, download_folder, file_name, new_file_n
 def record_successful_run(source_name: str, pipeline_type: str = 'active'):
     """
     Record a successful pipeline run for a data source.
-    
+
     Args:
         source_name (str): Name of the data source (e.g., 'music_lastfm', 'books_goodreads')
         pipeline_type (str): Type of pipeline ('active', 'coordination', 'legacy', 'inactive')
     """
     tracking_file = 'files/tracking/last_successful_runs.csv'
     current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
+
     try:
         # Ensure the tracking directory exists
         os.makedirs(os.path.dirname(tracking_file), exist_ok=True)
-        
+
         # Read existing tracking data
         if os.path.exists(tracking_file):
             df = pd.read_csv(tracking_file, sep=',')
         else:
             # Create new tracking file if it doesn't exist
             df = pd.DataFrame(columns=['source_name', 'last_successful_run', 'status', 'pipeline_type'])
-        
+
         # Check if source already exists
         if source_name in df['source_name'].values:
             # Update existing record
@@ -626,10 +626,10 @@ def record_successful_run(source_name: str, pipeline_type: str = 'active'):
             }
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
             print(f"📈 Added new tracking for {source_name}: {current_timestamp}")
-        
+
         # Save updated tracking file
         df.to_csv(tracking_file, sep=',', index=False, encoding='utf-8')
-        
+
     except Exception as e:
         print(f"⚠️  Warning: Could not update tracking file: {e}")
         # Don't fail the pipeline if tracking fails
@@ -638,12 +638,12 @@ def record_successful_run(source_name: str, pipeline_type: str = 'active'):
 def get_last_successful_runs():
     """
     Get the tracking data for all data sources.
-    
+
     Returns:
         pd.DataFrame: DataFrame with tracking information, or empty DataFrame if file doesn't exist
     """
     tracking_file = 'files/tracking/last_successful_runs.csv'
-    
+
     try:
         if os.path.exists(tracking_file):
             return pd.read_csv(tracking_file, sep=',')
@@ -660,14 +660,14 @@ def display_tracking_summary():
     Display a summary of all data source tracking information.
     """
     df = get_last_successful_runs()
-    
+
     if df.empty:
         print("📊 No tracking data available")
         return
-    
+
     print("\n📊 DATA SOURCE TRACKING SUMMARY")
     print("=" * 50)
-    
+
     # Group by pipeline type
     for pipeline_type in ['active', 'coordination', 'legacy', 'inactive']:
         sources = df[df['pipeline_type'] == pipeline_type]
@@ -695,7 +695,7 @@ def display_tracking_summary():
                     except:
                         status_icon = "❓"
                         last_run_str = "Invalid date"
-                
+
                 print(f"  {status_icon} {row['source_name']:<20} | {last_run_str}")
 
     print("=" * 50)
@@ -723,14 +723,6 @@ def enforce_snake_case(df, context=""):
         # Remove duplicate underscores
         snake_col = '_'.join(filter(None, snake_col.split('_')))
         new_columns.append(snake_col)
-
-    # Check if any changes were made
-    changes = [(orig, new) for orig, new in zip(original_columns, new_columns) if orig != new]
-
-    if changes:
-        print(f"🔄 Converting to snake_case for {context}:")
-        for orig, new in changes:
-            print(f"   '{orig}' → '{new}'")
 
     df.columns = new_columns
     return df

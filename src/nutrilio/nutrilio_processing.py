@@ -68,6 +68,9 @@ dict_kcal = {
     'Sweets': {'A little': 10, 'Medium': 20, 'A lot': 30}
 }
 
+# Valid meal types for validation
+VALID_MEAL_TYPES = ["Breakfast", "Morning snack", "Lunch", "Afternoon snack", "Dinner", "Night snack"]
+
 
 def generate_calory_needs(config=None):
     """
@@ -317,8 +320,19 @@ def add_usda_drink_scoring_efficient(df, use_usda_scoring=True):
 # Historical scores are preserved in JSON format
 # USDA-based scoring available as optional alternative (see add_usda_meal_scoring function)
 
-def extract_data_count(df):
-    """Retrieves the number of time each ingredient was eaten"""
+def extract_data_count(df, invalid_meals_list=None):
+    """Retrieves the number of time each ingredient was eaten
+
+    Args:
+        df: DataFrame with nutrilio data
+        invalid_meals_list: Optional list to collect invalid meal entries
+
+    Returns:
+        tuple: (df, list_col, invalid_meals_list)
+    """
+    if invalid_meals_list is None:
+        invalid_meals_list = []
+
     pattern = r'([\w ]+) \((\d+)x\)'
     list_col = []
     for column, indicator in dict_extract_data.items():
@@ -332,6 +346,15 @@ def extract_data_count(df):
                 start_point +=1
                 meal = matches[0][0].strip()
                 df.loc[index, "meal"] = meal
+
+                # Validate meal type
+                if meal not in VALID_MEAL_TYPES:
+                    invalid_entry = {
+                        'date': row.get('Full Date', row.get('date', 'Unknown')),
+                        'time': row.get('Time', 'Unknown'),
+                        'meal': meal
+                    }
+                    invalid_meals_list.append(invalid_entry)
             for match in matches[start_point:]:
                 word = match[0].strip()
                 value = int(match[1])
@@ -340,7 +363,7 @@ def extract_data_count(df):
                 list_elements.append(word)
             df.loc[index, f"{indicator}_list"] = str(list_elements)[1:-1]
         df.drop(column, axis = 1, inplace = True)
-    return df, list_col
+    return df, list_col, invalid_meals_list
 
 def extract_data(column):
     if column != column:
@@ -419,6 +442,41 @@ def generate_pbi_files(df, indicator):
     melted_df.sort_values("date", ascending = False).to_csv(f"files/processed_files/nutrilio/nutrilio_{indicator}_pbi_processed_file.csv", sep = '|', index = False, encoding='utf-8')
     # Note: Drink scoring is now handled automatically in the main pipeline via USDA scoring
 
+def display_meal_validation_report(invalid_meals_list):
+    """
+    Display a formatted report of invalid meal entries.
+
+    Args:
+        invalid_meals_list: List of dicts with 'date', 'time', 'meal' keys
+    """
+    if not invalid_meals_list:
+        print("✅ All meal types are valid!")
+        return
+
+    print("\n" + "="*70)
+    print("⚠️  MEAL VALIDATION REPORT")
+    print("="*70)
+    print(f"\nFound {len(invalid_meals_list)} meal(s) with invalid meal types.")
+    print(f"Valid meal types: {', '.join(VALID_MEAL_TYPES)}")
+    print("\nPlease add the correct meal type tag in the Nutrilio app for:")
+    print("\n" + "-"*70)
+    print(f"{'Date':<12} {'Time':<8} {'Invalid Meal Type':<40}")
+    print("-"*70)
+
+    # Sort by date descending (most recent first)
+    sorted_meals = sorted(invalid_meals_list, key=lambda x: (x['date'], x['time']), reverse=True)
+
+    for entry in sorted_meals:
+        date_str = str(entry['date'])[:10] if entry['date'] != 'Unknown' else 'Unknown'
+        time_str = str(entry['time'])[:5] if entry['time'] != 'Unknown' else 'Unknown'
+        meal_str = str(entry['meal'])[:40]
+        print(f"{date_str:<12} {time_str:<8} {meal_str:<40}")
+
+    print("-"*70)
+    print(f"\n💡 Action required: Open Nutrilio app and add meal type tags for these {len(invalid_meals_list)} entries")
+    print("="*70 + "\n")
+
+
 def create_optimized_nutrition_file(df):
     """Create optimized nutrition-only CSV for faster frontend performance"""
     print("Creating optimized nutrition file...")
@@ -485,8 +543,12 @@ def create_nutrilio_files():
     #Remove quantity when unnecessary
     for col in col_unnecessary_qty:
         df[col] = df[col].apply(lambda x: extract_data(x))
-    #Extract all values & quantities
-    df, list_col = extract_data_count(df)
+
+    # Initialize invalid meals tracking
+    invalid_meals_list = []
+
+    #Extract all values & quantities (with meal validation)
+    df, list_col, invalid_meals_list = extract_data_count(df, invalid_meals_list)
 
     # Rename columns to follow snake_case standards BEFORE enforce_snake_case
     rename_dict = {}
@@ -560,13 +622,138 @@ def create_nutrilio_files():
     # Generate website files for Nutrition page
     generate_nutrition_website_page_files(df)
 
+    # Display meal validation report
+    display_meal_validation_report(invalid_meals_list)
+
     print(f"✅ Processing complete! Generated {len(drive_list)} files.")
     return drive_list
+
+
+def remove_meal_type_from_food_list(df_web):
+    """
+    Remove meal type identifiers from the beginning of food_list column.
+
+    Removes the first item if it matches meal types: Breakfast, Morning Snack,
+    Lunch, Afternoon Snack, Dinner, Night Snack (case-insensitive).
+
+    Args:
+        df_web: DataFrame with food_list column
+
+    Returns:
+        DataFrame with cleaned food_list column
+    """
+    import re
+
+    meal_types = [
+        'breakfast', 'morning snack', 'lunch',
+        'afternoon snack', 'dinner', 'night snack'
+    ]
+
+    for index, row in df_web.iterrows():
+        if pd.notna(row.get('food_list')) and row['food_list']:
+            # Extract first item before the first pipe
+            first_item_match = re.match(r'^([^|]+)(\s*\|(.*))?$', row['food_list'])
+
+            if first_item_match:
+                first_item = first_item_match.group(1).strip()
+                remaining = first_item_match.group(3)  # Everything after first pipe
+
+                # Extract just the name without quantity
+                name_match = re.match(r'(.+?)\s*\(\d+x\)', first_item)
+                if name_match:
+                    item_name = name_match.group(1).strip().lower()
+
+                    # Check if it's a meal type
+                    if item_name in meal_types:
+                        # Remove the first item
+                        if remaining:
+                            df_web.loc[index, 'food_list'] = remaining.strip()
+                        else:
+                            df_web.loc[index, 'food_list'] = ''
+
+    return df_web
+
+
+def explode_food_and_drinks(df_web):
+    """
+    Explode food_list and drinks_list into individual rows with separate columns.
+
+    For each meal, creates multiple rows (one per ingredient/drink, using max count).
+    Parses items like "Dinner (1x) | Potatoes (2x)" into individual food/drink and quantity columns.
+
+    Args:
+        df_web: DataFrame with food_list and drinks_list columns
+
+    Returns:
+        DataFrame with food, food_quantity, drink, drink_quantity columns added
+    """
+    import re
+
+    result_rows = []
+    pattern = r'([^|]+)\s*\((\d+)x\)'
+
+    for _, row in df_web.iterrows():
+        # Parse food_list
+        food_items = []
+        food_quantities = []
+        if pd.notna(row.get('food_list')) and row['food_list']:
+            matches = re.findall(pattern, row['food_list'])
+            for item, qty in matches:
+                food_items.append(item.strip())
+                food_quantities.append(int(qty))
+
+        # Parse drinks_list
+        drink_items = []
+        drink_quantities = []
+        if pd.notna(row.get('drinks_list')) and row['drinks_list']:
+            matches = re.findall(pattern, row['drinks_list'])
+            for item, qty in matches:
+                drink_items.append(item.strip())
+                drink_quantities.append(int(qty))
+
+        # Determine number of rows to create (max of food and drink counts)
+        max_items = max(len(food_items), len(drink_items))
+
+        # If no items found, keep original row with empty food/drink columns
+        if max_items == 0:
+            new_row = row.to_dict()
+            new_row['food'] = ''
+            new_row['food_quantity'] = None
+            new_row['drink'] = ''
+            new_row['drink_quantity'] = None
+            result_rows.append(new_row)
+        else:
+            # Create one row per item
+            for i in range(max_items):
+                new_row = row.to_dict()
+
+                # Add food and quantity (or empty if index exceeds food items)
+                if i < len(food_items):
+                    new_row['food'] = food_items[i]
+                    new_row['food_quantity'] = food_quantities[i]
+                else:
+                    new_row['food'] = ''
+                    new_row['food_quantity'] = None
+
+                # Add drink and quantity (or empty if index exceeds drink items)
+                if i < len(drink_items):
+                    new_row['drink'] = drink_items[i]
+                    new_row['drink_quantity'] = drink_quantities[i]
+                else:
+                    new_row['drink'] = ''
+                    new_row['drink_quantity'] = None
+
+                result_rows.append(new_row)
+
+    return pd.DataFrame(result_rows)
 
 
 def generate_nutrition_website_page_files(df):
     """
     Generate website-optimized files for the Nutrition page.
+    Creates TWO files following Reading page pattern:
+    1. Meals file (grouped, for display and meal-level filtering)
+    2. Items file (exploded, for ingredient-level filtering)
 
     Args:
         df: Processed dataframe (already in snake_case)
@@ -574,7 +761,7 @@ def generate_nutrition_website_page_files(df):
     Returns:
         bool: True if successful, False otherwise
     """
-    print("\n🌐 Generating website files for Nutrition page...")
+    print("\n🌐 Generating website files for Nutrition page (dual-file strategy)...")
 
     try:
         # Ensure output directory exists
@@ -605,16 +792,39 @@ def generate_nutrition_website_page_files(df):
             'drinks_keep': 'drinks_list'
         }, inplace=True)
 
-        # Add meal_id as sequential integer starting from 0
+        # Add meal_id as sequential integer starting from 0 (before explosion)
         df_web.insert(0, 'meal_id', range(len(df_web)))
 
-        # Enforce snake_case before saving
-        df_web = enforce_snake_case(df_web, "nutrition_page_data")
+        # Remove meal type identifiers from food_list
+        print(f"🧹 Removing meal type identifiers from food_list...")
+        df_web = remove_meal_type_from_food_list(df_web)
 
-        # Save website file
-        website_path = f'{website_dir}/nutrition_page_data.csv'
-        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+        # ========== FILE 1: MEALS (Pre-grouped for display) ==========
+        print(f"\n📦 Creating meals file (grouped by meal_id)...")
+        df_meals = df_web.copy()
+        df_meals = enforce_snake_case(df_meals, "nutrition_page_meals")
+
+        meals_path = f'{website_dir}/nutrition_page_meals.csv'
+        df_meals.to_csv(meals_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Meals file: {len(df_meals):,} records → {meals_path}")
+
+        # ========== FILE 2: ITEMS (Exploded for ingredient filtering) ==========
+        print(f"\n🔄 Creating items file (exploded ingredients)...")
+        df_items = df_web.copy()
+
+        # Explode food_list and drinks_list into individual rows
+        df_items = explode_food_and_drinks(df_items)
+        print(f"📊 Exploded to {len(df_items)} rows (from individual ingredients/drinks)")
+
+        df_items = enforce_snake_case(df_items, "nutrition_page_items")
+
+        items_path = f'{website_dir}/nutrition_page_items.csv'
+        df_items.to_csv(items_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Items file: {len(df_items):,} records → {items_path}")
+
+        print(f"\n✨ Dual-file strategy complete:")
+        print(f"   • Meals: {len(df_meals):,} rows (for display & meal filters)")
+        print(f"   • Items: {len(df_items):,} rows (for ingredient filters)")
 
         return True
 
@@ -707,9 +917,10 @@ def upload_nutrilio_results():
     """
     print("☁️ Uploading Nutrilio results to Google Drive...")
 
-    # Upload only the website file (single source of truth)
+    # Upload both website files (dual-file strategy)
     files_to_upload = [
-        "files/website_files/nutrition/nutrition_page_data.csv"
+        "files/website_files/nutrition/nutrition_page_meals.csv",
+        "files/website_files/nutrition/nutrition_page_items.csv"
     ]
 
     # Filter to only existing files
