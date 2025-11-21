@@ -735,7 +735,7 @@ def create_nutrilio_files():
                     agg_dict[col] = lambda x: ' | '.join(x.dropna().astype(str)) if len(x.dropna()) > 0 else None
                 else:
                     # Take first non-null value (since sorted by time desc, this is latest)
-                    agg_dict[col] = lambda x: x.iloc[0] if len(x.dropna()) > 0 else None
+                    agg_dict[col] = lambda x: x.dropna().iloc[0] if len(x.dropna()) > 0 else None
 
         # Add standard columns
         agg_dict.update({
