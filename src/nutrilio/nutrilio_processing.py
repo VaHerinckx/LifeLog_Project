@@ -365,6 +365,27 @@ def extract_data_count(df, invalid_meals_list=None):
         df.drop(column, axis = 1, inplace = True)
     return df, list_col, invalid_meals_list
 
+def classify_row(row):
+    """
+    Classify a row as 'daily_summary' or 'meal' based on its content.
+
+    Args:
+        row: DataFrame row
+
+    Returns:
+        str: 'daily_summary' or 'meal'
+    """
+    # If row has daily_summary flag set to 'yes', it's a daily summary row
+    if pd.notna(row.get('daily_summary')) and str(row['daily_summary']).lower() == 'yes':
+        return 'daily_summary'
+
+    # If row has meal type, it's a meal row
+    if pd.notna(row.get('meal')):
+        return 'meal'
+
+    # Default to daily_summary if unclear
+    return 'daily_summary'
+
 def extract_data(column):
     if column != column:
         return None
@@ -674,11 +695,120 @@ def create_nutrilio_files():
     # Rename notes_about_today to daily_summary for health integration
     df = rename_columns_for_health(df)
 
+    # Classify rows as daily_summary or meal
+    print("🔍 Classifying rows...")
+    df['row_type'] = df.apply(classify_row, axis=1)
+
+    # Separate daily summary and meal rows
+    daily_summary_rows = df[df['row_type'] == 'daily_summary'].copy()
+    meal_rows = df[df['row_type'] == 'meal'].copy()
+
+    print(f"   Found {len(daily_summary_rows)} daily summary rows")
+    print(f"   Found {len(meal_rows)} meal rows")
+
+    # Aggregate daily summary rows by date (keep latest time)
+    print("📋 Aggregating daily summary rows by date...")
+    if len(daily_summary_rows) > 0:
+        # Sort by time descending to keep latest entries first
+        daily_summary_rows = daily_summary_rows.sort_values('time', ascending=False)
+
+        # Identify columns to aggregate
+        # Non-food metadata columns that should be aggregated
+        non_food_columns = [
+            'sleep_-_quality', 'sleep_-_quality_text', 'sleep_-_rest_feeling_(points)',
+            'fitness_feeling_(points)', 'stress_feeling_(points)',
+            'work_-_productivity_(points)', 'work_-_hours_worked',
+            'work_-_good_day_text', 'work_duration_est',
+            'cycling_distance_(km)', 'reading_-_pages',
+            'gaming_-_hours', 'overall_evaluation_(points)',
+            'notes_summary', 'dream_description', 'dreams',
+            'body_sensations_list', 'work_content_list',
+            'self_improvement_list', 'social_activity_list'
+        ]
+
+        # Build aggregation dictionary
+        agg_dict = {}
+        for col in non_food_columns:
+            if col in daily_summary_rows.columns:
+                if col in ['body_sensations_list', 'notes_summary', 'work_content_list', 'self_improvement_list', 'social_activity_list']:
+                    # Concatenate list columns with ' | ' separator
+                    agg_dict[col] = lambda x: ' | '.join(x.dropna().astype(str)) if len(x.dropna()) > 0 else None
+                else:
+                    # Take first non-null value (since sorted by time desc, this is latest)
+                    agg_dict[col] = lambda x: x.iloc[0] if len(x.dropna()) > 0 else None
+
+        # Add standard columns
+        agg_dict.update({
+            'time': 'first',  # Latest time (since sorted desc)
+            'weekday': 'first',
+            'daily_summary': 'first',
+            'source': 'first'
+        })
+
+        # Group by date and aggregate
+        aggregated_daily = daily_summary_rows.groupby('date', as_index=False).agg(agg_dict)
+
+        # Check for dates with multiple daily summary entries
+        date_counts = daily_summary_rows.groupby('date').size()
+        duplicates = date_counts[date_counts > 1]
+        if len(duplicates) > 0:
+            print(f"   ℹ️  Consolidated {len(duplicates)} dates with multiple daily summary entries:")
+            for date, count in duplicates.items():
+                times = daily_summary_rows[daily_summary_rows['date'] == date]['time'].tolist()
+                print(f"      {date}: {count} entries at times {times}")
+
+        # Clear meal-related columns for daily summary rows
+        meal_columns = ['meal', 'food_list', 'drinks_list', 'food_keep', 'drinks_keep',
+                       'usda_meal_score', 'usda_drink_score', 'places', 'origin', 'amount']
+        for col in meal_columns:
+            if col in aggregated_daily.columns:
+                aggregated_daily[col] = None
+
+        print(f"   ✅ Aggregated to {len(aggregated_daily)} daily summary rows")
+    else:
+        aggregated_daily = pd.DataFrame()
+
+    # Check for duplicate meals (same date + same meal type)
+    print("🔍 Checking for duplicate meal entries...")
+    if len(meal_rows) > 0:
+        meal_groups = meal_rows.groupby(['date', 'meal']).size()
+        duplicate_meals = meal_groups[meal_groups > 1]
+        if len(duplicate_meals) > 0:
+            print(f"   ⚠️  WARNING: Found {len(duplicate_meals)} duplicate meal entries:")
+            for (date, meal_type), count in duplicate_meals.items():
+                times = meal_rows[(meal_rows['date'] == date) & (meal_rows['meal'] == meal_type)]['time'].tolist()
+                print(f"      {date} - {meal_type}: {count} entries at times {times}")
+            print("   ⚠️  Keeping all entries for investigation. This should not happen normally.")
+        else:
+            print("   ✅ No duplicate meals found")
+
+    # Combine aggregated daily summary rows and meal rows
+    print("🔗 Combining daily summary and meal rows...")
+    if len(aggregated_daily) > 0 and len(meal_rows) > 0:
+        final_df = pd.concat([aggregated_daily, meal_rows], ignore_index=True)
+    elif len(aggregated_daily) > 0:
+        final_df = aggregated_daily
+    elif len(meal_rows) > 0:
+        final_df = meal_rows
+    else:
+        final_df = df  # Fallback to original if something went wrong
+
+    # Drop temporary row_type column
+    if 'row_type' in final_df.columns:
+        final_df = final_df.drop(columns=['row_type'])
+
+    # Sort by date (descending) then time (descending) - most recent first
+    final_df = final_df.sort_values(['date', 'time'], ascending=[False, False])
+
+    print(f"✅ Final dataframe: {len(final_df)} rows")
+    print(f"   Daily summary rows: {len(final_df[final_df['daily_summary'] == 'yes'])}")
+    print(f"   Meal rows: {len(final_df[final_df['meal'].notna()])}")
+
     print("💾 Saving main processed file...")
-    df.to_csv("files/processed_files/nutrilio/nutrilio_processed.csv", sep = '|', index = False, encoding='utf-8')
+    final_df.to_csv("files/processed_files/nutrilio/nutrilio_processed.csv", sep = '|', index = False, encoding='utf-8')
 
     # Create optimized nutrition file for frontend performance
-    optimized_nutrition_file = create_optimized_nutrition_file(df)
+    optimized_nutrition_file = create_optimized_nutrition_file(final_df)
 
     # Add additional files to drive_list
     drive_list.extend([
@@ -938,7 +1068,7 @@ def create_nutrilio_processed_files():
     Main processing function that processes the Nutrilio data.
     Returns True if successful, False otherwise.
     """
-    print("⚙️ Processing Nutrilio data...")
+    print("⚙️  Processing Nutrilio data...")
 
     input_path = "files/exports/nutrilio_exports/nutrilio_export.csv"
 
