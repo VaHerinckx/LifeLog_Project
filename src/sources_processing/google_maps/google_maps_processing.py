@@ -28,6 +28,54 @@ from src.utils.geocoding_utils import (
 
 
 # ============================================================================
+# CACHE MAINTENANCE FUNCTIONS
+# ============================================================================
+
+def clean_geocoding_cache():
+    """
+    Remove incomplete geocoding cache entries that are missing place_name or address.
+    This forces the pipeline to re-geocode these coordinates with complete data.
+
+    Returns:
+        tuple: (entries_removed, total_entries_before, total_entries_after)
+    """
+    print("🧹 Cleaning geocoding cache...")
+
+    # Load existing cache
+    geocoding_cache = load_geocoding_cache()
+    initial_count = len(geocoding_cache)
+
+    if initial_count == 0:
+        print("   Cache is empty, nothing to clean")
+        return (0, 0, 0)
+
+    # Identify incomplete entries
+    incomplete_entries = []
+    for coordinates, location_info in geocoding_cache.items():
+        # Check if missing place_name or address fields
+        if 'place_name' not in location_info or 'address' not in location_info:
+            incomplete_entries.append(coordinates)
+
+    # Remove incomplete entries
+    for coordinates in incomplete_entries:
+        del geocoding_cache[coordinates]
+
+    # Save cleaned cache
+    save_geocoding_cache(geocoding_cache)
+
+    final_count = len(geocoding_cache)
+    removed_count = len(incomplete_entries)
+
+    print(f"✅ Cache cleaning complete:")
+    print(f"   • Removed {removed_count} incomplete entries")
+    print(f"   • Before: {initial_count} entries")
+    print(f"   • After: {final_count} entries")
+    print(f"   • These will be re-geocoded on next pipeline run")
+
+    return (removed_count, initial_count, final_count)
+
+
+# ============================================================================
 # DOWNLOAD FUNCTIONS
 # ============================================================================
 
@@ -286,18 +334,17 @@ def create_hourly_timezone_records(location_data: List[Dict]) -> List[Dict]:
 def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
     """
     Create minute-by-minute location records from Google Maps timeline data.
-    Uses timelinePath waypoints, visit records, and activity records.
+    Processes both visit records (places where you stopped) and activity records (movement types).
 
     Args:
         location_data: List of timeline objects from Google Maps JSON
 
     Returns:
-        List of minute records with detailed location information
+        List of minute records with detailed location information and activity types
     """
-    print("🌍 Creating minute-by-minute location records...")
+    print("🌍 Creating minute-by-minute location records (visits + activities)...")
 
-    # Step 1: Process all record types
-    timeline_path_records = []
+    # Step 1: Process visit and activity records
     visit_records = []
     activity_records = []
 
@@ -314,28 +361,8 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
             end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00')).replace(tzinfo=None)
             timezone = extract_timezone_from_timestamp(start_time_str)
 
-            # Process timelinePath records (highest accuracy)
-            if 'timelinePath' in item:
-                waypoints = item['timelinePath']
-                for waypoint in waypoints:
-                    point = waypoint.get('point')
-                    offset_minutes = int(waypoint.get('durationMinutesOffsetFromStartTime', 0))
-
-                    if point:
-                        waypoint_time = start_time + timedelta(minutes=offset_minutes)
-                        timeline_path_records.append({
-                            'timestamp': waypoint_time,
-                            'timezone': timezone,
-                            'coordinates': point,
-                            'record_type': 'waypoint',
-                            'data_quality': 'actual',
-                            'confidence': 1.0,
-                            'is_home': False,
-                            'activity_type': None
-                        })
-
-            # Process visit records
-            elif 'visit' in item:
+            # Process visit records (places where you stopped)
+            if 'visit' in item:
                 visit = item['visit']
                 top_candidate = visit.get('topCandidate', {})
                 place_location = top_candidate.get('placeLocation', '')
@@ -349,53 +376,52 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
                         'timezone': timezone,
                         'coordinates': place_location,
                         'record_type': 'visit',
-                        'data_quality': 'repeated',
+                        'data_quality': 'actual',
                         'confidence': probability,
                         'is_home': (semantic_type == 'Home'),
-                        'activity_type': None
+                        'activity_type': None,
+                        'distance_meters': None
                     })
 
-            # Process activity records
+            # Process activity records (movement between places)
             elif 'activity' in item:
                 activity = item['activity']
                 start_location = activity.get('start', '')
-                end_location = activity.get('end', '')
                 activity_type = activity.get('topCandidate', {}).get('type', 'unknown')
                 probability = float(activity.get('probability', 0))
+                distance = float(activity.get('distanceMeters', 0))
 
-                if start_location and end_location:
+                # Only process activities with significant distance (skip GPS noise)
+                if start_location and distance > 10:
                     activity_records.append({
                         'start_time': start_time,
                         'end_time': end_time,
                         'timezone': timezone,
-                        'start_coordinates': start_location,
-                        'end_coordinates': end_location,
+                        'coordinates': start_location,
                         'record_type': 'activity',
-                        'data_quality': 'interpolated',
+                        'data_quality': 'transit',
                         'confidence': probability,
                         'is_home': False,
-                        'activity_type': activity_type
+                        'activity_type': activity_type,
+                        'distance_meters': distance
                     })
 
         except Exception as e:
             print(f"⚠️  Error processing timeline item: {e}")
             continue
 
-    print(f"📊 Found {len(timeline_path_records)} waypoints, {len(visit_records)} visits, {len(activity_records)} activities")
+    print(f"📊 Found {len(visit_records)} visits, {len(activity_records)} activities")
 
-    # Step 2: Geocode all unique coordinates
-    print("🌍 Loading geocoding cache and processing coordinates...")
+    # Step 2: Geocode visit and activity start coordinates
+    print("🌍 Loading geocoding cache and processing locations...")
     geocoding_cache = load_geocoding_cache()
 
-    # Collect unique coordinates
+    # Collect unique coordinates from visits and activity start locations
     unique_coordinates = set()
-    for record in timeline_path_records:
-        unique_coordinates.add(record['coordinates'])
     for record in visit_records:
         unique_coordinates.add(record['coordinates'])
     for record in activity_records:
-        unique_coordinates.add(record['start_coordinates'])
-        unique_coordinates.add(record['end_coordinates'])
+        unique_coordinates.add(record['coordinates'])
 
     # Geocode new coordinates
     coordinates_to_geocode = [coord for coord in unique_coordinates if coord not in geocoding_cache]
@@ -404,7 +430,8 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
         print(f"📍 Need to geocode {len(coordinates_to_geocode)} new locations (already have {len(geocoding_cache)} cached)")
 
         for idx, coordinates in enumerate(coordinates_to_geocode, 1):
-            print(f"   Geocoded {idx}/{len(coordinates_to_geocode)} new locations...")
+            if idx % 10 == 0 or idx == len(coordinates_to_geocode):
+                print(f"   Geocoding {idx}/{len(coordinates_to_geocode)} locations...")
 
             lat, lon = parse_coordinates(coordinates)
             if lat != 0.0 or lon != 0.0:
@@ -430,23 +457,21 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
     else:
         print(f"✅ All {len(unique_coordinates)} locations already cached!")
 
-    # Step 3: Generate minute-by-minute records
-    print("📝 Generating minute-by-minute records...")
+    # Step 3: Generate minute-by-minute records (visits + activities)
+    print("📝 Generating minute-by-minute records from visits and activities...")
 
     # Find overall date range
+    if not visit_records and not activity_records:
+        print("❌ No visit or activity records found")
+        return []
+
     all_times = []
-    for record in timeline_path_records:
-        all_times.append(record['timestamp'])
     for record in visit_records:
         all_times.append(record['start_time'])
         all_times.append(record['end_time'])
     for record in activity_records:
         all_times.append(record['start_time'])
         all_times.append(record['end_time'])
-
-    if not all_times:
-        print("❌ No valid timeline data found")
-        return []
 
     min_time = min(all_times)
     max_time = max(all_times)
@@ -456,31 +481,7 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
     # Build minute-level index
     minute_records = {}
 
-    # Add waypoint records (highest priority - actual data)
-    for record in timeline_path_records:
-        minute_key = record['timestamp'].replace(second=0, microsecond=0)
-        if minute_key not in minute_records:
-            lat, lon = parse_coordinates(record['coordinates'])
-            location_info = geocoding_cache[record['coordinates']]
-
-            minute_records[minute_key] = {
-                'timestamp': minute_key.isoformat(),
-                'latitude': lat,
-                'longitude': lon,
-                'coordinates': record['coordinates'],
-                'timezone': record['timezone'],
-                'city': location_info['city'],
-                'country': location_info['country'],
-                'place_name': location_info.get('place_name'),
-                'address': location_info.get('address', ''),
-                'is_home': record['is_home'],
-                'record_type': record['record_type'],
-                'activity_type': record['activity_type'],
-                'data_quality': record['data_quality'],
-                'confidence': record['confidence']
-            }
-
-    # Expand visit records (medium priority - repeated data)
+    # Expand visit records to minute-by-minute (highest priority)
     for record in visit_records:
         current_minute = record['start_time'].replace(second=0, microsecond=0)
         end_minute = record['end_time'].replace(second=0, microsecond=0)
@@ -489,7 +490,7 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
         location_info = geocoding_cache[record['coordinates']]
 
         while current_minute <= end_minute:
-            if current_minute not in minute_records:  # Don't overwrite waypoint data
+            if current_minute not in minute_records:  # Don't duplicate overlapping visits
                 minute_records[current_minute] = {
                     'timestamp': current_minute.isoformat(),
                     'latitude': lat,
@@ -504,80 +505,72 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
                     'record_type': record['record_type'],
                     'activity_type': record['activity_type'],
                     'data_quality': record['data_quality'],
-                    'confidence': record['confidence']
+                    'confidence': record['confidence'],
+                    'distance_meters': record['distance_meters'],
+                    'is_moving': False
                 }
             current_minute += timedelta(minutes=1)
 
-    # Interpolate activity records (lowest priority - synthetic data)
-    # OPTIMIZATION: Only geocode start/end points, interpolate city/country
+    # Expand activity records to minute-by-minute (fill gaps)
     for record in activity_records:
-        start_minute = record['start_time'].replace(second=0, microsecond=0)
+        current_minute = record['start_time'].replace(second=0, microsecond=0)
         end_minute = record['end_time'].replace(second=0, microsecond=0)
 
-        start_lat, start_lon = parse_coordinates(record['start_coordinates'])
-        end_lat, end_lon = parse_coordinates(record['end_coordinates'])
-
-        # Get location info for start and end (from cache)
-        start_location_info = geocoding_cache[record['start_coordinates']]
-        end_location_info = geocoding_cache[record['end_coordinates']]
-
-        total_minutes = int((end_minute - start_minute).total_seconds() / 60)
-        if total_minutes == 0:
-            total_minutes = 1
-
-        current_minute = start_minute
-        minute_index = 0
+        lat, lon = parse_coordinates(record['coordinates'])
+        location_info = geocoding_cache[record['coordinates']]
 
         while current_minute <= end_minute:
-            if current_minute not in minute_records:  # Don't overwrite better data
-                # Linear interpolation of coordinates
-                progress = minute_index / total_minutes if total_minutes > 0 else 0
-                interp_lat = start_lat + (end_lat - start_lat) * progress
-                interp_lon = start_lon + (end_lon - start_lon) * progress
-                interp_coords = f"geo:{interp_lat},{interp_lon}"
-
-                # Use start location for first half, end location for second half
-                # (Avoids geocoding thousands of interpolated points)
-                if progress < 0.5:
-                    location_info = start_location_info
-                else:
-                    location_info = end_location_info
-
+            if current_minute not in minute_records:  # Don't overwrite visits
                 minute_records[current_minute] = {
                     'timestamp': current_minute.isoformat(),
-                    'latitude': interp_lat,
-                    'longitude': interp_lon,
-                    'coordinates': interp_coords,
+                    'latitude': lat,
+                    'longitude': lon,
+                    'coordinates': record['coordinates'],
                     'timezone': record['timezone'],
                     'city': location_info['city'],
                     'country': location_info['country'],
-                    'place_name': location_info.get('place_name'),
-                    'address': location_info.get('address', ''),
+                    'place_name': None,  # No place name for transit
+                    'address': '',  # No address for transit
                     'is_home': record['is_home'],
                     'record_type': record['record_type'],
                     'activity_type': record['activity_type'],
                     'data_quality': record['data_quality'],
-                    'confidence': record['confidence']
+                    'confidence': record['confidence'],
+                    'distance_meters': record['distance_meters'],
+                    'is_moving': True
                 }
-
             current_minute += timedelta(minutes=1)
-            minute_index += 1
 
     # Convert to sorted list
     sorted_records = sorted(minute_records.values(), key=lambda x: x['timestamp'])
 
-    print(f"✅ Created {len(sorted_records)} minute records")
+    print(f"✅ Created {len(sorted_records)} minute records from {len(visit_records)} visits + {len(activity_records)} activities")
 
-    # Show data quality distribution
-    quality_counts = {}
+    # Show statistics
+    visit_minutes = sum(1 for record in sorted_records if record['record_type'] == 'visit')
+    activity_minutes = sum(1 for record in sorted_records if record['record_type'] == 'activity')
+    home_minutes = sum(1 for record in sorted_records if record['is_home'])
+    unique_places = len(set(record['place_name'] for record in sorted_records if record['place_name']))
+
+    # Activity type breakdown
+    activity_types = {}
     for record in sorted_records:
-        quality = record['data_quality']
-        quality_counts[quality] = quality_counts.get(quality, 0) + 1
+        if record['activity_type']:
+            activity_types[record['activity_type']] = activity_types.get(record['activity_type'], 0) + 1
 
-    print(f"📊 Data quality distribution:")
-    for quality, count in sorted(quality_counts.items()):
-        percentage = (count / len(sorted_records)) * 100
-        print(f"   • {quality}: {count} records ({percentage:.1f}%)")
+    print(f"📊 Location statistics:")
+    print(f"   • Total minutes: {len(sorted_records)}")
+    print(f"   • Visit minutes: {visit_minutes} ({(visit_minutes/len(sorted_records)*100):.1f}%)")
+    print(f"   • Activity minutes: {activity_minutes} ({(activity_minutes/len(sorted_records)*100):.1f}%)")
+    print(f"   • Minutes at home: {home_minutes} ({(home_minutes/len(sorted_records)*100):.1f}%)")
+    print(f"   • Unique places visited: {unique_places}")
+
+    if activity_types:
+        print(f"📊 Activity type breakdown:")
+        sorted_activities = sorted(activity_types.items(), key=lambda x: x[1], reverse=True)
+        for activity_type, count in sorted_activities[:5]:  # Show top 5
+            percentage = (count / activity_minutes * 100) if activity_minutes > 0 else 0
+            print(f"   • {activity_type}: {count} minutes ({percentage:.1f}%)")
 
     return sorted_records
 
@@ -604,8 +597,12 @@ def create_google_maps_file():
             print(f"❌ Google Maps file not found: {input_path}")
             return False
 
+        # Clean geocoding cache first to ensure all entries have complete data
+        print("\n📋 Step 0: Cleaning geocoding cache...")
+        clean_geocoding_cache()
+
         # Load the JSON data
-        print(f"📱 Reading Google Maps timeline data...")
+        print(f"\n📱 Reading Google Maps timeline data...")
         with open(input_path, 'r', encoding='utf-8') as f:
             location_data = json.load(f)
 
@@ -690,11 +687,13 @@ def create_google_maps_file():
 
         # Show sample of the data
         print(f"\n📋 Sample minute records:")
-        sample_df = df_minute.head(3)[['timestamp', 'city', 'place_name', 'data_quality', 'is_home']]
+        sample_df = df_minute.head(5)[['timestamp', 'city', 'place_name', 'record_type', 'activity_type', 'is_moving']]
         for _, row in sample_df.iterrows():
-            home_status = "🏠" if row['is_home'] else "📍"
+            icon = "🏠" if row.get('place_name') and 'home' in str(row['place_name']).lower() else ("🚶" if row['is_moving'] else "📍")
             place = row['place_name'] if row['place_name'] else row['city']
-            print(f"  {home_status} {row['timestamp'][:16]} | {place} | {row['data_quality']}")
+            activity = f" ({row['activity_type']})" if row['activity_type'] else ""
+            status = "moving" if row['is_moving'] else "stationary"
+            print(f"  {icon} {row['timestamp'][:16]} | {place}{activity} | {status}")
 
         # ========================================================================
         # SUMMARY
