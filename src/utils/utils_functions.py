@@ -244,7 +244,7 @@ def time_difference_correction(df: pd.DataFrame, timestamp_column: str, source_t
         raise
 
     # Load location timezone data
-    location_file_path = 'files/processed_files/location/combined_timezone_processed.csv'
+    location_file_path = 'files/topic_processed_files/location/location_processed.csv'
 
     try:
         location_df = pd.read_csv(location_file_path, sep='|')

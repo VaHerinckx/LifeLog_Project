@@ -1,19 +1,25 @@
 import subprocess
 import sys
-from src.music.lastfm_processing import full_lastfm_pipeline
-from src.books.books_processing import full_books_pipeline
-from src.books.goodreads_processing import download_goodreads_data, move_goodreads_files
-from src.books.kindle_processing import download_kindle_data, move_kindle_files
+from src.sources_processing.lastfm.lastfm_processing import full_lastfm_pipeline
+from src.sources_processing.spotify.spotify_processing import full_spotify_pipeline
+from src.topic_processing.music.music_processing import full_music_pipeline
+from src.topic_processing.reading.reading_processing import full_books_pipeline
+from src.sources_processing.goodreads.goodreads_processing import download_goodreads_data, move_goodreads_files
+from src.sources_processing.kindle.kindle_processing import download_kindle_data, move_kindle_files
 from src.podcasts.pocket_casts_processing import full_pocket_casts_pipeline, move_pocket_casts_files, download_pocket_casts_data
 from src.sport.garmin_processing import full_garmin_pipeline, move_garmin_files, download_garmin_data
 from src.finance.moneymgr_processing import full_moneymgr_pipeline, move_moneymgr_files, download_moneymgr_data
-from src.nutrilio.nutrilio_processing import full_nutrilio_pipeline, move_nutrilio_files, download_nutrilio_data
-from src.health.apple_processing import full_apple_pipeline, move_apple_files, download_apple_data
-from src.screentime.offscreen_processing import full_offscreen_pipeline, move_offscreen_files, download_offscreen_data
+from src.sources_processing.nutrilio.nutrilio_processing import full_nutrilio_pipeline, move_nutrilio_files, download_nutrilio_data
+from src.sources_processing.apple.apple_processing import full_apple_pipeline, move_apple_files, download_apple_data
+from src.sources_processing.offscreen.offscreen_processing import full_offscreen_pipeline, move_offscreen_files, download_offscreen_data
+from src.topic_processing.health.health_processing import full_health_pipeline
+from src.topic_processing.nutrition.nutrition_processing import full_nutrition_pipeline
 from src.weather.weather_processing import get_weather_data
 from src.movies.letterboxd_processing import full_letterboxd_pipeline, move_letterboxd_files, download_letterboxd_data
 from src.shows.trakt_processing import full_trakt_pipeline, move_trakt_files, download_trakt_data
-from src.location.location_processing import full_location_pipeline, move_google_files
+from src.topic_processing.location.location_processing import full_location_pipeline
+from src.sources_processing.google_maps.google_maps_processing import download_google_data, move_google_files, full_google_maps_pipeline
+from src.sources_processing.manual_location.manual_location_processing import full_manual_location_pipeline
 
 # Updated imports for enhanced authentication
 from src.utils.drive_storage import (
@@ -91,15 +97,37 @@ PIPELINE_REGISTRY = {
         'description': 'Downloads Kindle data from Amazon',
         'user_selectable': False  # Hidden - part of books coordination
     },
-    'music': {
-        'name': 'Music (Last.fm)',
+    'lastfm': {
+        'name': 'Music (Last.fm) - SOURCE',
         'function': full_lastfm_pipeline,
         'download_method': 'api',
         'requires_timezone': False,
         'move_function': None,
         'download_function': None,
         'urls': [],
-        'description': 'Fetches listening history from Last.fm API',
+        'description': 'Fetches listening history from Last.fm API (source processor only)',
+        'user_selectable': True
+    },
+    'spotify_legacy': {
+        'name': 'Music (Spotify Legacy) - SOURCE',
+        'function': full_spotify_pipeline,
+        'download_method': 'manual',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Processes legacy Spotify JSON exports 2013-2023 (source processor only)',
+        'user_selectable': True
+    },
+    'music_topic': {
+        'name': 'Music (Complete) - TOPIC',
+        'function': full_music_pipeline,
+        'download_method': 'coordination',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Coordinates Last.fm + Spotify legacy data, enriches with Spotify API',
         'user_selectable': True
     },
     'podcasts': {
@@ -125,14 +153,25 @@ PIPELINE_REGISTRY = {
         'user_selectable': True
     },
     'apple_health': {
-        'name': 'Health (Apple Health)',
+        'name': 'Health (Apple Health) - SOURCE',
         'function': full_apple_pipeline,
         'download_method': 'manual_app',
         'requires_timezone': False,
         'move_function': move_apple_files,
         'download_function': download_apple_data,
         'urls': [],
-        'description': 'Processes Apple Health export from iPhone',
+        'description': 'Processes Apple Health export from iPhone (source processor only)',
+        'user_selectable': True
+    },
+    'health_coordination': {
+        'name': 'Health (Complete) - TOPIC',
+        'function': full_health_pipeline,
+        'download_method': 'multiple',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Merges Apple Health, Nutrilio, Screen Time into complete health dataset',
         'user_selectable': True
     },
     'letterboxd': {
@@ -168,26 +207,37 @@ PIPELINE_REGISTRY = {
         'description': 'Processes Money Manager expense tracking data',
         'user_selectable': True
     },
-    'nutrition': {
-        'name': 'Nutrition (Nutrilio)',
+    'nutrition_source': {
+        'name': 'Nutrition (Nutrilio) - SOURCE',
         'function': full_nutrilio_pipeline,
         'download_method': 'manual_app',
         'requires_timezone': False,
         'move_function': move_nutrilio_files,
         'download_function': download_nutrilio_data,
         'urls': [],
-        'description': 'Processes Nutrilio meal and nutrition tracking data',
+        'description': 'Processes Nutrilio meal and nutrition tracking data (source processor, feeds Nutrition topic)',
+        'user_selectable': True
+    },
+    'nutrition_topic': {
+        'name': 'Nutrition (Complete) - TOPIC',
+        'function': full_nutrition_pipeline,
+        'download_method': 'multiple',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Merges Nutrilio nutrition data and generates website files for Nutrition page',
         'user_selectable': True
     },
     'offscreen': {
-        'name': 'Screen Time (Offscreen)',
+        'name': 'Screen Time (Offscreen) - SOURCE',
         'function': full_offscreen_pipeline,
         'download_method': 'manual_app',
         'requires_timezone': True,
         'move_function': move_offscreen_files,
         'download_function': download_offscreen_data,
         'urls': [],
-        'description': 'Processes Offscreen app usage data (requires timezone correction)',
+        'description': 'Processes Offscreen app usage data (source processor, feeds Health topic, requires timezone correction)',
         'user_selectable': True
     },
     'weather': {
@@ -199,6 +249,39 @@ PIPELINE_REGISTRY = {
         'download_function': None,
         'urls': [],
         'description': 'Fetches weather data from Meteostat API',
+        'user_selectable': True
+    },
+    'google_maps': {
+        'name': 'Location (Google Maps) - SOURCE',
+        'function': full_google_maps_pipeline,
+        'download_method': 'manual_app',
+        'requires_timezone': False,
+        'move_function': move_google_files,
+        'download_function': download_google_data,
+        'urls': [],
+        'description': 'Processes Google Maps Timeline data (source processor, feeds Location topic)',
+        'user_selectable': True
+    },
+    'manual_location': {
+        'name': 'Location (Manual Excel) - SOURCE',
+        'function': full_manual_location_pipeline,
+        'download_method': 'manual',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Processes manual Excel travel records (source processor, feeds Location topic)',
+        'user_selectable': True
+    },
+    'location_topic': {
+        'name': 'Location (Complete) - TOPIC',
+        'function': full_location_pipeline,
+        'download_method': 'multiple',
+        'requires_timezone': False,
+        'move_function': None,
+        'download_function': None,
+        'urls': [],
+        'description': 'Merges Google Maps and Manual location data and generates website files for Location page',
         'user_selectable': True
     },
 }
