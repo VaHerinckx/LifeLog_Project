@@ -425,6 +425,7 @@ def create_trakt_file():
                 'episode_imdb_id': entry.get('episode', {}).get('ids', {}).get('imdb', ''),
                 'episode_rating': episode_rating,
                 'season_rating': season_rating,
+                'season_show_id': f"{show_trakt_id}_S{season_num}",
                 'show_rating': show_rating
             }
 
