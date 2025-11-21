@@ -3,11 +3,11 @@
 Last.fm API Processing Module
 
 This module handles incremental updates to the Last.fm processed data file by:
-1. Reading the latest timestamp from existing lfm_processed.csv
-2. Fetching new tracks from Last.fm API since that timestamp
+1. Reading the latest timestamp from existing lastfm_export.csv
+2. Fetching new tracks from Last.fm API since that timestamp (saved incrementally per page)
 3. Applying the complete pipeline processing (Spotify API enrichment, etc.)
 4. Merging new data with existing data and removing duplicates
-5. Saving the updated data back to the same file
+5. Saving the updated data back to lastfm_processed.csv
 
 This replaces the manual download process while maintaining all existing processing logic.
 
@@ -59,21 +59,23 @@ class LastFmAPIProcessor:
         self.base_url = "http://ws.audioscrobbler.com/2.0/"
 
         # File paths
-        self.processed_file_path = "files/processed_files/music/lfm_processed.csv"
+        self.export_file_path = "files/exports/music/lastfm_export.csv"
+        self.processed_file_path = "files/processed_files/music/lastfm_processed.csv"
         self.spotify_file_path = "files/processed_files/music/spotify_processed.csv"
-        self.artists_work_file = "files/work_files/lfm_work_files/artists_infos.csv"
-        self.tracks_work_file = "files/work_files/lfm_work_files/tracks_infos.csv"
+        self.artists_work_file = "files/work_files/lastfm_work_files/artists_infos.csv"
+        self.tracks_work_file = "files/work_files/lastfm_work_files/tracks_infos.csv"
 
     def get_latest_timestamp_from_file(self):
         """
-        Read the existing processed file and return the latest timestamp.
+        Read the existing raw export file and return the latest timestamp.
+        This is used to determine the checkpoint for resuming downloads.
 
         Returns:
             datetime: Latest timestamp from the file, or None if file doesn't exist
         """
         try:
-            if not os.path.exists(self.processed_file_path):
-                print(f"File {self.processed_file_path} not found. Will fetch all available data.")
+            if not os.path.exists(self.export_file_path):
+                print(f"File {self.export_file_path} not found. Will fetch all available data.")
                 return None
 
             # Try different encodings to read the file (UTF-8 first as it's the new standard)
@@ -82,8 +84,8 @@ class LastFmAPIProcessor:
 
             for encoding in encodings_to_try:
                 try:
-                    df = pd.read_csv(self.processed_file_path, sep='|', encoding=encoding, low_memory=False)
-                    print(f"Successfully read file with {encoding} encoding")
+                    df = pd.read_csv(self.export_file_path, sep='|', encoding=encoding, low_memory=False)
+                    print(f"Successfully read export file with {encoding} encoding")
                     break
                 except UnicodeError:
                     continue
@@ -96,7 +98,7 @@ class LastFmAPIProcessor:
                 raise Exception("Could not read file with any supported encoding")
 
             if df.empty:
-                print("Existing file is empty. Will fetch all available data.")
+                print("Existing export file is empty. Will fetch all available data.")
                 return None
 
             # Convert timestamp column to datetime
@@ -104,35 +106,42 @@ class LastFmAPIProcessor:
 
             # Get the latest timestamp
             latest_timestamp = df['timestamp'].max()
-            print(f"Latest timestamp in existing file: {latest_timestamp}")
+            print(f"Latest timestamp in export file: {latest_timestamp}")
 
             return latest_timestamp
 
         except Exception as e:
-            print(f"Error reading existing file: {e}")
+            print(f"Error reading existing export file: {e}")
             print("Will fetch all available data.")
             return None
 
     def fetch_tracks_since_timestamp(self, since_timestamp=None):
         """
         Fetch tracks from Last.fm API since the given timestamp.
+        Saves each page incrementally to lastfm_export.csv for crash recovery.
 
         Args:
             since_timestamp (datetime): Fetch tracks after this timestamp
 
         Returns:
-            list: List of track dictionaries
+            bool: True if successful, False otherwise
         """
-        all_tracks = []
+        # Ensure export directory exists
+        os.makedirs(os.path.dirname(self.export_file_path), exist_ok=True)
+
         page = 1
         total_pages = None
         printed_currently_playing = set()  # Track already-printed "currently playing" messages
+        total_saved = 0
 
-        print(f"Fetching tracks from Last.fm API...")
+        print(f"Fetching tracks from Last.fm API with incremental checkpointing...")
         if since_timestamp:
             print(f"Fetching tracks since: {since_timestamp}")
         else:
             print("Fetching all available tracks (no existing data found)")
+
+        # Check if export file exists to determine if we should write header
+        file_exists = os.path.exists(self.export_file_path)
 
         while True:
             retry_count = 0
@@ -164,12 +173,14 @@ class LastFmAPIProcessor:
                     # Check for API errors
                     if 'error' in data:
                         print(f"API Error: {data['message']}")
-                        return all_tracks  # Return what we have so far
+                        print(f"✅ Saved {total_saved} tracks before error")
+                        return True  # Partial success - data is checkpointed
 
                     # Check if we have track data
                     if 'recenttracks' not in data or 'track' not in data['recenttracks']:
                         print("No track data found in API response")
-                        return all_tracks  # Return what we have so far
+                        print(f"✅ Saved {total_saved} tracks before response issue")
+                        return True  # Partial success - data is checkpointed
 
                     tracks = data['recenttracks']['track']
                     attr = data['recenttracks']['@attr']
@@ -182,7 +193,8 @@ class LastFmAPIProcessor:
 
                     # If no tracks on this page, we're done
                     if not tracks:
-                        return all_tracks  # Return what we have
+                        print(f"✅ Complete: Saved {total_saved} tracks")
+                        return True  # Success
 
                     # Handle case where only one track is returned (not a list)
                     if isinstance(tracks, dict):
@@ -200,9 +212,21 @@ class LastFmAPIProcessor:
                                 print(f"Skipping currently playing track: {track_name}")
                                 printed_currently_playing.add(track_name)
 
-                    all_tracks.extend(valid_tracks)
+                    # Save this page immediately to export file (checkpoint)
+                    if valid_tracks:
+                        page_df = self.parse_api_tracks_to_dataframe(valid_tracks)
 
-                    print(f"Fetched page {page}/{total_pages} ({len(valid_tracks)} tracks)")
+                        # Append to CSV (write header only if file doesn't exist or is first page)
+                        mode = 'w' if not file_exists else 'a'
+                        header = not file_exists
+                        page_df.to_csv(self.export_file_path, sep='|', encoding='utf-8',
+                                      index=False, mode=mode, header=header)
+
+                        # After first write, file exists
+                        file_exists = True
+                        total_saved += len(valid_tracks)
+
+                    print(f"Fetched page {page}/{total_pages} ({len(valid_tracks)} tracks) ✓ Saved checkpoint")
 
                     success = True  # Mark as successful
 
@@ -212,11 +236,11 @@ class LastFmAPIProcessor:
                         print(f"❌ Network error on page {page} after {max_retries} retries: {e}")
                         if total_pages:
                             estimated_missing = (total_pages - page + 1) * 200
-                            print(f"⚠️  WARNING: Incomplete fetch - successfully retrieved {len(all_tracks)} tracks")
+                            print(f"⚠️  WARNING: Incomplete fetch - successfully saved {total_saved} tracks")
                             print(f"    Failed at page {page} of {total_pages}")
                             print(f"    Estimated missing tracks: ~{estimated_missing}")
-                            print(f"    Next incremental update will capture missing data")
-                        return all_tracks  # Return partial data
+                            print(f"    ✓ Checkpointed data saved - next run will resume from {total_saved} tracks")
+                        return True  # Partial success - checkpointed data is recoverable
                     else:
                         wait_time = 2 ** retry_count  # Exponential backoff: 2, 4, 8 seconds
                         print(f"⚠️  Error on page {page}, retry {retry_count}/{max_retries} in {wait_time}s: {e}")
@@ -227,8 +251,9 @@ class LastFmAPIProcessor:
                     if retry_count >= max_retries:
                         print(f"❌ Error processing page {page} after {max_retries} retries: {e}")
                         if total_pages:
-                            print(f"⚠️  WARNING: Returning {len(all_tracks)} tracks fetched so far")
-                        return all_tracks  # Return partial data
+                            print(f"⚠️  WARNING: Saved {total_saved} tracks before failure")
+                            print(f"    ✓ Checkpointed data saved - next run will resume")
+                        return True  # Partial success - checkpointed data is recoverable
                     else:
                         wait_time = 2 ** retry_count
                         print(f"⚠️  Error on page {page}, retry {retry_count}/{max_retries} in {wait_time}s: {e}")
@@ -247,8 +272,8 @@ class LastFmAPIProcessor:
             # Be nice to the API - small delay between requests
             time.sleep(0.2)
 
-        print(f"Successfully fetched {len(all_tracks)} new tracks")
-        return all_tracks
+        print(f"✅ Successfully fetched and saved {total_saved} new tracks to {self.export_file_path}")
+        return True
 
     def parse_api_tracks_to_dataframe(self, tracks):
         """
@@ -1153,20 +1178,26 @@ class LastFmAPIProcessor:
     def process_incremental_update(self):
         """
         Main method to perform incremental update of Last.fm data with full pipeline processing.
+        Uses checkpointed export file for crash recovery.
         """
         print("Starting Last.fm incremental update with full pipeline...")
         print("=" * 60)
 
         try:
-            # Step 1: Get latest timestamp from existing file
+            # Step 1: Get latest timestamp from export file (checkpoint)
             latest_timestamp = self.get_latest_timestamp_from_file()
 
-            # Step 2: Fetch new tracks from API
-            new_tracks = self.fetch_tracks_since_timestamp(latest_timestamp)
+            # Step 2: Fetch new tracks from API (saves incrementally to export file)
+            fetch_success = self.fetch_tracks_since_timestamp(latest_timestamp)
 
-            if not new_tracks:
-                print("No new tracks found. Data is up to date!")
-                print("Re-generating website files from existing data...")
+            if not fetch_success:
+                print("❌ API fetch failed")
+                return False
+
+            # Step 3: Check if export file has data to process
+            if not os.path.exists(self.export_file_path):
+                print("No export data found. Nothing to process!")
+                print("Re-generating website files from existing processed data...")
                 # Still regenerate website files even if no new data
                 if os.path.exists(self.processed_file_path):
                     df = pd.read_csv(self.processed_file_path, sep='|', encoding='utf-8', low_memory=False)
@@ -1176,36 +1207,39 @@ class LastFmAPIProcessor:
                     print("⚠️  No existing processed file found")
                 return True
 
-            # Step 3: Parse the new track data into basic DataFrame
-            new_data_df = self.parse_api_tracks_to_dataframe(new_tracks)
+            # Step 4: Read the export file (raw API data)
+            print(f"📖 Reading export file: {self.export_file_path}")
+            new_data_df = pd.read_csv(self.export_file_path, sep='|', encoding='utf-8', low_memory=False)
 
             if new_data_df.empty:
-                print("No valid new tracks after parsing. Data is up to date!")
-                print("Re-generating website files from existing data...")
+                print("Export file is empty. Data is up to date!")
+                print("Re-generating website files from existing processed data...")
                 if os.path.exists(self.processed_file_path):
                     df = pd.read_csv(self.processed_file_path, sep='|', encoding='utf-8', low_memory=False)
                     self.generate_music_website_page_files(df)
                     print("✅ Website files regenerated")
                 return True
 
-            # Step 4: Apply full processing pipeline to new data
+            # Step 5: Apply full processing pipeline to export data
             processed_new_data = self.process_new_data_with_pipeline(new_data_df)
 
-            # Step 5: Merge with existing data and remove duplicates
+            # Step 6: Merge with existing processed data and remove duplicates
             final_df = self.merge_and_deduplicate(processed_new_data)
 
-            # Step 6: Save the updated data
+            # Step 7: Save the updated processed data
             self.save_data(final_df)
 
             print("=" * 60)
             print("Last.fm incremental update completed successfully!")
-            print(f"📊 Added {len(new_tracks)} new tracks")
+            print(f"📊 Processed {len(new_data_df)} tracks from export file")
             print(f"📊 Final dataset contains {len(final_df)} total tracks")
 
             return True
 
         except Exception as e:
             print(f"Error during incremental update: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def upload_results(self):
@@ -1235,7 +1269,7 @@ class LastFmAPIProcessor:
         return success
 
 
-def full_lfm_pipeline(auto_full=False, auto_process_only=False):
+def full_lastfm_pipeline(auto_full=False, auto_process_only=False):
     """
     Complete Last.fm API pipeline with 3 standard options.
     Uses Last.fm API for automatic incremental updates.
@@ -1345,7 +1379,7 @@ def main():
         print("This tool fetches new data from Last.fm API and processes it with the full pipeline.")
 
         # Run the pipeline (interactive mode)
-        success = full_lfm_pipeline(auto_full=False)
+        success = full_lastfm_pipeline(auto_full=False)
 
         if success:
             print("\n🎉 All done! Your Last.fm data has been updated.")

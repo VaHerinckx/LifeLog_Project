@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from src.music.lastfm_processing import full_lfm_pipeline
+from src.music.lastfm_processing import full_lastfm_pipeline
 from src.books.books_processing import full_books_pipeline
 from src.books.goodreads_processing import download_goodreads_data, move_goodreads_files
 from src.books.kindle_processing import download_kindle_data, move_kindle_files
@@ -93,7 +93,7 @@ PIPELINE_REGISTRY = {
     },
     'music': {
         'name': 'Music (Last.fm)',
-        'function': full_lfm_pipeline,
+        'function': full_lastfm_pipeline,
         'download_method': 'api',
         'requires_timezone': False,
         'move_function': None,

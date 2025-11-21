@@ -23,7 +23,7 @@ sys.path.append(project_root)
 
 # Global variable to store loaded mappings
 GENRE_MAPPING = {}
-MAPPING_FILE = os.path.join(project_root, 'files', 'work_files', 'lfm_work_files', 'genre_mapping.csv')
+MAPPING_FILE = os.path.join(project_root, 'files', 'work_files', 'lastfm_work_files', 'genre_mapping.csv')
 
 
 def load_genre_mapping():
@@ -185,7 +185,7 @@ def analyze_unmapped_genres(df, top_n=50):
         first_genre = genre_counts.index[0]
         print(f"{first_genre}|[Category]")
 
-    print("\nAfter you provide the mappings, append them to @lifelog_python_processing/files/work_files/lfm_work_files/genre_mapping.csv")
+    print("\nAfter you provide the mappings, append them to @lifelog_python_processing/files/work_files/lastfm_work_files/genre_mapping.csv")
     print("━"*60)
     print()
 
@@ -242,7 +242,7 @@ if __name__ == '__main__':
             'files',
             'processed_files',
             'music',
-            'lfm_processed.csv'
+            'lastfm_processed.csv'
         )
 
         if os.path.exists(processed_file):
