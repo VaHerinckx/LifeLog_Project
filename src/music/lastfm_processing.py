@@ -59,7 +59,7 @@ class LastFmAPIProcessor:
         self.base_url = "http://ws.audioscrobbler.com/2.0/"
 
         # File paths
-        self.export_file_path = "files/exports/music/lastfm_export.csv"
+        self.export_file_path = "files/exports/lastfm_exports/lastfm_export.csv"
         self.processed_file_path = "files/processed_files/music/lastfm_processed.csv"
         self.spotify_file_path = "files/processed_files/music/spotify_processed.csv"
         self.artists_work_file = "files/work_files/lastfm_work_files/artists_infos.csv"

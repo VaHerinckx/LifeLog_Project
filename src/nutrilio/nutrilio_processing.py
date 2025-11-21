@@ -477,6 +477,70 @@ def display_meal_validation_report(invalid_meals_list):
     print("="*70 + "\n")
 
 
+def merge_dreams_data(nutrilio_df):
+    """
+    Merge dreams data from nutrilio_dreams_pbi_processed_file.csv
+    into main nutrilio_processed DataFrame.
+
+    If multiple dreams exist for same date, combines them into comma-separated string.
+
+    Args:
+        nutrilio_df: Main nutrilio DataFrame
+
+    Returns:
+        DataFrame: nutrilio_df with dreams column added (max one row per date)
+    """
+    dreams_path = 'files/processed_files/nutrilio/nutrilio_dreams_pbi_processed_file.csv'
+
+    if os.path.exists(dreams_path):
+        print("🌙 Merging dreams data...")
+        dreams_df = pd.read_csv(dreams_path, sep='|')
+        dreams_df['date'] = pd.to_datetime(dreams_df['date']).dt.strftime('%Y-%m-%d')
+
+        # Aggregate multiple dreams per date into comma-separated string
+        dreams_aggregated = dreams_df.groupby('date')['dreams'].apply(
+            lambda x: ', '.join(x.astype(str))
+        ).reset_index()
+
+        # Count dates with multiple dreams
+        multiple_dreams_count = dreams_df.groupby('date').size()
+        multiple_dreams_count = (multiple_dreams_count > 1).sum()
+
+        # Ensure date column in nutrilio_df is string format for merging
+        nutrilio_df['date'] = nutrilio_df['date'].astype(str)
+
+        # Merge with main nutrilio data (left merge to preserve all nutrilio rows)
+        nutrilio_df = nutrilio_df.merge(dreams_aggregated, on='date', how='left')
+
+        print(f"✅ Dreams data merged: {len(dreams_aggregated)} dates with dreams")
+        if multiple_dreams_count > 0:
+            print(f"   📝 {multiple_dreams_count} dates had multiple dreams (combined with comma)")
+    else:
+        print(f"⚠️  Dreams file not found: {dreams_path}")
+        print("   Adding empty dreams column")
+        nutrilio_df['dreams'] = None
+
+    return nutrilio_df
+
+
+def rename_columns_for_health(df):
+    """
+    Rename notes_about_today to notes_summary before saving.
+    This avoids conflict with the 'daily_summary' column (yes/no indicator).
+
+    Args:
+        df: DataFrame with notes_about_today column
+
+    Returns:
+        DataFrame: DataFrame with renamed column
+    """
+    if 'notes_about_today' in df.columns:
+        df = df.rename(columns={'notes_about_today': 'notes_summary'})
+        print("✏️  Renamed: notes_about_today → notes_summary")
+
+    return df
+
+
 def create_optimized_nutrition_file(df):
     """Create optimized nutrition-only CSV for faster frontend performance"""
     print("Creating optimized nutrition file...")
@@ -603,6 +667,12 @@ def create_nutrilio_files():
 
     # Drop list columns AFTER generating PBI files (cleanup for main processed file)
     df = df.drop(list_col, axis=1)
+
+    # Merge dreams data from separate PBI file
+    df = merge_dreams_data(df)
+
+    # Rename notes_about_today to daily_summary for health integration
+    df = rename_columns_for_health(df)
 
     print("💾 Saving main processed file...")
     df.to_csv("files/processed_files/nutrilio/nutrilio_processed.csv", sep = '|', index = False, encoding='utf-8')
