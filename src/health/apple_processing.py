@@ -381,9 +381,6 @@ def create_apple_files():
     print(f"📅 Date range: {apple_df['date'].min()} to {apple_df['date'].max()}")
     print("=" * 60)
 
-    # Generate website files
-    generate_health_website_page_files(apple_df)
-
 
 def create_apple_file():
     """
@@ -410,68 +407,6 @@ def create_apple_file():
         return False
 
 
-def generate_health_website_page_files(df):
-    """
-    Generate website-optimized files for the Health page.
-
-    Args:
-        df: Processed dataframe (already in snake_case)
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print("\n🌐 Generating website files for Health page...")
-
-    try:
-        # Ensure output directory exists
-        website_dir = 'files/website_files/health'
-        os.makedirs(website_dir, exist_ok=True)
-
-        # Work with copy to avoid modifying original
-        df_web = df.copy()
-
-        # Enforce snake_case before saving
-        df_web = enforce_snake_case(df_web, "health_page_apple_data")
-
-        # Save website file
-        website_path = f'{website_dir}/health_page_apple_data.csv'
-        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
-
-        return True
-
-    except Exception as e:
-        print(f"❌ Error generating website files: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def upload_apple_results():
-    """
-    Uploads the processed Apple Health files to Google Drive.
-    Returns True if successful, False otherwise.
-    """
-    print("☁️  Uploading Apple Health results to Google Drive...")
-
-    files_to_upload = ['files/website_files/health/health_page_apple_data.csv']
-
-    # Filter to only existing files
-    existing_files = [f for f in files_to_upload if os.path.exists(f)]
-
-    if not existing_files:
-        print("❌ No files found to upload")
-        return False
-
-    print(f"📤 Uploading {len(existing_files)} files...")
-    success = upload_multiple_files(existing_files)
-
-    if success:
-        print("✅ Apple Health results uploaded successfully!")
-    else:
-        print("❌ Some files failed to upload")
-
-    return success
 
 
 def process_apple_export(upload="Y"):
@@ -541,26 +476,18 @@ def full_apple_pipeline(auto_full=False, auto_process_only=False):
             print("⚠️  No new files found, attempting to process existing files...")
             process_success = create_apple_file()
 
-        # Step 4: Upload
-        if process_success:
-            upload_success = upload_apple_results()
-            success = upload_success
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
+        # Step 4: Processing complete (upload handled by health coordination pipeline)
+        success = process_success
 
     elif choice == "2":
-        print("\n⚙️  Process existing data and upload to Drive...")
+        print("\n⚙️  Process existing data...")
         process_success = create_apple_file()
-        if process_success:
-            success = upload_apple_results()
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
+        success = process_success
 
     elif choice == "3":
-        print("\n☁️  Upload existing processed files to Drive...")
-        success = upload_apple_results()
+        print("\n⚠️  Option 3 deprecated: Apple Health files are now uploaded via health coordination pipeline")
+        print("   Please use the health coordination pipeline to upload health data.")
+        success = False
 
     else:
         print("❌ Invalid choice. Please select 1-3.")

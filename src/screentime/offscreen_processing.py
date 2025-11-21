@@ -231,9 +231,6 @@ def create_offscreen_file():
         print(f"📊 Total screen time: {df['screen_time'].sum() / 3600:.1f} hours")
         print(f"📊 Total pickups: {int(df['pickups'].sum())}")
 
-        # Generate website files
-        generate_screentime_website_page_files(df)
-
         return True
 
     except Exception as e:
@@ -242,73 +239,6 @@ def create_offscreen_file():
         return False
 
 
-def generate_screentime_website_page_files(df):
-    """
-    Generate website-optimized files for the Screentime page.
-
-    Args:
-        df: Processed dataframe (already in snake_case)
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    print("\n🌐 Generating website files for Screentime page...")
-
-    try:
-        # Ensure output directory exists
-        website_dir = 'files/website_files/health'  # Note: screentime goes to health folder
-        os.makedirs(website_dir, exist_ok=True)
-
-        # Work with copy to avoid modifying original
-        df_web = df.copy()
-
-        # Enforce snake_case before saving
-        df_web = enforce_snake_case(df_web, "health_page_screentime_data")
-
-        # Save website file
-        website_path = f'{website_dir}/health_page_screentime_data.csv'
-        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
-
-        return True
-
-    except Exception as e:
-        print(f"❌ Error generating website files: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-
-def upload_offscreen_results():
-    """
-    Uploads the processed Offscreen files to Google Drive.
-    Returns True if successful, False otherwise.
-    """
-    try:
-        print("⬆️  Uploading Offscreen results to Google Drive...")
-
-        files_to_upload = ['files/website_files/health/health_page_screentime_data.csv']
-
-        # Filter to only existing files
-        existing_files = [f for f in files_to_upload if os.path.exists(f)]
-
-        if not existing_files:
-            print("❌ No files found to upload")
-            return False
-
-        print(f"📤 Uploading {len(existing_files)} file(s)...")
-        success = upload_multiple_files(existing_files)
-
-        if success:
-            print("✅ Offscreen results uploaded successfully!")
-        else:
-            print("❌ Some files failed to upload")
-
-        return success
-
-    except Exception as e:
-        print(f"❌ Error uploading files: {e}")
-        return False
 
 
 def full_offscreen_pipeline(auto_full=False, auto_process_only=False):
@@ -367,26 +297,18 @@ def full_offscreen_pipeline(auto_full=False, auto_process_only=False):
             print("⚠️  No new files found, attempting to process existing files...")
             process_success = create_offscreen_file()
 
-        # Step 4: Upload
-        if process_success:
-            upload_success = upload_offscreen_results()
-            success = upload_success
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
+        # Step 4: Processing complete (upload handled by health coordination pipeline)
+        success = process_success
 
     elif choice == "2":
-        print("\n⚙️  Process existing data and upload to Drive...")
+        print("\n⚙️  Process existing data...")
         process_success = create_offscreen_file()
-        if process_success:
-            success = upload_offscreen_results()
-        else:
-            print("❌ Processing failed, skipping upload")
-            success = False
+        success = process_success
 
     elif choice == "3":
-        print("\n⬆️  Upload existing processed files to Drive...")
-        success = upload_offscreen_results()
+        print("\n⚠️  Option 3 deprecated: Screen time files are now uploaded via health coordination pipeline")
+        print("   Please use the health coordination pipeline to upload health data.")
+        success = False
 
     else:
         print("❌ Invalid choice. Please select 1-3.")
