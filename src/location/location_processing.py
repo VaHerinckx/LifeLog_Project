@@ -660,9 +660,9 @@ def create_hourly_timezone_records(location_data: List[Dict]) -> List[Dict]:
             continue
 
         try:
-            # Parse timestamps
-            start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
-            end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+            # Parse timestamps (strip timezone info for consistent format)
+            start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00')).replace(tzinfo=None)
+            end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00')).replace(tzinfo=None)
 
             # Extract timezone
             timezone = extract_timezone_from_timestamp(start_time_str)
@@ -1167,6 +1167,67 @@ def create_manual_timezone_file():
 # MERGE FUNCTION (Combines Google and Manual data)
 # ============================================================================
 
+def enrich_location_with_type(location_df):
+    """
+    Add location_type column (home/work/other) based on is_home column
+    and potentially coordinates or city patterns.
+
+    Args:
+        location_df: DataFrame with location data
+
+    Returns:
+        DataFrame: location_df with location_type column added
+    """
+    print("🏷️  Enriching location data with location_type...")
+
+    # Start with 'other' as default
+    location_df['location_type'] = 'other'
+
+    # Set 'home' based on is_home column
+    location_df.loc[location_df['is_home'] == True, 'location_type'] = 'home'
+
+    # TODO: Add work location detection logic here
+    # Example patterns that could be used:
+    #
+    # 1. Based on specific coordinates (if work location known):
+    # WORK_COORDS = "geo:50.8503,4.3517"  # Example coordinates
+    # location_df.loc[
+    #     (location_df['coordinates'] == WORK_COORDS) &
+    #     (location_df['is_home'] == False),
+    #     'location_type'
+    # ] = 'work'
+    #
+    # 2. Based on city patterns (if work city known and different from home):
+    # location_df.loc[
+    #     (location_df['city'] == 'Brussels') &
+    #     (location_df['is_home'] == False),
+    #     'location_type'
+    # ] = 'work'
+    #
+    # 3. Based on time patterns (weekdays 9-5 at non-home location):
+    # location_df['timestamp_dt'] = pd.to_datetime(location_df['timestamp'])
+    # location_df['hour'] = location_df['timestamp_dt'].dt.hour
+    # location_df['weekday'] = location_df['timestamp_dt'].dt.dayofweek  # 0=Monday
+    # location_df.loc[
+    #     (location_df['is_home'] == False) &
+    #     (location_df['weekday'] < 5) &  # Monday-Friday
+    #     (location_df['hour'] >= 9) &
+    #     (location_df['hour'] <= 17),
+    #     'location_type'
+    # ] = 'work'
+
+    home_count = (location_df['location_type'] == 'home').sum()
+    work_count = (location_df['location_type'] == 'work').sum()
+    other_count = (location_df['location_type'] == 'other').sum()
+
+    print(f"✅ Location types assigned:")
+    print(f"   🏠 Home: {home_count:,} records ({home_count/len(location_df)*100:.1f}%)")
+    print(f"   💼 Work: {work_count:,} records ({work_count/len(location_df)*100:.1f}%)")
+    print(f"   📍 Other: {other_count:,} records ({other_count/len(location_df)*100:.1f}%)")
+
+    return location_df
+
+
 def merge_timezone_files():
     """
     Merge manual and Google timezone files into combined file.
@@ -1262,6 +1323,9 @@ def merge_timezone_files():
 
         # Sort final dataframe by timestamp string
         deduplicated_df = deduplicated_df.sort_values('timestamp')
+
+        # Enrich with location_type (home/work/other)
+        deduplicated_df = enrich_location_with_type(deduplicated_df)
 
         # Enforce snake_case before saving
         deduplicated_df = enforce_snake_case(deduplicated_df, "processed file")
