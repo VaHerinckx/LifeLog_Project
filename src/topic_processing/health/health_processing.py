@@ -340,16 +340,21 @@ def aggregate_to_daily(minute_df):
             'within_hour_before_sleep': 'sum'
         }).reset_index()
 
-        # Convert from seconds to minutes
-        screen_daily['screen_time'] = (screen_daily['screen_time'] / 60).round(0).astype(int)
-        screen_daily['within_hour_before_sleep'] = (screen_daily['within_hour_before_sleep'] / 60).round(0).astype(int)
+        # Rename aggregation columns
+        screen_daily = screen_daily.rename(columns={
+            'date_only': 'date',
+            'pickups': 'total_pickups'
+        })
 
-        screen_daily.columns = [
-            'date',
-            'total_screen_minutes',
-            'total_pickups',
-            'screen_before_sleep_minutes'
-        ]
+        # Convert screen_time from seconds to minutes and hours
+        screen_daily['total_screen_minutes'] = (screen_daily['screen_time'] / 60).round(0).astype(int)
+        screen_daily['total_screen_hours'] = (screen_daily['screen_time'] / 3600).round(2)
+
+        # Convert sleep screen time from seconds to minutes
+        screen_daily['screen_before_sleep_minutes'] = (screen_daily['within_hour_before_sleep'] / 60).round(0).astype(int)
+
+        # Drop intermediate columns
+        screen_daily = screen_daily.drop(columns=['screen_time', 'within_hour_before_sleep'])
 
         # Merge with main daily dataframe
         daily_df = daily_df.merge(screen_daily, on='date', how='left')

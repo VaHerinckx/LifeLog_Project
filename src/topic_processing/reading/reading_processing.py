@@ -598,10 +598,16 @@ def generate_reading_website_page_files(df):
         # Sort by timestamp descending (most recent first)
         df_web = df_web.sort_values('timestamp', ascending=False)
 
+        # Add reading_format column based on source
+        print("📖 Adding reading format column...")
+        df_web['reading_format'] = df_web['source'].apply(
+            lambda x: 'Kindle' if x == 'Kindle' else 'Physical'
+        )
+
         # FILE 1: Sessions (all reading sessions)
         sessions_columns = [
             'book_id', 'title', 'author', 'timestamp', 'source', 'genre',
-            'page_split', 'my_rating', 'reading_year', 'reading_month', 'reading_quarter'
+            'page_split', 'my_rating', 'reading_format', 'reading_year', 'reading_month', 'reading_quarter'
         ]
 
         sessions_df = df_web[sessions_columns].copy()
@@ -619,14 +625,25 @@ def generate_reading_website_page_files(df):
         # Add computed column
         df_web["pages_per_day"] = df_web["number_of_pages"] / df_web["reading_duration_final"]
 
+        # Determine reading format per book (Kindle if any session was Kindle)
+        book_format = df_web.groupby(['book_id', 'title', 'author'])['source'].apply(
+            lambda sources: 'Kindle' if 'Kindle' in sources.values else 'Physical'
+        ).reset_index(name='reading_format_agg')
+
         # Group by book_id + title + author, take most recent record (already sorted above)
         books_df = df_web.groupby(['book_id', 'title', 'author'], as_index=False).first()
+
+        # Merge the aggregated reading format
+        books_df = books_df.merge(book_format[['book_id', 'title', 'author', 'reading_format_agg']],
+                                   on=['book_id', 'title', 'author'], how='left')
+        books_df['reading_format'] = books_df['reading_format_agg']
+        books_df = books_df.drop(columns=['reading_format_agg'])
 
         books_columns = [
             'book_id', 'title', 'author', 'original_publication_year',
             'my_rating', 'average_rating', 'genre', 'fiction_yn',
             'number_of_pages', 'pages_per_day', 'reading_duration_final', 'cover_url',
-            'timestamp', 'reading_year', 'reading_month', 'reading_quarter'
+            'reading_format', 'timestamp', 'reading_year', 'reading_month', 'reading_quarter'
         ]
 
         books_df = books_df[books_columns].copy()

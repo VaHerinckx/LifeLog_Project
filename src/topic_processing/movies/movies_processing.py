@@ -54,6 +54,10 @@ def generate_movies_website_page_files(df):
             cols = ['movie_id'] + cols
             df_web = df_web[cols]
 
+        # Add extra columns to simplify website processing
+        df_web["runtime_hour"] = (df_web["runtime"] / 60).astype(float)
+
+
         # Enforce snake_case before saving
         df_web = enforce_snake_case(df_web, "movies_page_letterboxd_data")
 
