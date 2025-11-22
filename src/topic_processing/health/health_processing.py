@@ -5,7 +5,7 @@ from src.utils.drive_operations import upload_multiple_files, verify_drive_conne
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 from src.sources_processing.apple.apple_processing import full_apple_pipeline
 from src.sources_processing.nutrilio.nutrilio_processing import full_nutrilio_pipeline
-from src.location.location_processing import full_location_pipeline
+from src.topic_processing.location.location_processing import full_location_pipeline
 from src.sources_processing.offscreen.offscreen_processing import full_offscreen_pipeline
 
 
@@ -339,6 +339,10 @@ def aggregate_to_daily(minute_df):
             'pickups': 'sum',
             'within_hour_before_sleep': 'sum'
         }).reset_index()
+
+        # Convert from seconds to minutes
+        screen_daily['screen_time'] = (screen_daily['screen_time'] / 60).round(0).astype(int)
+        screen_daily['within_hour_before_sleep'] = (screen_daily['within_hour_before_sleep'] / 60).round(0).astype(int)
 
         screen_daily.columns = [
             'date',
