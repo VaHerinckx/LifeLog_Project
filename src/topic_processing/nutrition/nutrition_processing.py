@@ -42,6 +42,199 @@ def load_nutrilio_nutrition_data():
 
 
 # ============================================================================
+# WEBSITE FILE GENERATION FUNCTIONS
+# ============================================================================
+
+def remove_meal_type_from_food_list(df_web):
+    """
+    Remove meal type identifiers from the beginning of food_list column.
+
+    Removes the first item if it matches meal types: Breakfast, Morning Snack,
+    Lunch, Afternoon Snack, Dinner, Night Snack (case-insensitive).
+
+    Args:
+        df_web: DataFrame with food_list column
+
+    Returns:
+        DataFrame with cleaned food_list column
+    """
+    import regex as re
+
+    meal_types = [
+        'breakfast', 'morning snack', 'lunch',
+        'afternoon snack', 'dinner', 'night snack'
+    ]
+
+    for index, row in df_web.iterrows():
+        if pd.notna(row.get('food_list')) and row['food_list']:
+            # Extract first item before the first pipe
+            first_item_match = re.match(r'^([^|]+)(\s*\|(.*))?$', row['food_list'])
+
+            if first_item_match:
+                first_item = first_item_match.group(1).strip()
+                remaining = first_item_match.group(3)  # Everything after first pipe
+
+                # Extract just the name without quantity
+                name_match = re.match(r'(.+?)\s*\(\d+x\)', first_item)
+                if name_match:
+                    item_name = name_match.group(1).strip().lower()
+
+                    # Check if it's a meal type
+                    if item_name in meal_types:
+                        # Remove the first item
+                        if remaining:
+                            df_web.loc[index, 'food_list'] = remaining.strip()
+                        else:
+                            df_web.loc[index, 'food_list'] = ''
+
+    return df_web
+
+
+def explode_food_and_drinks(df_web):
+    """
+    Explode food_list and drinks_list into individual rows with separate columns.
+
+    For each meal, creates multiple rows (one per ingredient/drink, using max count).
+    Parses items like "Dinner (1x) | Potatoes (2x)" into individual food/drink and quantity columns.
+
+    Args:
+        df_web: DataFrame with food_list and drinks_list columns
+
+    Returns:
+        DataFrame with food, food_quantity, drink, drink_quantity columns added
+    """
+    import regex as re
+
+    result_rows = []
+    pattern = r'([^|]+)\s*\((\d+)x\)'
+
+    for _, row in df_web.iterrows():
+        # Parse food_list
+        food_items = []
+        food_quantities = []
+        if pd.notna(row.get('food_list')) and row['food_list']:
+            matches = re.findall(pattern, row['food_list'])
+            for item, qty in matches:
+                food_items.append(item.strip())
+                food_quantities.append(int(qty))
+
+        # Parse drinks_list
+        drink_items = []
+        drink_quantities = []
+        if pd.notna(row.get('drinks_list')) and row['drinks_list']:
+            matches = re.findall(pattern, row['drinks_list'])
+            for item, qty in matches:
+                drink_items.append(item.strip())
+                drink_quantities.append(int(qty))
+
+        # Determine number of rows to create (max of food and drink counts)
+        max_items = max(len(food_items), len(drink_items))
+
+        # If no items found, keep original row with empty food/drink columns
+        if max_items == 0:
+            new_row = row.to_dict()
+            new_row['food'] = ''
+            new_row['food_quantity'] = None
+            new_row['drink'] = ''
+            new_row['drink_quantity'] = None
+            result_rows.append(new_row)
+        else:
+            # Create one row per item
+            for i in range(max_items):
+                new_row = row.to_dict()
+
+                # Add food and quantity (or empty if index exceeds food items)
+                if i < len(food_items):
+                    new_row['food'] = food_items[i]
+                    new_row['food_quantity'] = food_quantities[i]
+                else:
+                    new_row['food'] = ''
+                    new_row['food_quantity'] = None
+
+                # Add drink and quantity (or empty if index exceeds drink items)
+                if i < len(drink_items):
+                    new_row['drink'] = drink_items[i]
+                    new_row['drink_quantity'] = drink_quantities[i]
+                else:
+                    new_row['drink'] = ''
+                    new_row['drink_quantity'] = None
+
+                result_rows.append(new_row)
+
+    return pd.DataFrame(result_rows)
+
+
+def generate_nutrition_website_file(df):
+    """
+    Generate website-optimized file for the Nutrition page.
+
+    Args:
+        df: Processed dataframe (already in snake_case)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n🌐 Generating website file for Nutrition page...")
+
+    try:
+        # Ensure output directory exists
+        website_dir = 'files/website_files/nutrition'
+        os.makedirs(website_dir, exist_ok=True)
+
+        # Work with copy to avoid modifying original
+        df_web = df.copy()
+
+        # Filter to only keep rows where meal is not null
+        df_web = df_web[df_web['meal'].notna() & (df_web['meal'] != '')].copy()
+        print(f"📊 Filtered to {len(df_web)} meal entries from {len(df)} total rows")
+
+        # Select specific columns for website (use keep columns instead of list columns)
+        columns_to_keep = [
+            'date', 'weekday', 'time', 'meal', 'food_keep', 'drinks_keep',
+            'usda_meal_score', 'places', 'origin', 'amount', 'amount_text',
+            'meal_assessment', 'meal_assessment_text'
+        ]
+
+        # Keep only columns that exist in the dataframe
+        existing_columns = [col for col in columns_to_keep if col in df_web.columns]
+        df_web = df_web[existing_columns].copy()
+
+        # Rename keep columns to list columns for website
+        df_web.rename(columns={
+            'food_keep': 'food_list',
+            'drinks_keep': 'drinks_list'
+        }, inplace=True)
+
+        # Add meal_id as sequential integer starting from 0 (before explosion)
+        df_web.insert(0, 'meal_id', range(len(df_web)))
+
+        # Remove meal type identifiers from food_list
+        print(f"🧹 Removing meal type identifiers from food_list...")
+        df_web = remove_meal_type_from_food_list(df_web)
+
+        # Explode food_list and drinks_list into individual rows
+        print(f"🔄 Exploding food and drinks into individual rows...")
+        df_web = explode_food_and_drinks(df_web)
+        print(f"📊 Exploded to {len(df_web)} rows (from individual ingredients/drinks)")
+
+        # Enforce snake_case before saving
+        df_web = enforce_snake_case(df_web, "nutrition_page_data")
+
+        # Save website file
+        website_path = f'{website_dir}/nutrition_page_data.csv'
+        df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Website file: {len(df_web):,} records → {website_path}")
+
+        return True
+
+    except Exception as e:
+        print(f"❌ Error generating website file: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+# ============================================================================
 # PROCESSING FUNCTIONS
 # ============================================================================
 
@@ -102,6 +295,13 @@ def create_nutrition_files():
         print(f"✅ Saved nutrition data: {len(nutrition_df):,} records")
         print(f"   Output: {nutrition_output}")
 
+        # STEP 6: Generate website file
+        print("\n🌐 STEP 6: Generating website file...")
+        website_success = generate_nutrition_website_file(nutrition_df)
+
+        if not website_success:
+            print("⚠️  Warning: Website file generation failed, but processed file was saved")
+
         return True
 
     except Exception as e:
@@ -113,35 +313,37 @@ def create_nutrition_files():
 
 def upload_nutrition_results():
     """
-    Uploads processed nutrition files to Google Drive.
+    Uploads nutrition website file to Google Drive.
+    Only uploads the single website file (not processed files).
 
     Returns:
         bool: True if successful, False otherwise
     """
-    print("\n☁️  Uploading nutrition results to Google Drive...")
+    print("\n☁️  Uploading nutrition website file to Google Drive...")
 
+    # Only upload website file
     files_to_upload = [
-        "files/topic_processed_files/nutrition/nutrition_processed.csv",
-        "files/website_files/nutrition/nutrition_page_data.csv"  # Website file (already generated by Nutrilio source)
+        "files/website_files/nutrition/nutrition_page_data.csv"
     ]
 
     # Filter to only existing files
     existing_files = [f for f in files_to_upload if os.path.exists(f)]
 
     if not existing_files:
-        print("❌ No files found to upload")
+        print("❌ No website file found to upload")
+        print("💡 Make sure generate_nutrition_website_file() ran successfully")
         return False
 
-    print(f"📤 Uploading {len(existing_files)} file(s)...")
+    print(f"📤 Uploading {len(existing_files)} website file...")
     for f in existing_files:
         print(f"   • {f}")
 
     success = upload_multiple_files(existing_files)
 
     if success:
-        print("✅ Nutrition results uploaded successfully!")
+        print("✅ Nutrition website file uploaded successfully!")
     else:
-        print("❌ Some files failed to upload")
+        print("❌ Website file failed to upload")
 
     return success
 

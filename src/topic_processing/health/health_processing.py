@@ -101,7 +101,7 @@ def load_location_data():
     Returns:
         DataFrame: Location data with minute-level granularity
     """
-    location_path = 'files/processed_files/location/combined_timezone_processed.csv'
+    location_path = 'files/topic_processed_files/location/location_processed.csv'
 
     if not os.path.exists(location_path):
         print(f"⚠️  Location file not found: {location_path}")
