@@ -28,6 +28,7 @@ from src.utils.utils_functions import enforce_snake_case, record_successful_run
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.spotify_api_utils import spotify_authentication, get_artist_info, get_track_info
 from src.topic_processing.music.genre_mapping import get_simplified_genre
+from src.sources_processing.lastfm.lastfm_processing import full_lastfm_pipeline
 
 load_dotenv()
 
@@ -128,25 +129,73 @@ def enrich_with_spotify_metadata(df):
 
     print(f"📊 Found {len(unique_artists):,} unique artists and {len(unique_tracks):,} unique tracks")
 
+    # Define work file paths
+    artists_work_file = 'files/work_files/lastfm_work_files/artists_infos.csv'
+    tracks_work_file = 'files/work_files/lastfm_work_files/tracks_infos.csv'
+
+    # Count how many are NEW (not in work files) - helps estimate API call time
+    existing_artists = set()
+    existing_tracks = set()
+    if os.path.exists(artists_work_file):
+        existing_df = pd.read_csv(artists_work_file, sep='|', low_memory=False)
+        existing_artists = set(existing_df['artist_name'].str.lower())
+    if os.path.exists(tracks_work_file):
+        existing_df = pd.read_csv(tracks_work_file, sep='|', low_memory=False)
+        existing_tracks = set(existing_df['song_key'].str.lower())
+
+    new_artists_count = len([a for a in unique_artists if str(a).lower() not in existing_artists])
+    new_tracks_count = len([t for t in unique_tracks if str(t).lower() not in existing_tracks])
+    print(f"🆕 New artists to fetch: {new_artists_count:,} (cached: {len(existing_artists):,})")
+    print(f"🆕 New tracks to fetch: {new_tracks_count:,} (cached: {len(existing_tracks):,})")
+
     # Get artist information
     print("🎤 Gathering artist information from Spotify API...")
-    artists_work_file = 'files/work_files/lastfm_work_files/artists_infos.csv'
     artist_df = get_artist_info(token, unique_artists, artists_work_file)
 
     # Get track information
     print("🎶 Gathering track information from Spotify API...")
-    tracks_work_file = 'files/work_files/lastfm_work_files/tracks_infos.csv'
     track_df = get_track_info(token, unique_tracks, tracks_work_file)
 
-    # Merge artist info
+    # Merge artist info (use lowercase for case-insensitive merge)
     print("🔄 Merging artist metadata...")
-    df_merge_artist = pd.merge(df, artist_df, how='left', on='artist_name')
+    df['_artist_name_lower'] = df['artist_name'].astype(str).str.lower()
+    artist_df['_artist_name_lower'] = artist_df['artist_name'].astype(str).str.lower()
+    artist_df_no_name = artist_df.drop(columns=['artist_name'])  # Remove to avoid duplicate column
+
+    df_merge_artist = pd.merge(df, artist_df_no_name, how='left', on='_artist_name_lower')
+    df_merge_artist = df_merge_artist.drop(columns=['_artist_name_lower'])
+
+    # Check if artist_artwork_url was merged
+    if 'artist_artwork_url' in df_merge_artist.columns:
+        non_null = df_merge_artist['artist_artwork_url'].notna().sum()
+        print(f"   ✅ artist_artwork_url merged ({non_null:,} non-null values)")
+    else:
+        print(f"   ⚠️  artist_artwork_url NOT in artist merge result")
 
     # Merge track info (only new columns)
     print("🔄 Merging track metadata...")
     cols_to_use = list(track_df.columns.difference(df_merge_artist.columns))
     cols_to_use.append('song_key')
-    df_enriched = pd.merge(df_merge_artist, track_df[cols_to_use], how='left', on='song_key')
+
+    # Ensure album_artwork_url is included if it exists in track_df
+    if 'album_artwork_url' in track_df.columns and 'album_artwork_url' not in cols_to_use:
+        cols_to_use.append('album_artwork_url')
+
+    # Use lowercase song_key for case-insensitive merge (work file stores lowercase keys)
+    df_merge_artist['_song_key_lower'] = df_merge_artist['song_key'].astype(str).str.lower()
+    track_df_subset = track_df[cols_to_use].copy()
+    track_df_subset['_song_key_lower'] = track_df_subset['song_key'].astype(str).str.lower()
+    track_df_subset = track_df_subset.drop(columns=['song_key'])  # Remove original to avoid duplicate
+
+    df_enriched = pd.merge(df_merge_artist, track_df_subset, how='left', on='_song_key_lower')
+    df_enriched = df_enriched.drop(columns=['_song_key_lower'])  # Clean up temp column
+
+    # Check if album_artwork_url was merged
+    if 'album_artwork_url' in df_enriched.columns:
+        non_null = df_enriched['album_artwork_url'].notna().sum()
+        print(f"   ✅ album_artwork_url merged ({non_null:,} non-null values)")
+    else:
+        print(f"   ⚠️  album_artwork_url NOT in track merge result")
 
     print(f"✅ Enrichment complete: {len(df_enriched.columns)} total columns")
 
@@ -161,69 +210,56 @@ def compute_completion(df):
     """
     Calculate listening completion percentage and skip detection.
 
-    Completion is calculated by comparing consecutive plays of the same track:
-    - If track A plays after track B, but track B duration hasn't elapsed, B was likely skipped
+    Completion is calculated by comparing consecutive plays:
+    - If time to next track < track duration, track was likely skipped
     - Completion % = time_elapsed / track_duration
 
+    Uses vectorized pandas operations for performance.
+
     Args:
-        df (pandas.DataFrame): Data sorted by timestamp descending
+        df (pandas.DataFrame): Data with timestamp and track_duration columns
 
     Returns:
-        pandas.DataFrame: Data with 'completion' and 'skip_next_track' columns
+        pandas.DataFrame: Data with 'completion' and 'is_skipped_track' columns
     """
     print("\n📊 Calculating listening statistics...")
 
     df = df.copy()
-    df['completion'] = 0.0
-    df['skip_next_track'] = 0
 
-    # Sort by timestamp ascending for chronological processing
+    # Sort chronologically for time-diff calculation
     df = df.sort_values('timestamp', ascending=True).reset_index(drop=True)
 
-    total_tracks = len(df)
+    # Convert track_duration to numeric seconds (handle non-numeric values)
+    df['_duration_sec'] = pd.to_numeric(df['track_duration'], errors='coerce') / 1000
 
-    for i in range(len(df) - 1):
-        current_track = df.loc[i]
-        next_track = df.loc[i + 1]
+    # Calculate time diff to next track (vectorized)
+    df['_time_to_next'] = df['timestamp'].shift(-1) - df['timestamp']
+    df['_time_to_next_sec'] = df['_time_to_next'].dt.total_seconds()
 
-        # Get track duration in seconds
-        try:
-            duration_ms = float(current_track['track_duration'])
-            if pd.isna(duration_ms) or duration_ms == 0 or str(duration_ms) == 'No API result':
-                # Can't calculate completion without duration
-                df.loc[i, 'completion'] = 1.0  # Assume full listen
-                continue
-            duration_seconds = duration_ms / 1000
-        except (ValueError, TypeError):
-            df.loc[i, 'completion'] = 1.0
-            continue
+    # Calculate completion (vectorized) - clip between 0 and 1
+    df['completion'] = (df['_time_to_next_sec'] / df['_duration_sec']).clip(0, 1)
 
-        # Calculate time between tracks
-        time_diff = (next_track['timestamp'] - current_track['timestamp']).total_seconds()
+    # Handle missing/zero durations (assume full listen)
+    df.loc[df['_duration_sec'].isna() | (df['_duration_sec'] == 0), 'completion'] = 1.0
 
-        # Calculate completion percentage
-        if time_diff >= duration_seconds:
-            # Track played completely (or beyond)
-            completion = 1.0
-            skip_next = 0
-        else:
-            # Track was interrupted
-            completion = min(time_diff / duration_seconds, 1.0)
-            skip_next = 1
+    # Last track - assume completed (no next track to compare)
+    df.loc[df.index[-1], 'completion'] = 1.0
 
-        df.loc[i, 'completion'] = completion
-        df.loc[i, 'skip_next_track'] = skip_next
+    # Fill any remaining NaN completions with 1.0
+    df['completion'] = df['completion'].fillna(1.0)
 
-    # Last track - assume completed
-    df.loc[len(df) - 1, 'completion'] = 1.0
-    df.loc[len(df) - 1, 'skip_next_track'] = 0
+    # Skip detection: True if completion < 1.0 (boolean)
+    df['is_skipped_track'] = df['completion'] < 1.0
+
+    # Clean up temp columns
+    df = df.drop(columns=['_duration_sec', '_time_to_next', '_time_to_next_sec'])
 
     # Sort back to descending timestamp
     df = df.sort_values('timestamp', ascending=False).reset_index(drop=True)
 
-    # Calculate statistics
+    # Calculate and print statistics
     avg_completion = df['completion'].mean() * 100
-    skip_rate = df['skip_next_track'].mean() * 100
+    skip_rate = df['is_skipped_track'].mean() * 100
     print(f"✅ Average completion: {avg_completion:.1f}%")
     print(f"✅ Skip rate: {skip_rate:.1f}%")
 
@@ -232,43 +268,53 @@ def compute_completion(df):
 
 def calculate_discovery_flags(df):
     """
-    Calculate new artist/track discovery flags.
+    Calculate new artist/track discovery flags (boolean columns).
 
     Flags:
-    - new_artist_yn: First time listening to this artist
-    - new_track_yn: First time listening to this track
-    - new_recurring_artist_yn: 10th listen of this artist
-    - new_recurring_track_yn: 5th listen of this track
+    - is_new_artist: True only for the first listen of an artist
+    - is_new_track: True only for the first listen of a track
+    - is_new_recurring_artist: True only at 10th listen of an artist (milestone)
+    - is_new_recurring_track: True only at 5th listen of a track (milestone)
+    - is_recurring_artist: True for ALL listens once artist has 10+ total listens
+    - is_recurring_track: True for ALL listens once track has 5+ total listens
 
     Args:
         df (pandas.DataFrame): Data with timestamp column
 
     Returns:
-        pandas.DataFrame: Data with discovery flag columns
+        pandas.DataFrame: Data with discovery flag columns (boolean)
     """
     print("🔍 Calculating discovery flags...")
 
     # Sort chronologically for cumulative counting
     df = df.sort_values('timestamp', ascending=True).reset_index(drop=True)
 
-    # Calculate flags
-    df['new_artist_yn'] = df.groupby('artist_name').cumcount() == 0
-    df['new_recurring_artist_yn'] = df.groupby('artist_name').cumcount() == 10
-    df['new_track_yn'] = df.groupby('track_name').cumcount() == 0
-    df['new_recurring_track_yn'] = df.groupby('track_name').cumcount() == 5
+    # First listen flags (True only for the first occurrence)
+    df['is_new_artist'] = df.groupby('artist_name').cumcount() == 0
+    df['is_new_track'] = df.groupby('track_name').cumcount() == 0
 
-    # Convert boolean to integer
-    df['new_artist_yn'] = df['new_artist_yn'].astype(int)
-    df['new_recurring_artist_yn'] = df['new_recurring_artist_yn'].astype(int)
-    df['new_track_yn'] = df['new_track_yn'].astype(int)
-    df['new_recurring_track_yn'] = df['new_recurring_track_yn'].astype(int)
+    # Milestone flags (True only at the 10th/5th listen)
+    df['is_new_recurring_artist'] = df.groupby('artist_name').cumcount() == 9  # 10th listen (0-indexed)
+    df['is_new_recurring_track'] = df.groupby('track_name').cumcount() == 4  # 5th listen (0-indexed)
+
+    # Recurring status (True for ALL listens once threshold reached)
+    # Use transform to get total count per artist/track across all time
+    artist_total_count = df.groupby('artist_name')['artist_name'].transform('count')
+    track_total_count = df.groupby('track_name')['track_name'].transform('count')
+
+    df['is_recurring_artist'] = artist_total_count >= 10
+    df['is_recurring_track'] = track_total_count >= 5
 
     # Sort back to descending timestamp
     df = df.sort_values('timestamp', ascending=False).reset_index(drop=True)
 
-    new_artists = df['new_artist_yn'].sum()
-    new_tracks = df['new_track_yn'].sum()
+    # Print statistics
+    new_artists = df['is_new_artist'].sum()
+    new_tracks = df['is_new_track'].sum()
+    recurring_artists = df['is_recurring_artist'].sum()
+    recurring_tracks = df['is_recurring_track'].sum()
     print(f"✅ Discovered {new_artists:,} new artists and {new_tracks:,} new tracks")
+    print(f"✅ Recurring: {recurring_artists:,} artist listens, {recurring_tracks:,} track listens")
 
     return df
 
@@ -316,10 +362,11 @@ def select_output_columns(df):
         'album_artwork_url', 'artist_artwork_url',
 
         # Listening behavior (calculated fields)
-        'completion', 'skip_next_track',
+        'completion', 'is_skipped_track',
 
-        # Discovery flags
-        'new_artist_yn', 'new_track_yn', 'new_recurring_artist_yn', 'new_recurring_track_yn',
+        # Discovery flags (boolean)
+        'is_new_artist', 'is_new_track', 'is_new_recurring_artist', 'is_new_recurring_track',
+        'is_recurring_artist', 'is_recurring_track',
 
         # Source tracking
         'source'
@@ -352,9 +399,9 @@ def power_bi_processing(df):
     if 'genre_1' in df.columns:
         df['genre_1'] = df['genre_1'].fillna('Unknown')
 
-    # Convert track_duration to float (replace 'No API result' with 0)
+    # Convert track_duration to float (replace non-numeric strings with 0)
     if 'track_duration' in df.columns:
-        df['track_duration'] = df['track_duration'].replace('No API result', '0').astype(float)
+        df['track_duration'] = df['track_duration'].replace(['No API result', 'Unknown', 'Unknown Error'], '0').astype(float)
 
     return df
 
@@ -396,14 +443,19 @@ def generate_music_website_files(df):
         df_web['listening_seconds'] = df_web['listening_seconds'].fillna(0).astype(int)
         print(f"✅ Added listening_seconds column")
 
-        # Combine genres from genre_1 through genre_14 into single 'genres' column
+        # Combine genres from available genre columns into single 'genres' column
         # Use comma separator (not pipe, which is the CSV delimiter)
-        genre_cols = [f'genre_{i}' for i in range(1, 15)]
-        df_web['genres'] = df_web[genre_cols].apply(
-            lambda row: ', '.join([str(g) for g in row if pd.notna(g) and str(g) != '' and str(g) != 'nan']),
-            axis=1
-        )
-        print(f"✅ Combined genres from genre_1-14 into single column (comma-separated)")
+        # Filter to only existing genre columns (may have genre_1 through genre_8 or more)
+        genre_cols = [f'genre_{i}' for i in range(1, 15) if f'genre_{i}' in df_web.columns]
+        if genre_cols:
+            df_web['genres'] = df_web[genre_cols].apply(
+                lambda row: ', '.join([str(g) for g in row if pd.notna(g) and str(g) != '' and str(g) != 'nan']),
+                axis=1
+            )
+            print(f"✅ Combined genres from {len(genre_cols)} genre columns into single column (comma-separated)")
+        else:
+            df_web['genres'] = ''
+            print(f"⚠️  No genre columns found, genres will be empty")
 
         # Add simplified_genre column using genre_1
         df_web['simplified_genre'] = df_web['genre_1'].apply(get_simplified_genre)
@@ -426,25 +478,70 @@ def generate_music_website_files(df):
             'track_duration',
             'track_popularity',
             'completion',
-            'skip_next_track',
-            'listening_seconds',
-            'new_artist_yn',
-            'new_track_yn'
+            'is_skipped_track',
+            'listening_seconds'
         ]
+
+        # Add discovery flag columns if they exist in the data
+        if 'is_new_artist' in df_web.columns:
+            website_columns.append('is_new_artist')
+            print(f"✅ Including is_new_artist column")
+
+        if 'is_new_track' in df_web.columns:
+            website_columns.append('is_new_track')
+            print(f"✅ Including is_new_track column")
+
+        # Add is_recurring_artist if it exists in the data
+        if 'is_recurring_artist' in df_web.columns:
+            website_columns.append('is_recurring_artist')
+            print(f"✅ Including is_recurring_artist column")
+
+        # Add is_recurring_track if it exists in the data
+        if 'is_recurring_track' in df_web.columns:
+            website_columns.append('is_recurring_track')
+            print(f"✅ Including is_recurring_track column")
+
+        # Add is_new_recurring_artist if it exists in the data (milestone: 10th listen)
+        if 'is_new_recurring_artist' in df_web.columns:
+            website_columns.append('is_new_recurring_artist')
+            print(f"✅ Including is_new_recurring_artist column")
+
+        # Add is_new_recurring_track if it exists in the data (milestone: 5th listen)
+        if 'is_new_recurring_track' in df_web.columns:
+            website_columns.append('is_new_recurring_track')
+            print(f"✅ Including is_new_recurring_track column")
 
         # Add album_artwork_url if it exists in the data
         if 'album_artwork_url' in df_web.columns:
             website_columns.append('album_artwork_url')
-            print(f"✅ Including album_artwork_url column")
+            non_null = df_web['album_artwork_url'].notna().sum()
+            has_url = df_web['album_artwork_url'].str.startswith('http', na=False).sum()
+            print(f"✅ Including album_artwork_url column ({non_null:,} non-null, {has_url:,} valid URLs)")
+        else:
+            print(f"⚠️  album_artwork_url column NOT found in data")
 
         # Add artist_artwork_url if it exists in the data
         if 'artist_artwork_url' in df_web.columns:
             website_columns.append('artist_artwork_url')
-            print(f"✅ Including artist_artwork_url column")
+            non_null = df_web['artist_artwork_url'].notna().sum()
+            has_url = df_web['artist_artwork_url'].str.startswith('http', na=False).sum()
+            print(f"✅ Including artist_artwork_url column ({non_null:,} non-null, {has_url:,} valid URLs)")
+        else:
+            print(f"⚠️  artist_artwork_url column NOT found in data")
 
         # Filter to only website columns
         df_web = df_web[website_columns]
         print(f"✅ Filtered to {len(website_columns)} website columns")
+
+        # Convert boolean columns to integers for proper CSV storage
+        # (Python "True"/"False" strings are truthy in JavaScript, 0/1 works correctly)
+        bool_cols = ['is_skipped_track', 'is_new_artist', 'is_new_track',
+                     'is_recurring_artist', 'is_recurring_track',
+                     'is_new_recurring_artist', 'is_new_recurring_track']
+        for col in bool_cols:
+            if col in df_web.columns:
+                df_web[col] = df_web[col].astype(int)
+        print(f"✅ Converted boolean columns to integers")
 
         # Save website file
         website_path = f'{website_dir}/music_page_data.csv'
@@ -526,10 +623,10 @@ def create_music_file():
 
         # Show sample
         print(f"\n📋 Sample records:")
-        sample_df = df.head(3)[['timestamp', 'artist_name', 'track_name', 'completion', 'skip_next_track']]
+        sample_df = df.head(3)[['timestamp', 'artist_name', 'track_name', 'completion', 'is_skipped_track']]
         for _, row in sample_df.iterrows():
             completion_pct = row['completion'] * 100
-            skip_status = "⏭️ " if row['skip_next_track'] else "✓"
+            skip_status = "⏭️ " if row['is_skipped_track'] else "✓"
             print(f"  {skip_status} {str(row['timestamp'])[:16]} | {row['artist_name']} - {row['track_name']} ({completion_pct:.0f}%)")
 
         # Step 9: Generate website files
@@ -624,7 +721,11 @@ def full_music_pipeline(auto_full=False, auto_process_only=False):
     if choice == "1":
         print("\n🚀 Option 1: Full processing from source data...")
 
-        # Process data
+        # Step 1: Run Last.fm source pipeline (download + process)
+        print("\n📥 Running Last.fm source pipeline...")
+        full_lastfm_pipeline(auto_full=True)
+
+        # Step 2: Process music topic data
         process_success = create_music_file()
 
         if not process_success:

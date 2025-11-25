@@ -43,10 +43,25 @@ def create_podcasts_topic_file():
             return False
 
         print(f"📖 Reading source data from {source_file}...")
-        df = pd.read_csv(source_file, sep='|', encoding='utf-8')
+        df = pd.read_csv(source_file, sep='|', encoding='utf-8').drop(["is_new_podcast", "is_recurring_podcast"], axis = 1)
         print(f"✅ Loaded {len(df)} records")
 
         os.makedirs(os.path.dirname(topic_output_file), exist_ok=True)
+        df["listened_minutes"] = df["listened_seconds"] / 60
+        df["listened_hours"] = df["listened_minutes"] / 60
+
+        # First listen flags (True only for the first occurrence)
+        df['is_new_podcast'] = df.groupby('podcast_name').cumcount() == 0
+
+        # Milestone flags (True only at the 10th/5th listen)
+        df['is_new_recurring_podcast'] = df.groupby('podcast_name').cumcount() == 9  # 10th listen (0-indexed)
+
+        # Recurring status (True for ALL listens once threshold reached)
+        # Use transform to get total count per podcast across all time
+        podcast_total_count = df.groupby('podcast_name')['podcast_name'].transform('count')
+
+        df['is_recurring_podcast'] = podcast_total_count >= 10
+
         df.to_csv(topic_output_file, sep='|', index=False, encoding='utf-8')
         print(f"💾 Saved topic file to {topic_output_file}")
 
@@ -108,7 +123,7 @@ def full_podcasts_pipeline(auto_full=False, auto_process_only=False, skip_source
             source_success = full_pocket_casts_pipeline(auto_process_only=True)
             if not source_success:
                 print("⚠️  Source pipeline failed, but attempting to use existing source data...")
-        
+
         print(f"\n📊 Step 2: Creating Podcasts topic files...")
         topic_success = create_podcasts_topic_file()
 
