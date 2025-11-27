@@ -51,6 +51,7 @@ def create_podcasts_topic_file():
         df["listened_hours"] = df["listened_minutes"] / 60
 
         # First listen flags (True only for the first occurrence)
+        df = df.sort_values("listened_date")
         df['is_new_podcast'] = df.groupby('podcast_name').cumcount() == 0
 
         # Milestone flags (True only at the 10th/5th listen)
@@ -62,6 +63,13 @@ def create_podcasts_topic_file():
 
         df['is_recurring_podcast'] = podcast_total_count >= 10
 
+        bool_cols = ['is_new_podcast', 'is_recurring_podcast', 'is_new_recurring_podcast']
+        for col in bool_cols:
+            if col in df.columns:
+                df[col] = df[col].astype(int)
+        print(f"✅ Converted boolean columns to integers")
+
+        df = df.sort_values("listened_date", ascending = False)
         df.to_csv(topic_output_file, sep='|', index=False, encoding='utf-8')
         print(f"💾 Saved topic file to {topic_output_file}")
 
