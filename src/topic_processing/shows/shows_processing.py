@@ -70,8 +70,10 @@ def create_shows_topic_file():
         df = pd.read_csv(source_file, sep='|', encoding='utf-8')
         print(f"✅ Loaded {len(df)} records")
 
-        # For Shows, the topic file is the same as source (single source, no merging needed)
-        # But we save it to topic_processed_files for consistency
+        # We add extra time columns
+        df["minutes"] = df["seconds"] / 60
+        df["hours"] = df["minutes"] / 60
+
         os.makedirs(os.path.dirname(topic_output_file), exist_ok=True)
         df.to_csv(topic_output_file, sep='|', index=False, encoding='utf-8')
         print(f"💾 Saved topic file to {topic_output_file}")

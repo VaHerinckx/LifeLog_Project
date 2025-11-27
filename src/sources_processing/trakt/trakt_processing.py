@@ -228,7 +228,7 @@ def save_season_artwork_cache(cache_data):
     """Save season artwork cache to JSON file"""
     cache_path = 'files/work_files/trakt_work_files/season_artwork_cache.json'
     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-    
+
     try:
         with open(cache_path, 'w') as f:
             json.dump(cache_data, f, indent=2)
@@ -237,6 +237,250 @@ def save_season_artwork_cache(cache_data):
     except Exception as e:
         print(f"❌ Error saving artwork cache: {e}")
         return False
+
+
+# ============================================================================
+# TMDB EPISODE DATA FUNCTIONS
+# ============================================================================
+
+def load_episode_tmdb_cache():
+    """Load episode TMDB cache from JSON file"""
+    cache_path = 'files/work_files/trakt_work_files/episode_tmdb_cache.json'
+
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            print(f"📺 Loaded {len(cache_data)} episode TMDB entries from cache")
+            return cache_data
+        except Exception as e:
+            print(f"⚠️  Error loading episode cache: {e}")
+            return {}
+    else:
+        print("📺 No existing episode TMDB cache found - creating new one")
+        return {}
+
+
+def save_episode_tmdb_cache(cache_data):
+    """Save episode TMDB cache to JSON file"""
+    cache_path = 'files/work_files/trakt_work_files/episode_tmdb_cache.json'
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+
+    try:
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        print(f"❌ Error saving episode cache: {e}")
+        return False
+
+
+def _get_default_episode_data():
+    """Returns default structure with None/empty values for episode data"""
+    return {
+        'runtime': None,
+        'overview': '',
+        'air_date': None,
+        'vote_average': None,
+        'vote_count': None,
+        'still_url': '',
+        'production_code': '',
+        'director': '',
+        'writer': '',
+        'cinematographer': '',
+        'editor': '',
+        'cast': '',
+        'guest_stars': '',
+        'cached_at': datetime.now().isoformat()
+    }
+
+
+def extract_episode_director(crew_list):
+    """Extract director(s) from episode crew list"""
+    directors = [person.get('name', '') for person in crew_list
+                 if person.get('job') == 'Director' and person.get('name')]
+    return ', '.join(directors) if directors else ''
+
+
+def extract_episode_writer(crew_list):
+    """Extract writer(s) from episode crew list (department=Writing)"""
+    writers = [person.get('name', '') for person in crew_list
+               if person.get('department') == 'Writing' and person.get('name')]
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_writers = []
+    for w in writers:
+        if w not in seen:
+            seen.add(w)
+            unique_writers.append(w)
+    return ', '.join(unique_writers) if unique_writers else ''
+
+
+def extract_cinematographer(crew_list):
+    """Extract cinematographer (job=Director of Photography)"""
+    cinematographers = [person.get('name', '') for person in crew_list
+                        if person.get('job') == 'Director of Photography' and person.get('name')]
+    return ', '.join(cinematographers) if cinematographers else ''
+
+
+def extract_editor(crew_list):
+    """Extract editor(s) from episode crew list"""
+    editors = [person.get('name', '') for person in crew_list
+               if person.get('job') == 'Editor' and person.get('name')]
+    return ', '.join(editors) if editors else ''
+
+
+def extract_cast(cast_list):
+    """Extract all main cast as comma-separated string"""
+    cast_names = [person.get('name', '') for person in cast_list if person.get('name')]
+    return ', '.join(cast_names) if cast_names else ''
+
+
+def extract_guest_stars(guest_stars_list):
+    """Extract all guest stars as comma-separated string"""
+    guest_names = [person.get('name', '') for person in guest_stars_list if person.get('name')]
+    return ', '.join(guest_names) if guest_names else ''
+
+
+def get_tmdb_show_id(show_title, show_year, show_id_cache):
+    """
+    Get TMDB show ID, using cache to avoid repeated searches.
+    Returns: (tv_id, success) tuple
+    """
+    cache_key = f"{show_title}_{show_year}"
+
+    if cache_key in show_id_cache:
+        cached_value = show_id_cache[cache_key]
+        if cached_value == 'Not found':
+            return None, False
+        return cached_value, True
+
+    # Get TMDB API key
+    api_key = os.environ.get('TMDB_Key')
+    if not api_key:
+        return None, False
+
+    try:
+        # Search for TV show
+        search_url = "https://api.themoviedb.org/3/search/tv"
+        params = {
+            'api_key': api_key,
+            'query': show_title,
+            'first_air_date_year': show_year
+        }
+
+        response = requests.get(search_url, params=params)
+        time.sleep(0.25)
+
+        if response.status_code != 200:
+            show_id_cache[cache_key] = 'Not found'
+            return None, False
+
+        search_data = response.json()
+
+        if not search_data.get('results'):
+            show_id_cache[cache_key] = 'Not found'
+            return None, False
+
+        tv_id = search_data['results'][0]['id']
+        show_id_cache[cache_key] = tv_id
+        return tv_id, True
+
+    except Exception as e:
+        show_id_cache[cache_key] = 'Not found'
+        return None, False
+
+
+def get_tmdb_episode_info(show_title, show_year, season_number, episode_number, episode_cache, show_id_cache):
+    """
+    Fetches comprehensive episode data from TMDB API with caching.
+
+    Args:
+        show_title: Title of the TV show
+        show_year: Year the show first aired
+        season_number: Season number
+        episode_number: Episode number
+        episode_cache: Dict to store/retrieve episode data
+        show_id_cache: Dict to cache show ID lookups
+
+    Returns:
+        Dict with episode data
+    """
+    cache_key = f"{show_title}_{show_year}_S{season_number}_E{episode_number}"
+
+    # Check if already cached
+    if cache_key in episode_cache:
+        return episode_cache[cache_key]
+
+    # Get TMDB API key
+    api_key = os.environ.get('TMDB_Key')
+    if not api_key:
+        print("⚠️  TMDB_Key not found in environment variables")
+        default_data = _get_default_episode_data()
+        episode_cache[cache_key] = default_data
+        return default_data
+
+    try:
+        # Get show ID (cached)
+        tv_id, success = get_tmdb_show_id(show_title, show_year, show_id_cache)
+
+        if not success:
+            default_data = _get_default_episode_data()
+            episode_cache[cache_key] = default_data
+            return default_data
+
+        # Fetch episode details with credits
+        episode_url = f"https://api.themoviedb.org/3/tv/{tv_id}/season/{season_number}/episode/{episode_number}"
+        params = {
+            'api_key': api_key,
+            'append_to_response': 'credits'
+        }
+
+        response = requests.get(episode_url, params=params)
+        time.sleep(0.25)
+
+        if response.status_code != 200:
+            default_data = _get_default_episode_data()
+            episode_cache[cache_key] = default_data
+            return default_data
+
+        data = response.json()
+
+        # Extract all fields
+        credits = data.get('credits', {})
+        crew = credits.get('crew', [])
+        cast = credits.get('cast', [])
+        guest_stars = data.get('guest_stars', [])
+
+        # Build still URL
+        still_url = ''
+        if data.get('still_path'):
+            still_url = f"https://image.tmdb.org/t/p/w300{data['still_path']}"
+
+        episode_data = {
+            'runtime': data.get('runtime'),
+            'overview': data.get('overview', ''),
+            'air_date': data.get('air_date'),
+            'vote_average': data.get('vote_average'),
+            'vote_count': data.get('vote_count'),
+            'still_url': still_url,
+            'production_code': data.get('production_code', ''),
+            'director': extract_episode_director(crew),
+            'writer': extract_episode_writer(crew),
+            'cinematographer': extract_cinematographer(crew),
+            'editor': extract_editor(crew),
+            'cast': extract_cast(cast),
+            'guest_stars': extract_guest_stars(guest_stars),
+            'cached_at': datetime.now().isoformat()
+        }
+
+        episode_cache[cache_key] = episode_data
+        return episode_data
+
+    except Exception as e:
+        default_data = _get_default_episode_data()
+        episode_cache[cache_key] = default_data
+        return default_data
 
 
 def get_tmdb_season_artwork(show_title, show_year, season_number, cache_data):
@@ -522,6 +766,72 @@ def create_trakt_file():
             lambda row: artwork_cache.get(f"{row['show_title']}_{row['show_year']}_S{row['season']}", ''),
             axis=1
         )
+
+        # ================================================================
+        # TMDB EPISODE DATA ENRICHMENT
+        # ================================================================
+        print("\n📺 Fetching TMDB episode data...")
+
+        episode_cache = load_episode_tmdb_cache()
+        show_id_cache = {}  # In-memory cache for show ID lookups
+
+        # Get unique episodes needing data
+        unique_episodes = df[['show_title', 'show_year', 'season', 'episode_number']].drop_duplicates()
+        print(f"📊 Found {len(unique_episodes)} unique episodes")
+
+        # Check which need fetching
+        episodes_needing_data = []
+        for _, row in unique_episodes.iterrows():
+            cache_key = f"{row['show_title']}_{row['show_year']}_S{row['season']}_E{row['episode_number']}"
+            if cache_key not in episode_cache:
+                episodes_needing_data.append(row)
+
+        print(f"🔍 Need to fetch data for {len(episodes_needing_data)} episodes")
+
+        # Fetch missing data with progress
+        if episodes_needing_data:
+            print("🚀 Fetching episode data from TMDB...")
+
+            for i, row in enumerate(episodes_needing_data):
+                get_tmdb_episode_info(
+                    row['show_title'],
+                    row['show_year'],
+                    row['season'],
+                    row['episode_number'],
+                    episode_cache,
+                    show_id_cache
+                )
+
+                # Save cache every 10 fetches
+                if (i + 1) % 10 == 0:
+                    save_episode_tmdb_cache(episode_cache)
+                    print(f"   💾 Processed {i + 1}/{len(episodes_needing_data)} episodes...")
+
+            # Final cache save
+            save_episode_tmdb_cache(episode_cache)
+            print(f"✅ Fetched TMDB data for {len(episodes_needing_data)} episodes")
+
+        # Helper function to get episode field from cache
+        def get_episode_field(row, field, default=None):
+            cache_key = f"{row['show_title']}_{row['show_year']}_S{row['season']}_E{row['episode_number']}"
+            return episode_cache.get(cache_key, {}).get(field, default)
+
+        # Map cache data to dataframe columns
+        df['episode_runtime'] = df.apply(lambda r: get_episode_field(r, 'runtime'), axis=1)
+        df['episode_overview'] = df.apply(lambda r: get_episode_field(r, 'overview', ''), axis=1)
+        df['episode_air_date'] = df.apply(lambda r: get_episode_field(r, 'air_date'), axis=1)
+        df['episode_vote_average'] = df.apply(lambda r: get_episode_field(r, 'vote_average'), axis=1)
+        df['episode_vote_count'] = df.apply(lambda r: get_episode_field(r, 'vote_count'), axis=1)
+        df['episode_still_url'] = df.apply(lambda r: get_episode_field(r, 'still_url', ''), axis=1)
+        df['episode_production_code'] = df.apply(lambda r: get_episode_field(r, 'production_code', ''), axis=1)
+        df['episode_director'] = df.apply(lambda r: get_episode_field(r, 'director', ''), axis=1)
+        df['episode_writer'] = df.apply(lambda r: get_episode_field(r, 'writer', ''), axis=1)
+        df['episode_cinematographer'] = df.apply(lambda r: get_episode_field(r, 'cinematographer', ''), axis=1)
+        df['episode_editor'] = df.apply(lambda r: get_episode_field(r, 'editor', ''), axis=1)
+        df['episode_cast'] = df.apply(lambda r: get_episode_field(r, 'cast', ''), axis=1)
+        df['episode_guest_stars'] = df.apply(lambda r: get_episode_field(r, 'guest_stars', ''), axis=1)
+
+        print(f"✅ Added TMDB data to {len(df)} episode records")
 
         # Enforce snake_case before saving
         df = enforce_snake_case(df, "processed file")
