@@ -35,6 +35,12 @@ def generate_finance_website_page_files(df):
         # Enforce snake_case before saving
         df_web = enforce_snake_case(df_web, "finance_page_data")
 
+        # Add transaction_id
+        df_web.index.name = 'transaction_id'
+        df_web.reset_index(inplace = True)
+        # Order by descending transactions
+        df_web = df_web.sort_values("date", ascending = False)
+
         # Save website file
         website_path = f'{website_dir}/finance_page_data.csv'
         df_web.to_csv(website_path, sep='|', index=False, encoding='utf-8')
@@ -165,7 +171,7 @@ def full_finance_pipeline(auto_full=False, auto_process_only=False, skip_source=
         # Step 1: Run Money Manager source pipeline (unless skipped)
         if not skip_source:
             print("\n📥 Step 1: Running Money Manager source pipeline...")
-            source_success = full_moneymgr_pipeline(auto_process_only=True)
+            source_success = full_moneymgr_pipeline(auto_full=True)
             if not source_success:
                 print("⚠️  Source pipeline failed, but attempting to use existing source data...")
         else:
