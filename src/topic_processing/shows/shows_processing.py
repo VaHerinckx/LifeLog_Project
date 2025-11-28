@@ -71,8 +71,7 @@ def create_shows_topic_file():
         print(f"✅ Loaded {len(df)} records")
 
         # We add extra time columns
-        df["minutes"] = df["seconds"] / 60
-        df["hours"] = df["minutes"] / 60
+        df["episode_runtime_hours"] = df["episode_runtime"] / 60
 
         os.makedirs(os.path.dirname(topic_output_file), exist_ok=True)
         df.to_csv(topic_output_file, sep='|', index=False, encoding='utf-8')
