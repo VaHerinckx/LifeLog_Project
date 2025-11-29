@@ -7,8 +7,8 @@ from pathlib import Path
 from datetime import datetime
 
 # Import the pipeline functions from source processors
-from src.sources_processing.goodreads.goodreads_processing import full_goodreads_pipeline
-from src.sources_processing.kindle.kindle_processing import full_kindle_pipeline
+from src.sources_processing.goodreads.goodreads_processing import full_goodreads_pipeline, download_goodreads_data, move_goodreads_files
+from src.sources_processing.kindle.kindle_processing import full_kindle_pipeline, download_kindle_data, move_kindle_files
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 
@@ -893,10 +893,66 @@ def full_books_pipeline(auto_full=False, auto_process_only=False):
     if choice == "1":
         print("\n🚀 Starting full books pipeline...")
 
-        # Step 1: Run Goodreads pipeline
-        print("\n📚 Step 1: Processing Goodreads data...")
+        # ============================================================
+        # PHASE 1: DOWNLOAD - All user interaction upfront
+        # ============================================================
+        print("\n" + "="*60)
+        print("📥 DOWNLOAD PHASE - User interaction required")
+        print("="*60)
+        print("\nYou will be prompted to download each data source.")
+        print("After all downloads are complete, processing will run automatically.\n")
+
+        download_status = {}
+
+        # Download 1: Goodreads
+        print("\n📚 Download 1/2: Goodreads...")
+        print("-" * 40)
+        download_confirmed = download_goodreads_data()
+        if download_confirmed:
+            move_success = move_goodreads_files()
+            download_status['goodreads'] = move_success
+            if move_success:
+                print("✅ Goodreads files ready")
+            else:
+                print("⚠️  Goodreads file move failed")
+        else:
+            download_status['goodreads'] = False
+            print("⏭️  Skipping Goodreads download")
+
+        # Download 2: Kindle
+        print("\n📱 Download 2/2: Kindle...")
+        print("-" * 40)
+        download_confirmed = download_kindle_data()
+        if download_confirmed:
+            move_success = move_kindle_files()
+            download_status['kindle'] = move_success
+            if move_success:
+                print("✅ Kindle files ready")
+            else:
+                print("⚠️  Kindle file move failed")
+        else:
+            download_status['kindle'] = False
+            print("⏭️  Skipping Kindle download")
+
+        # Summary of downloads
+        print("\n" + "="*60)
+        print("📋 DOWNLOAD SUMMARY")
+        print("="*60)
+        for source, status in download_status.items():
+            status_icon = "✅" if status else "⏭️"
+            print(f"   {status_icon} {source.title()}: {'Ready' if status else 'Skipped'}")
+
+        # ============================================================
+        # PHASE 2: PROCESSING - Automated, no user interaction
+        # ============================================================
+        print("\n" + "="*60)
+        print("⚙️  AUTOMATED PROCESSING PHASE - No more user input needed")
+        print("="*60)
+
+        # Step 1: Process Goodreads
+        print("\n📚 Step 1/4: Processing Goodreads data...")
         try:
-            gr_success = full_goodreads_pipeline(auto_full=True)
+            gr_success = full_goodreads_pipeline(auto_process_only=True)
             if not gr_success:
                 print("❌ Goodreads pipeline failed, stopping books pipeline")
                 return False
@@ -904,10 +960,10 @@ def full_books_pipeline(auto_full=False, auto_process_only=False):
             print(f"❌ Error in Goodreads pipeline: {e}")
             return False
 
-        # Step 2: Run Kindle pipeline
-        print("\n📱 Step 2: Processing Kindle data...")
+        # Step 2: Process Kindle
+        print("\n📱 Step 2/4: Processing Kindle data...")
         try:
-            kindle_success = full_kindle_pipeline(auto_full=True)
+            kindle_success = full_kindle_pipeline(auto_process_only=True)
             if not kindle_success:
                 print("❌ Kindle pipeline failed, stopping books pipeline")
                 return False
@@ -916,14 +972,14 @@ def full_books_pipeline(auto_full=False, auto_process_only=False):
             return False
 
         # Step 3: Merge the data
-        print("\n🔗 Step 3: Merging Goodreads and Kindle data...")
+        print("\n🔗 Step 3/4: Merging Goodreads and Kindle data...")
         merge_success = create_books_file()
         if not merge_success:
             print("❌ Books merge failed, stopping pipeline")
             return False
 
         # Step 4: Upload results
-        print("\n☁️  Step 4: Uploading results...")
+        print("\n☁️  Step 4/4: Uploading results...")
         success = upload_books_results()
 
     elif choice == "2":

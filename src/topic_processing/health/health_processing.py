@@ -3,10 +3,11 @@ import numpy as np
 import os
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
-from src.sources_processing.apple.apple_processing import full_apple_pipeline
-from src.sources_processing.nutrilio.nutrilio_processing import full_nutrilio_pipeline
+from src.sources_processing.apple.apple_processing import full_apple_pipeline, download_apple_data, move_apple_files
+from src.sources_processing.nutrilio.nutrilio_processing import full_nutrilio_pipeline, download_nutrilio_data, move_nutrilio_files
 from src.topic_processing.location.location_processing import full_location_pipeline
-from src.sources_processing.offscreen.offscreen_processing import full_offscreen_pipeline
+from src.sources_processing.google_maps.google_maps_processing import download_google_data, move_google_files
+from src.sources_processing.offscreen.offscreen_processing import full_offscreen_pipeline, download_offscreen_data, move_offscreen_files
 
 
 # ============================================================================
@@ -617,10 +618,101 @@ def full_health_pipeline(auto_full=False, auto_process_only=False):
     if choice == "1":
         print("\n🚀 Option 1: Download, process, and upload...")
 
-        # Step 1: Run Apple Health pipeline (CRITICAL)
+        # ============================================================
+        # PHASE 1: DOWNLOAD - All user interaction upfront
+        # ============================================================
+        print("\n" + "="*60)
+        print("📥 DOWNLOAD PHASE - User interaction required")
+        print("="*60)
+        print("\nYou will be prompted to download each data source.")
+        print("After all downloads are complete, processing will run automatically.\n")
+
+        download_status = {}
+
+        # Download 1: Apple Health (CRITICAL)
+        print("\n🍎 Download 1/4: Apple Health...")
+        print("-" * 40)
+        download_confirmed = download_apple_data()
+        if download_confirmed:
+            move_success = move_apple_files()
+            download_status['apple'] = move_success
+            if move_success:
+                print("✅ Apple Health files ready")
+            else:
+                print("⚠️  Apple Health file move failed")
+        else:
+            download_status['apple'] = False
+            print("⏭️  Skipping Apple Health download")
+
+        # Download 2: Nutrilio (OPTIONAL)
+        print("\n🥗 Download 2/4: Nutrilio...")
+        print("-" * 40)
+        download_confirmed = download_nutrilio_data()
+        if download_confirmed:
+            move_success = move_nutrilio_files()
+            download_status['nutrilio'] = move_success
+            if move_success:
+                print("✅ Nutrilio files ready")
+            else:
+                print("⚠️  Nutrilio file move failed")
+        else:
+            download_status['nutrilio'] = False
+            print("⏭️  Skipping Nutrilio download")
+
+        # Download 3: Google Maps (for Location - OPTIONAL)
+        print("\n📍 Download 3/4: Google Maps (for Location)...")
+        print("-" * 40)
+        download_confirmed = download_google_data()
+        if download_confirmed:
+            move_success = move_google_files()
+            download_status['google_maps'] = move_success
+            if move_success:
+                print("✅ Google Maps files ready")
+            else:
+                print("⚠️  Google Maps file move failed")
+        else:
+            download_status['google_maps'] = False
+            print("⏭️  Skipping Google Maps download")
+
+        # Download 4: Offscreen/Screen Time (OPTIONAL)
+        print("\n📱 Download 4/4: Screen Time (Offscreen)...")
+        print("-" * 40)
+        download_confirmed = download_offscreen_data()
+        if download_confirmed:
+            move_success = move_offscreen_files()
+            download_status['offscreen'] = move_success
+            if move_success:
+                print("✅ Screen Time files ready")
+            else:
+                print("⚠️  Screen Time file move failed")
+        else:
+            download_status['offscreen'] = False
+            print("⏭️  Skipping Screen Time download")
+
+        # Summary of downloads
+        print("\n" + "="*60)
+        print("📋 DOWNLOAD SUMMARY")
+        print("="*60)
+        for source, status in download_status.items():
+            status_icon = "✅" if status else "⏭️"
+            print(f"   {status_icon} {source.replace('_', ' ').title()}: {'Ready' if status else 'Skipped'}")
+
+        # Check if Apple Health was downloaded (critical)
+        if not download_status.get('apple', False):
+            print("\n⚠️  Warning: Apple Health is the critical data source.")
+            print("   The pipeline may fail without Apple Health data.")
+
+        # ============================================================
+        # PHASE 2: PROCESSING - Automated, no user interaction
+        # ============================================================
+        print("\n" + "="*60)
+        print("⚙️  AUTOMATED PROCESSING PHASE - No more user input needed")
+        print("="*60)
+
+        # Step 1: Process Apple Health (CRITICAL)
         print("\n🍎 Step 1/5: Processing Apple Health data...")
         try:
-            apple_success = full_apple_pipeline(auto_full=True)
+            apple_success = full_apple_pipeline(auto_process_only=True)
             if not apple_success:
                 print("❌ Apple Health pipeline failed, stopping health coordination pipeline")
                 return False
@@ -628,28 +720,28 @@ def full_health_pipeline(auto_full=False, auto_process_only=False):
             print(f"❌ Error in Apple Health pipeline: {e}")
             return False
 
-        # Step 2: Run Nutrilio pipeline (OPTIONAL)
+        # Step 2: Process Nutrilio (OPTIONAL)
         print("\n🥗 Step 2/5: Processing Nutrilio mental health data...")
         try:
-            nutrilio_success = full_nutrilio_pipeline(auto_full=True)
+            nutrilio_success = full_nutrilio_pipeline(auto_process_only=True)
             if not nutrilio_success:
                 print("⚠️  Nutrilio pipeline failed, but continuing (optional data source)")
         except Exception as e:
             print(f"⚠️  Error in Nutrilio pipeline: {e}, but continuing (optional data source)")
 
-        # Step 3: Run Location pipeline (OPTIONAL)
+        # Step 3: Process Location (OPTIONAL)
         print("\n📍 Step 3/5: Processing Location data...")
         try:
-            location_success = full_location_pipeline(auto_full=True)
+            location_success = full_location_pipeline(auto_process_only=True)
             if not location_success:
                 print("⚠️  Location pipeline failed, but continuing (optional data source)")
         except Exception as e:
             print(f"⚠️  Error in Location pipeline: {e}, but continuing (optional data source)")
 
-        # Step 4: Run Screen Time pipeline (OPTIONAL)
+        # Step 4: Process Screen Time (OPTIONAL)
         print("\n📱 Step 4/5: Processing Screen Time data...")
         try:
-            screen_success = full_offscreen_pipeline(auto_full=True)
+            screen_success = full_offscreen_pipeline(auto_process_only=True)
             if not screen_success:
                 print("⚠️  Screen Time pipeline failed, but continuing (optional data source)")
         except Exception as e:

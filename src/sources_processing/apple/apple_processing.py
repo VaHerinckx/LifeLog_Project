@@ -275,9 +275,6 @@ def download_apple_data():
     """
     print("🍎 Starting Apple Health data download...")
 
-    urls = ['https://support.apple.com/en-us/102203']
-    open_web_urls(urls)
-
     print("📝 Instructions:")
     print("   1. Open the Health app on your iPhone")
     print("   2. Tap your profile picture in the top right")

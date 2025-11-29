@@ -19,7 +19,7 @@ import os
 
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
-from src.sources_processing.google_maps.google_maps_processing import full_google_maps_pipeline
+from src.sources_processing.google_maps.google_maps_processing import full_google_maps_pipeline, download_google_data, move_google_files
 from src.sources_processing.manual_location.manual_location_processing import full_manual_location_pipeline
 
 
@@ -426,26 +426,67 @@ def full_location_pipeline(auto_full=False, auto_process_only=False):
     if choice == "1":
         print("\n🚀 Option 1: Full pipeline...")
 
-        # Step 1: Run Google Maps source pipeline
-        print("\n📱 Step 1/3: Processing Google Maps data...")
+        # ============================================================
+        # PHASE 1: DOWNLOAD - All user interaction upfront
+        # ============================================================
+        print("\n" + "="*60)
+        print("📥 DOWNLOAD PHASE - User interaction required")
+        print("="*60)
+        print("\nYou will be prompted to download Google Maps data.")
+        print("After download is complete, processing will run automatically.\n")
+
+        download_status = {}
+
+        # Download 1: Google Maps
+        print("\n🌍 Download 1/1: Google Maps Timeline...")
+        print("-" * 40)
+        download_confirmed = download_google_data()
+        if download_confirmed:
+            move_success = move_google_files()
+            download_status['google_maps'] = move_success
+            if move_success:
+                print("✅ Google Maps files ready")
+            else:
+                print("⚠️  Google Maps file move failed")
+        else:
+            download_status['google_maps'] = False
+            print("⏭️  Skipping Google Maps download")
+
+        # Summary of downloads
+        print("\n" + "="*60)
+        print("📋 DOWNLOAD SUMMARY")
+        print("="*60)
+        for source, status in download_status.items():
+            status_icon = "✅" if status else "⏭️"
+            print(f"   {status_icon} {source.replace('_', ' ').title()}: {'Ready' if status else 'Skipped'}")
+
+        # ============================================================
+        # PHASE 2: PROCESSING - Automated, no user interaction
+        # ============================================================
+        print("\n" + "="*60)
+        print("⚙️  AUTOMATED PROCESSING PHASE - No more user input needed")
+        print("="*60)
+
+        # Step 1: Process Google Maps
+        print("\n📱 Step 1/4: Processing Google Maps data...")
         try:
-            google_success = full_google_maps_pipeline(auto_full=True)
+            google_success = full_google_maps_pipeline(auto_process_only=True)
             if not google_success:
                 print("⚠️  Google Maps pipeline failed, continuing with available data...")
         except Exception as e:
             print(f"⚠️  Error in Google Maps pipeline: {e}")
 
-        # Step 2: Run Manual Location source pipeline
-        print("\n📝 Step 2/3: Processing Manual location data...")
+        # Step 2: Process Manual Location
+        print("\n📝 Step 2/4: Processing Manual location data...")
         try:
-            manual_success = full_manual_location_pipeline()
+            manual_success = full_manual_location_pipeline(auto_process_only=True)
             if not manual_success:
                 print("⚠️  Manual location pipeline failed, continuing with available data...")
         except Exception as e:
             print(f"⚠️  Error in Manual location pipeline: {e}")
 
         # Step 3: Merge location data
-        print("\n🔗 Step 3/3: Merging and uploading location data...")
+        print("\n🔗 Step 3/4: Merging location data...")
         process_success = create_location_files()
         if not process_success:
             print("❌ Location data merge failed, stopping pipeline")
