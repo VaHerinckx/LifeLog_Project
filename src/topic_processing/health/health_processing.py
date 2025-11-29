@@ -1,7 +1,22 @@
+"""
+Health Topic Coordinator - Reorganized Version
+
+Creates two clean, flat CSV files:
+1. health_daily.csv - Daily subjective metrics + sleep timing + daily totals
+2. health_hourly.csv - Granular activity/location segments with minute-level metric attribution
+
+Data Sources:
+- Apple Health (minute-level metrics)
+- Google Maps (segment data with activity types)
+- Nutrilio (daily subjective ratings)
+- Offscreen (screen time data)
+- Location pipeline (fallback for pre-Google Maps dates)
+"""
+
 import pandas as pd
 import numpy as np
 import os
-import json
+from datetime import datetime, timedelta, date
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 from src.sources_processing.apple.apple_processing import full_apple_pipeline, download_apple_data, move_apple_files
@@ -12,16 +27,27 @@ from src.sources_processing.offscreen.offscreen_processing import full_offscreen
 
 
 # ============================================================================
+# CONSTANTS
+# ============================================================================
+
+def get_time_period(hour):
+    """Convert hour (0-23) to time period string."""
+    if 6 <= hour <= 11:
+        return 'MORNING'
+    elif 12 <= hour <= 17:
+        return 'AFTERNOON'
+    elif 18 <= hour <= 21:
+        return 'EVENING'
+    else:  # 22-5
+        return 'NIGHT'
+
+
+# ============================================================================
 # DATA LOADING FUNCTIONS
 # ============================================================================
 
 def load_apple_minute_data():
-    """
-    Load Apple Health minute-level data.
-
-    Returns:
-        DataFrame: Apple Health data with minute-level granularity
-    """
+    """Load Apple Health minute-level data."""
     apple_path = 'files/source_processed_files/apple/apple_processed.csv'
 
     if not os.path.exists(apple_path):
@@ -39,14 +65,7 @@ def load_apple_minute_data():
 
 
 def load_nutrilio_mental_health():
-    """
-    Load Nutrilio mental health data (daily summary rows only).
-    Columns: sleep_quality, sleep_quality_text, dream_description, dreams,
-             sleep_rest_feeling, fitness_feeling, overall_evaluation, notes_summary
-
-    Returns:
-        DataFrame: Nutrilio mental health data with daily granularity
-    """
+    """Load Nutrilio mental health data (daily summary rows only)."""
     nutrilio_path = 'files/source_processed_files/nutrilio/nutrilio_health_processed.csv'
 
     if not os.path.exists(nutrilio_path):
@@ -55,13 +74,9 @@ def load_nutrilio_mental_health():
 
     print(f"🥗 Loading Nutrilio mental health data...")
     df_daily = pd.read_csv(nutrilio_path, sep='|', encoding='utf-8')
-
-    # File already contains only daily summary rows (pre-filtered by Nutrilio source processor)
-
-    # Parse date
     df_daily['date'] = pd.to_datetime(df_daily['date']).dt.normalize()
 
-    # Select mental health columns (excluding productivity)
+    # Select and rename mental health columns
     columns_to_keep = [
         'date',
         'sleep_-_quality',
@@ -75,11 +90,9 @@ def load_nutrilio_mental_health():
         'weight_(kg)'
     ]
 
-    # Filter columns that exist
     existing_columns = [col for col in columns_to_keep if col in df_daily.columns]
     df_daily = df_daily[existing_columns].copy()
 
-    # Rename columns to cleaner names
     rename_dict = {
         'sleep_-_quality': 'sleep_quality',
         'sleep_-_quality_text': 'sleep_quality_text',
@@ -87,686 +100,857 @@ def load_nutrilio_mental_health():
         'fitness_feeling_(points)': 'fitness_feeling',
         'overall_evaluation_(points)': 'overall_evaluation'
     }
-
     df_daily = df_daily.rename(columns=rename_dict)
 
     print(f"✅ Loaded Nutrilio: {len(df_daily):,} daily mental health records")
-    print(f"   Date range: {df_daily['date'].min()} to {df_daily['date'].max()}")
-
     return df_daily
 
 
-def load_location_data():
-    """
-    Load location data with location_type enrichment.
+def load_google_maps_minute_data():
+    """Load Google Maps minute-level data with activity segments."""
+    gmaps_path = 'files/source_processed_files/google_maps/google_maps_minute_processed.csv'
 
-    Returns:
-        DataFrame: Location data with minute-level granularity
-    """
+    if not os.path.exists(gmaps_path):
+        print(f"⚠️  Google Maps minute file not found: {gmaps_path}")
+        return None
+
+    print(f"🗺️  Loading Google Maps minute data...")
+    df = pd.read_csv(gmaps_path, sep='|', encoding='utf-8', low_memory=False)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    print(f"✅ Loaded Google Maps: {len(df):,} minute-level records")
+    print(f"   Date range: {df['timestamp'].min()} to {df['timestamp'].max()}")
+
+    return df
+
+
+def load_location_daily_data():
+    """Load location data for daily fallback (pre-Google Maps dates)."""
     location_path = 'files/topic_processed_files/location/location_processed.csv'
 
     if not os.path.exists(location_path):
         print(f"⚠️  Location file not found: {location_path}")
         return None
 
-    print(f"📍 Loading location data...")
+    print(f"📍 Loading location data for fallback...")
     df = pd.read_csv(location_path, sep='|', encoding='utf-8')
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df['date'] = df['timestamp'].dt.date
 
-    # Parse timestamp to datetime (timezone-naive guaranteed by upstream processing)
-    df['date'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%dT%H:%M:%S')
+    # Aggregate to daily level (take most common city/country per day)
+    daily_location = df.groupby('date').agg({
+        'city': lambda x: x.mode()[0] if len(x.mode()) > 0 else None,
+        'country': lambda x: x.mode()[0] if len(x.mode()) > 0 else None
+    }).reset_index()
 
-    print(f"✅ Loaded location: {len(df):,} records")
-    if len(df) > 0:
-        print(f"   Date range: {df['date'].min()} to {df['date'].max()}")
-
-    return df
+    print(f"✅ Loaded location fallback: {len(daily_location):,} daily records")
+    return daily_location
 
 
 def load_screentime_data():
-    """
-    Load screen time data.
-
-    Returns:
-        DataFrame: Screen time data with minute-level granularity, or None if not available
-    """
+    """Load screen time data."""
     screen_path = 'files/source_processed_files/offscreen/offscreen_processed.csv'
 
     if not os.path.exists(screen_path):
         print(f"⚠️  Screen time file not found: {screen_path}")
         return None
 
-    try:
-        print(f"📱 Loading screen time data...")
-        df = pd.read_csv(screen_path, sep='|', encoding='utf-8')
-        df['date'] = pd.to_datetime(df['date']).dt.floor('T')  # Floor to minute
+    print(f"📱 Loading screen time data...")
+    df = pd.read_csv(screen_path, sep='|', encoding='utf-8')
+    df['date'] = pd.to_datetime(df['date']).dt.floor('min')
 
-        print(f"✅ Loaded screen time: {len(df):,} minute-level records")
-        print(f"   Date range: {df['date'].min()} to {df['date'].max()}")
-
-        return df
-
-    except Exception as e:
-        print(f"❌ Error loading screen time data: {e}")
-        return None
-
-
-def load_google_maps_data():
-    """
-    Load Google Maps minute-level data for richer location details.
-
-    Returns:
-        DataFrame: Google Maps data with minute-level granularity, or None if not available
-    """
-    gmaps_path = 'files/source_processed_files/google_maps/google_maps_minute_processed.csv'
-
-    if not os.path.exists(gmaps_path):
-        print(f"⚠️  Google Maps file not found: {gmaps_path}")
-        return None
-
-    try:
-        print(f"🗺️  Loading Google Maps data...")
-        df = pd.read_csv(gmaps_path, sep='|', encoding='utf-8', low_memory=False)
-        df['date'] = pd.to_datetime(df['timestamp']).dt.floor('T')  # Floor to minute
-
-        print(f"✅ Loaded Google Maps: {len(df):,} minute-level records")
-        print(f"   Date range: {df['date'].min()} to {df['date'].max()}")
-
-        return df
-
-    except Exception as e:
-        print(f"❌ Error loading Google Maps data: {e}")
-        return None
+    print(f"✅ Loaded screen time: {len(df):,} minute-level records")
+    return df
 
 
 # ============================================================================
-# HOURLY AGGREGATION FUNCTIONS
+# SEGMENT PROCESSING FUNCTIONS
 # ============================================================================
 
-def get_time_period(hour):
-    """Convert hour (0-23) to time period string."""
-    if 6 <= hour <= 11:
-        return 'MORNING'
-    elif 12 <= hour <= 17:
-        return 'AFTERNOON'
-    elif 18 <= hour <= 23:
-        return 'EVENING'
-    else:  # 0-5
-        return 'NIGHT'
-
-
-def aggregate_to_hourly(minute_df, google_maps_df=None, existing_hourly_path=None, nutrilio_cutoff_date=None):
+def create_segments_from_google_maps(gmaps_df):
     """
-    Aggregate minute-level data to hourly with rich JSON detail columns.
+    Create segments from Google Maps minute data.
+    A segment is a continuous activity/location that may span multiple hours.
 
-    Supports incremental processing: if existing_hourly_path and nutrilio_cutoff_date
-    are provided, only reprocesses data from cutoff_date onwards. Historical data
-    (before the cutoff) is preserved from the existing file.
-
-    Args:
-        minute_df: Minute-level merged DataFrame (Apple Health + Location + Screen)
-        google_maps_df: Optional Google Maps minute-level DataFrame for richer location data
-        existing_hourly_path: Path to existing hourly file (for incremental processing)
-        nutrilio_cutoff_date: Date object - only reprocess from this date onwards
-
-    Returns:
-        DataFrame: Hourly aggregated DataFrame with JSON detail columns
+    Returns DataFrame with columns:
+    - segment_id: Unique ID for continuous activity spanning hours
+    - start_time, end_time: Segment boundaries
+    - segment_type: 'stationary' or 'moving'
+    - activity_type: 'idle' for stationary, actual activity for moving
+    - place_name, address, city, country, coordinates, is_home
+    - distance_meters: Total distance for moving segments
     """
-    print("\n⏰ Aggregating to hourly level with JSON details...")
+    if gmaps_df is None or len(gmaps_df) == 0:
+        return None
 
-    # Work with a copy
-    df = minute_df.copy()
+    print("🔀 Creating segments from Google Maps data...")
 
-    # Check for incremental processing
-    historical_df = None
-    if existing_hourly_path and nutrilio_cutoff_date and os.path.exists(existing_hourly_path):
-        print(f"   ⚡ Incremental mode: Keeping data before {nutrilio_cutoff_date}")
+    # Sort by timestamp
+    df = gmaps_df.sort_values('timestamp').copy()
 
-        # Load existing hourly file
-        existing_hourly = pd.read_csv(existing_hourly_path, sep='|', encoding='utf-8')
-        existing_hourly['datetime'] = pd.to_datetime(existing_hourly['datetime'])
+    # Create segment boundaries when record_type, activity_type, place, or DATE changes
+    df['prev_record_type'] = df['record_type'].shift(1)
+    df['prev_activity_type'] = df['activity_type'].shift(1)
+    df['prev_place_name'] = df['place_name'].shift(1)
 
-        # Split: keep historical records (before cutoff date)
-        historical_df = existing_hourly[existing_hourly['datetime'].dt.date < nutrilio_cutoff_date].copy()
+    # CRITICAL: Also break segments at day boundaries to ensure each day has its own segments
+    df['current_date'] = df['timestamp'].dt.date
+    df['prev_date'] = df['current_date'].shift(1)
 
-        # Filter minute_df to only process data from cutoff date onwards
-        df = df[df['date'].dt.date >= nutrilio_cutoff_date].copy()
+    # New segment when record_type changes, OR activity_type changes, OR place changes, OR date changes
+    df['new_segment'] = (
+        (df['record_type'] != df['prev_record_type']) |
+        (df['activity_type'] != df['prev_activity_type']) |
+        ((df['record_type'] == 'visit') & (df['place_name'] != df['prev_place_name'])) |
+        (df['current_date'] != df['prev_date'])  # Break at day boundaries
+    )
 
-        print(f"      Historical records preserved: {len(historical_df):,}")
-        print(f"      Minute records to reprocess: {len(df):,}")
+    # Assign segment IDs
+    df['segment_id'] = df['new_segment'].cumsum()
 
-    # Ensure date column is datetime
-    df['date'] = pd.to_datetime(df['date'])
+    # Aggregate each segment
+    segments = df.groupby('segment_id').agg({
+        'timestamp': ['min', 'max'],
+        'record_type': 'first',
+        'activity_type': 'first',
+        'place_name': 'first',
+        'address': 'first',
+        'city': 'first',
+        'country': 'first',
+        'coordinates': 'first',
+        'is_home': 'first',
+        'is_moving': 'first',
+        'distance_meters': 'sum'
+    }).reset_index()
 
-    # Create hour column (floor to hour)
-    df['hour_dt'] = df['date'].dt.floor('H')
+    # Flatten column names
+    segments.columns = [
+        'segment_id', 'start_time', 'end_time', 'record_type', 'activity_type',
+        'place_name', 'address', 'city', 'country', 'coordinates', 'is_home',
+        'is_moving', 'distance_meters'
+    ]
 
-    # Merge Google Maps data if available (for richer location details)
-    if google_maps_df is not None:
-        print("   🗺️  Merging Google Maps data for richer location details...")
-        gm = google_maps_df.copy()
-        gm['hour_dt'] = gm['date'].dt.floor('H')
+    # Determine segment_type
+    segments['segment_type'] = np.where(segments['is_moving'] == True, 'moving', 'stationary')
 
-        # Select Google Maps columns to merge (prefix with gm_ to avoid conflicts)
-        gm_cols = ['hour_dt', 'place_name', 'address', 'activity_type', 'distance_meters', 'is_moving', 'record_type']
-        gm_cols = [c for c in gm_cols if c in gm.columns]
-        gm_subset = gm[gm_cols].copy()
+    # Set activity_type to 'idle' for stationary segments
+    segments.loc[segments['segment_type'] == 'stationary', 'activity_type'] = 'idle'
 
-        # Rename to avoid conflicts
-        gm_subset = gm_subset.rename(columns={
-            'place_name': 'gm_place_name',
-            'address': 'gm_address',
-            'activity_type': 'gm_activity_type',
-            'distance_meters': 'gm_distance_meters',
-            'is_moving': 'gm_is_moving',
-            'record_type': 'gm_record_type'
-        })
+    # Convert segment_id to string format: YYYYMMDD_HHMMSS_seq (vectorized)
+    segments['segment_id'] = (
+        segments['start_time'].dt.strftime('%Y%m%d_%H%M%S') + '_' + segments.index.astype(str)
+    )
 
-        # Merge on hour (many-to-many, will aggregate later)
-        df = df.merge(gm_subset, on='hour_dt', how='left')
-        print(f"      Merged {len(google_maps_df):,} Google Maps records")
+    print(f"✅ Created {len(segments):,} segments")
+    print(f"   Stationary: {(segments['segment_type'] == 'stationary').sum():,}")
+    print(f"   Moving: {(segments['segment_type'] == 'moving').sum():,}")
 
-    # Initialize result list
+    return segments
+
+
+def expand_segments_to_hourly(segments_df):
+    """
+    Expand segments to hourly records.
+    One row per segment per hour it spans.
+
+    Returns DataFrame with hour_segment_id for uniqueness within each hour.
+    """
+    if segments_df is None or len(segments_df) == 0:
+        return None
+
+    print("⏰ Expanding segments to hourly records...")
+
+    # Process segments in batches using list comprehension for speed
+    all_hourly_records = []
+
+    # Convert to list of dicts for faster iteration (faster than iterrows)
+    segments_list = segments_df.to_dict('records')
+
+    for segment in segments_list:
+        # Get start and end hours
+        start_hour = segment['start_time'].replace(minute=0, second=0, microsecond=0)
+        end_hour = segment['end_time'].replace(minute=0, second=0, microsecond=0)
+
+        current_hour = start_hour
+        hour_seq = 1
+
+        while current_hour <= end_hour:
+            # Calculate duration within this hour
+            hour_start = current_hour
+            hour_end = current_hour + timedelta(hours=1)
+
+            seg_start_in_hour = max(segment['start_time'], hour_start)
+            seg_end_in_hour = min(segment['end_time'], hour_end)
+
+            duration_minutes = (seg_end_in_hour - seg_start_in_hour).total_seconds() / 60
+
+            if duration_minutes > 0:
+                all_hourly_records.append({
+                    'date': current_hour.date(),
+                    'hour': current_hour.hour,
+                    'weekday': current_hour.weekday(),
+                    'time_period': get_time_period(current_hour.hour),
+                    'segment_id': segment['segment_id'],
+                    'hour_segment_id': f"{current_hour.strftime('%Y%m%d_%H')}_{hour_seq}",
+                    'segment_type': segment['segment_type'],
+                    'segment_duration_minutes': round(duration_minutes, 1),
+                    'place_name': segment['place_name'] if segment['segment_type'] == 'stationary' else None,
+                    'address': segment['address'] if segment['segment_type'] == 'stationary' else None,
+                    'city': segment['city'],
+                    'country': segment['country'],
+                    'is_home': segment['is_home'],
+                    'location_type': None,  # Will be enriched later
+                    'coordinates': segment['coordinates'],
+                    'activity_type': segment['activity_type'],
+                    'distance_meters': segment['distance_meters'] if segment['segment_type'] == 'moving' else None,
+                    'data_source': 'google_maps'
+                })
+                hour_seq += 1
+
+            current_hour += timedelta(hours=1)
+
+    hourly_df = pd.DataFrame(all_hourly_records)
+    print(f"✅ Created {len(hourly_df):,} hourly segment records")
+
+    return hourly_df
+
+
+def create_fallback_hourly_records(apple_df, location_daily_df, gmaps_dates):
+    """
+    Create hourly records for dates without Google Maps data.
+    One row per hour, using daily location from location pipeline.
+    """
+    print("📋 Creating fallback hourly records for pre-Google Maps dates...")
+
+    # Get all dates from Apple Health
+    apple_dates = set(apple_df['date'].dt.date.unique())
+
+    # Get dates that have Google Maps data
+    if gmaps_dates is not None:
+        covered_dates = set(gmaps_dates)
+    else:
+        covered_dates = set()
+
+    # Find dates needing fallback
+    fallback_dates = apple_dates - covered_dates
+
+    if not fallback_dates:
+        print("   No fallback dates needed")
+        return None
+
+    print(f"   {len(fallback_dates)} dates need fallback records")
+
+    # Create location lookup (vectorized)
+    location_lookup = {}
+    if location_daily_df is not None and len(location_daily_df) > 0:
+        for row in location_daily_df.to_dict('records'):
+            location_lookup[row['date']] = {
+                'city': row.get('city'),
+                'country': row.get('country')
+            }
+
     hourly_records = []
 
-    # Group by hour
-    print("   📊 Processing hourly aggregations...")
-    grouped = df.groupby('hour_dt')
-    total_hours = len(grouped)
+    for date in sorted(fallback_dates):
+        location = location_lookup.get(date, {'city': None, 'country': None})
 
-    for i, (hour_dt, group) in enumerate(grouped):
-        if i % 5000 == 0:
-            print(f"      Processing hour {i:,}/{total_hours:,}...")
+        for hour in range(24):
+            dt = datetime.combine(date, datetime.min.time()) + timedelta(hours=hour)
 
-        record = {
-            'datetime': hour_dt,
-            'date': hour_dt.date(),
-            'hour': hour_dt.hour,
-            'weekday': hour_dt.weekday(),  # Monday=0
-            'time_period': get_time_period(hour_dt.hour)
-        }
+            hourly_records.append({
+                'date': date,
+                'hour': hour,
+                'weekday': dt.weekday(),
+                'time_period': get_time_period(hour),
+                'segment_id': f"{date.strftime('%Y%m%d')}_{hour:02d}_default",
+                'hour_segment_id': f"{date.strftime('%Y%m%d')}_{hour:02d}_1",
+                'segment_type': 'stationary',
+                'segment_duration_minutes': 60,
+                'place_name': None,
+                'address': None,
+                'city': location['city'],
+                'country': location['country'],
+                'is_home': None,  # Do not derive
+                'location_type': None,
+                'coordinates': None,
+                'activity_type': 'idle',
+                'distance_meters': None,
+                'data_source': 'manual_location_input'
+            })
 
-        # =====================================================================
-        # FLAT COLUMNS - Simple aggregations for filtering/heatmap
-        # =====================================================================
+    fallback_df = pd.DataFrame(hourly_records)
+    print(f"✅ Created {len(fallback_df):,} fallback hourly records")
 
-        # Movement metrics (sum)
-        record['total_steps'] = group['step_count'].sum() if 'step_count' in group.columns else 0
-        record['total_distance_m'] = group['walking_dist'].sum() * 1000 if 'walking_dist' in group.columns else 0  # km to m
-        record['total_flights_climbed'] = group['flights_climbed'].sum() if 'flights_climbed' in group.columns else 0
-        record['total_active_energy'] = group['active_energy'].sum() if 'active_energy' in group.columns else 0
-        record['total_resting_energy'] = group['resting_energy'].sum() if 'resting_energy' in group.columns else 0
+    return fallback_df
 
-        # Body metrics (average, excluding nulls)
-        record['avg_heart_rate'] = group['heart_rate'].mean() if 'heart_rate' in group.columns and group['heart_rate'].notna().any() else None
-        record['avg_walking_speed'] = group['walking_speed'].mean() if 'walking_speed' in group.columns and group['walking_speed'].notna().any() else None
-        record['avg_step_length'] = group['step_length'].mean() if 'step_length' in group.columns and group['step_length'].notna().any() else None
-        record['avg_body_weight'] = group['body_weight'].mean() if 'body_weight' in group.columns and group['body_weight'].notna().any() else None
-        record['avg_body_fat_percent'] = group['body_fat_percent'].mean() if 'body_fat_percent' in group.columns and group['body_fat_percent'].notna().any() else None
-        record['avg_audio_exposure'] = group['audio_exposure'].mean() if 'audio_exposure' in group.columns and group['audio_exposure'].notna().any() else None
 
-        # Sleep metrics
-        sleep_minutes = 0
-        if 'sleep_analysis' in group.columns:
-            sleep_rows = group[group['sleep_analysis'].notna() & (group['sleep_analysis'] != '')]
-            sleep_minutes = len(sleep_rows)
-        record['total_sleep_minutes'] = sleep_minutes
+def fill_missing_hours(hourly_df, location_daily_df):
+    """
+    Fill in missing hours for dates that have partial Google Maps coverage.
 
-        # Screen time metrics
-        record['total_screen_minutes'] = group['screen_time'].sum() / 60 if 'screen_time' in group.columns else 0  # seconds to minutes
-        record['total_pickups'] = int(group['pickups'].sum()) if 'pickups' in group.columns else 0
-        record['screen_before_sleep_minutes'] = group['within_hour_before_sleep'].sum() / 60 if 'within_hour_before_sleep' in group.columns else 0
+    For dates that have SOME Google Maps segments but not all 24 hours,
+    creates placeholder records for the missing hours.
+    """
+    if hourly_df is None or len(hourly_df) == 0:
+        return hourly_df
 
-        # Location dominant values
-        if 'city' in group.columns and group['city'].notna().any():
-            record['dominant_city'] = group['city'].mode().iloc[0] if len(group['city'].mode()) > 0 else None
-        else:
-            record['dominant_city'] = None
+    print("🔧 Filling in missing hours for dates with partial coverage...")
 
-        if 'country' in group.columns and group['country'].notna().any():
-            record['dominant_country'] = group['country'].mode().iloc[0] if len(group['country'].mode()) > 0 else None
-        else:
-            record['dominant_country'] = None
+    # Get all unique dates in hourly data
+    all_dates = hourly_df['date'].unique()
 
-        if 'timezone' in group.columns and group['timezone'].notna().any():
-            record['timezone'] = group['timezone'].mode().iloc[0] if len(group['timezone'].mode()) > 0 else None
-        else:
-            record['timezone'] = None
-
-        # Activity type (from Google Maps if available)
-        if 'gm_activity_type' in group.columns and group['gm_activity_type'].notna().any():
-            record['dominant_activity'] = group['gm_activity_type'].mode().iloc[0] if len(group['gm_activity_type'].mode()) > 0 else None
-        else:
-            record['dominant_activity'] = None
-
-        # Boolean flags
-        if 'is_home' in group.columns:
-            home_minutes = (group['is_home'] == True).sum() | (group['is_home'] == 'True').sum()
-            record['is_home_hour'] = home_minutes > len(group) / 2
-        else:
-            record['is_home_hour'] = None
-
-        record['is_sleeping_hour'] = sleep_minutes > 30  # More than half hour asleep
-        record['is_moving_hour'] = record['total_steps'] > 100 or record['total_distance_m'] > 50
-
-        # =====================================================================
-        # JSON COLUMNS - Rich detail aggregations
-        # =====================================================================
-
-        # 1. locations_json - Location breakdown
-        locations = []
-        if 'city' in group.columns:
-            loc_groups = group.groupby(['city', 'country'], dropna=False)
-            for (city, country), loc_group in loc_groups:
-                if pd.isna(city):
-                    continue
-                loc_entry = {
-                    'city': city,
-                    'country': country if pd.notna(country) else None,
-                    'minutes': len(loc_group),
-                    'is_home': bool((loc_group['is_home'] == True).any() | (loc_group['is_home'] == 'True').any()) if 'is_home' in loc_group.columns else False
-                }
-                # Add Google Maps details if available
-                if 'gm_place_name' in loc_group.columns:
-                    place_names = loc_group['gm_place_name'].dropna().unique()
-                    if len(place_names) > 0:
-                        loc_entry['place_name'] = place_names[0]  # First place name
-                if 'gm_address' in loc_group.columns:
-                    addresses = loc_group['gm_address'].dropna().unique()
-                    if len(addresses) > 0:
-                        loc_entry['address'] = addresses[0]
-                if 'coordinates' in loc_group.columns:
-                    coords = loc_group['coordinates'].dropna().unique()
-                    if len(coords) > 0:
-                        loc_entry['coordinates'] = coords[0]
-                if 'location_type' in loc_group.columns:
-                    loc_types = loc_group['location_type'].dropna().unique()
-                    if len(loc_types) > 0:
-                        loc_entry['location_type'] = loc_types[0]
-                locations.append(loc_entry)
-        record['locations_json'] = json.dumps(locations) if locations else '[]'
-
-        # 2. activities_json - Activity/Movement breakdown (from Google Maps)
-        activities = {}
-        if 'gm_activity_type' in group.columns:
-            activity_counts = group['gm_activity_type'].value_counts()
-            for activity, count in activity_counts.items():
-                if pd.isna(activity) or activity == '':
-                    continue
-                activity_group = group[group['gm_activity_type'] == activity]
-                activities[activity] = {
-                    'minutes': int(count),
-                    'distance_m': float(activity_group['gm_distance_meters'].sum()) if 'gm_distance_meters' in activity_group.columns else 0
-                }
-        # Add stationary time (minutes without activity type)
-        if 'gm_activity_type' in group.columns:
-            stationary_count = group['gm_activity_type'].isna().sum()
-            if stationary_count > 0:
-                activities['stationary'] = {'minutes': int(stationary_count), 'distance_m': 0}
-        record['activities_json'] = json.dumps(activities) if activities else '{}'
-
-        # 3. sleep_json - Sleep stage breakdown
-        sleep_data = {}
-        if 'sleep_analysis' in group.columns:
-            sleep_counts = group['sleep_analysis'].value_counts()
-            phase_mapping = {
-                'Deep sleep': 'deep',
-                'REM sleep': 'rem',
-                'Core sleep': 'core',
-                'Awake': 'awake',
-                'In bed': 'in_bed',
-                'Unspecified': 'unspecified'
+    # Create location lookup
+    location_lookup = {}
+    if location_daily_df is not None and len(location_daily_df) > 0:
+        for row in location_daily_df.to_dict('records'):
+            location_lookup[row['date']] = {
+                'city': row.get('city'),
+                'country': row.get('country')
             }
-            for phase, count in sleep_counts.items():
-                if pd.isna(phase) or phase == '':
-                    continue
-                key = phase_mapping.get(phase, phase.lower().replace(' ', '_'))
-                sleep_data[key] = int(count)
-            if sleep_data:
-                sleep_data['total'] = sum(sleep_data.values())
-        record['sleep_json'] = json.dumps(sleep_data) if sleep_data else '{}'
 
-        # 4. screen_json - Screen time breakdown
-        screen_data = {
-            'total_minutes': round(record['total_screen_minutes'], 1),
-            'total_pickups': record['total_pickups'],
-            'before_sleep_minutes': round(record['screen_before_sleep_minutes'], 1),
-            'is_before_sleep_hour': bool(group['is_within_hour_before_sleep'].any()) if 'is_within_hour_before_sleep' in group.columns else False
-        }
-        record['screen_json'] = json.dumps(screen_data)
+    # Find missing hours for each date
+    missing_records = []
+    dates_with_gaps = 0
 
-        # 5. body_metrics_json - Body measurements
-        body_metrics = {}
-        if 'heart_rate' in group.columns and group['heart_rate'].notna().any():
-            hr_data = group['heart_rate'].dropna()
-            body_metrics['heart_rate'] = {
-                'min': float(hr_data.min()),
-                'max': float(hr_data.max()),
-                'avg': round(float(hr_data.mean()), 1),
-                'readings': len(hr_data)
-            }
-        if 'body_weight' in group.columns and group['body_weight'].notna().any():
-            bw_data = group['body_weight'].dropna()
-            body_metrics['body_weight'] = {
-                'avg': round(float(bw_data.mean()), 1),
-                'readings': len(bw_data)
-            }
-        if 'body_fat_percent' in group.columns and group['body_fat_percent'].notna().any():
-            bf_data = group['body_fat_percent'].dropna()
-            body_metrics['body_fat_percent'] = {
-                'avg': round(float(bf_data.mean()), 1),
-                'readings': len(bf_data)
-            }
-        if 'audio_exposure' in group.columns and group['audio_exposure'].notna().any():
-            ae_data = group['audio_exposure'].dropna()
-            body_metrics['audio_exposure'] = {
-                'avg': round(float(ae_data.mean()), 1),
-                'max': float(ae_data.max()),
-                'readings': len(ae_data)
-            }
-        record['body_metrics_json'] = json.dumps(body_metrics) if body_metrics else '{}'
+    for date_val in all_dates:
+        # Convert to Python date object if it's a numpy/pandas date
+        if hasattr(date_val, 'date'):
+            date_obj = date_val.date() if callable(date_val.date) else date_val
+        elif isinstance(date_val, date):
+            date_obj = date_val
+        else:
+            # Attempt to parse if it's a string
+            date_obj = pd.to_datetime(date_val).date()
 
-        # 6. movement_metrics_json - Movement statistics
-        movement_metrics = {
-            'total_steps': round(record['total_steps'], 0),
-            'total_distance_m': round(record['total_distance_m'], 1),
-            'total_flights_climbed': round(record['total_flights_climbed'], 1),
-            'avg_step_length_cm': round(record['avg_step_length'] * 100, 1) if record['avg_step_length'] else None,
-            'avg_walking_speed_kmh': round(record['avg_walking_speed'], 1) if record['avg_walking_speed'] else None,
-            'total_active_energy_kcal': round(record['total_active_energy'], 1),
-            'total_resting_energy_kcal': round(record['total_resting_energy'], 1)
-        }
-        record['movement_metrics_json'] = json.dumps(movement_metrics)
+        # Get hours that exist for this date
+        existing_hours = set(hourly_df[hourly_df['date'] == date_val]['hour'].unique())
+        all_hours = set(range(24))
+        missing_hours = all_hours - existing_hours
 
-        # 7. countries_visited_json - Countries in that hour
-        countries = []
-        if 'country' in group.columns:
-            countries = group['country'].dropna().unique().tolist()
-        record['countries_visited_json'] = json.dumps(countries)
+        if missing_hours:
+            dates_with_gaps += 1
+            location = location_lookup.get(date_obj, {'city': None, 'country': None})
 
-        # 8. cities_visited_json - Cities in that hour
-        cities = []
-        if 'city' in group.columns:
-            cities = group['city'].dropna().unique().tolist()
-        record['cities_visited_json'] = json.dumps(cities)
+            for hour in missing_hours:
+                dt = datetime.combine(date_obj, datetime.min.time()) + timedelta(hours=hour)
+                date_str = date_obj.strftime('%Y%m%d')
 
-        # 9. timezones_json - Timezone changes
-        timezones = []
-        if 'timezone' in group.columns:
-            timezones = group['timezone'].dropna().unique().tolist()
-        record['timezones_json'] = json.dumps(timezones)
+                missing_records.append({
+                    'date': date_obj,
+                    'hour': hour,
+                    'weekday': dt.weekday(),
+                    'time_period': get_time_period(hour),
+                    'segment_id': f"{date_str}_{hour:02d}_gap",
+                    'hour_segment_id': f"{date_str}_{hour:02d}_gap_1",
+                    'segment_type': 'stationary',
+                    'segment_duration_minutes': 60,
+                    'place_name': None,
+                    'address': None,
+                    'city': location['city'],
+                    'country': location['country'],
+                    'is_home': None,
+                    'location_type': None,
+                    'coordinates': None,
+                    'activity_type': 'idle',
+                    'distance_meters': None,
+                    'data_source': 'gap_fill'
+                })
 
-        hourly_records.append(record)
-
-    # Create DataFrame
-    hourly_df = pd.DataFrame(hourly_records)
-
-    # Merge historical data if incremental processing was used
-    if historical_df is not None and len(historical_df) > 0:
-        print(f"   🔗 Merging {len(historical_df):,} historical records with {len(hourly_df):,} new records...")
-        hourly_df = pd.concat([historical_df, hourly_df], ignore_index=True)
-
-    # Sort by datetime descending
-    hourly_df = hourly_df.sort_values('datetime', ascending=False)
-
-    print(f"✅ Hourly aggregation complete: {len(hourly_df):,} hourly records")
+    if missing_records:
+        gap_df = pd.DataFrame(missing_records)
+        hourly_df = pd.concat([hourly_df, gap_df], ignore_index=True)
+        print(f"✅ Filled {len(missing_records)} missing hours across {dates_with_gaps} dates")
+    else:
+        print("   No missing hours found")
 
     return hourly_df
 
 
 # ============================================================================
-# MERGE FUNCTIONS
+# METRIC ATTRIBUTION FUNCTIONS
 # ============================================================================
 
-def merge_minute_level_data(apple_df, location_df, screen_df):
+def attribute_apple_metrics_to_segments(hourly_df, apple_df, gmaps_minute_df):
     """
-    Merge Location and Screen Time into Apple Health at minute-level.
-
-    Args:
-        apple_df: Apple Health minute-level DataFrame
-        location_df: Location minute-level DataFrame
-        screen_df: Screen time minute-level DataFrame (can be None)
-
-    Returns:
-        DataFrame: Merged minute-level DataFrame
+    Attribute Apple Health metrics to hourly segments using vectorized operations.
+    Uses pre-aggregation by date+hour and then merges, which is much faster.
     """
-    print("\n🔗 Merging minute-level data...")
+    print("📊 Attributing Apple Health metrics to segments...")
 
-    # Start with Apple data
-    merged_df = apple_df.copy()
+    if hourly_df is None or len(hourly_df) == 0:
+        return hourly_df
 
-    # Merge location data (HOURLY → MINUTE mapping)
-    if location_df is not None:
-        location_cols = ['date', 'timezone', 'city', 'country', 'is_home', 'coordinates', 'location_type']
-        existing_loc_cols = [col for col in location_cols if col in location_df.columns]
+    # Initialize metric columns
+    metric_columns = [
+        'steps', 'apple_distance_meters', 'avg_step_length_cm', 'avg_walking_speed_kmh',
+        'avg_heart_rate', 'avg_audio_exposure', 'active_energy_kcal', 'resting_energy_kcal',
+        'flights_climbed', 'body_weight_kg', 'body_fat_percent',
+        'sleep_minutes', 'deep_sleep_minutes', 'rem_sleep_minutes',
+        'core_sleep_minutes', 'awake_minutes'
+    ]
 
-        # Create hour column for merging (floor to hour)
-        # Location data is hourly, so 09:00:00 applies to all minutes 09:00-09:59
-        merged_df['hour'] = merged_df['date'].dt.floor('H')
-        location_df_copy = location_df.copy()
-        location_df_copy['hour'] = location_df_copy['date'].dt.floor('H')
+    for col in metric_columns:
+        hourly_df[col] = None
 
-        # Merge on hour (maps all 60 minutes to their hourly location record)
-        merge_cols = ['hour'] + [col for col in existing_loc_cols if col != 'date']
-        merged_df = merged_df.merge(
-            location_df_copy[merge_cols],
-            on='hour',
-            how='left'
-        )
+    if apple_df is None or len(apple_df) == 0:
+        print("⚠️  No Apple data to attribute")
+        return hourly_df
 
-        # Drop helper column
-        merged_df = merged_df.drop(columns=['hour'])
+    # Create date and hour columns in apple_df for grouping
+    apple_df = apple_df.copy()
+    apple_df['_date'] = apple_df['date'].dt.date
+    apple_df['_hour'] = apple_df['date'].dt.hour
 
-        print(f"✅ Merged location data: {len(location_df):,} hourly records → {len(merged_df):,} minute records")
+    # Pre-aggregate Apple data by date+hour (MUCH faster than row-by-row)
+    print("   Pre-aggregating Apple data by hour...")
 
-    # Merge screen time data
-    if screen_df is not None:
-        screen_cols = ['date', 'screen_time', 'pickups', 'within_hour_before_sleep', 'is_within_hour_before_sleep']
-        existing_screen_cols = [col for col in screen_cols if col in screen_df.columns]
-
-        merged_df = merged_df.merge(
-            screen_df[existing_screen_cols],
-            on='date',
-            how='left'
-        )
-        print(f"✅ Merged screen time data: {len(screen_df):,} records")
-
-    print(f"✅ Minute-level merge complete: {len(merged_df):,} records")
-
-    return merged_df
-
-
-def aggregate_to_daily(minute_df):
-    """
-    Aggregate minute-level data to daily summaries.
-
-    Args:
-        minute_df: Minute-level merged DataFrame
-
-    Returns:
-        DataFrame: Daily aggregated DataFrame
-    """
-    print("\n📊 Aggregating to daily level...")
-
-    # Extract date only (remove time)
-    minute_df_copy = minute_df.copy()
-    minute_df_copy['date_only'] = minute_df_copy['date'].dt.date
-    minute_df_copy['date_only'] = pd.to_datetime(minute_df_copy['date_only'])
-
-    # Aggregate Apple activity metrics
+    # Aggregation functions for different metric types
     agg_dict = {}
 
-    # Activity metrics (sum)
-    for col in ['step_count', 'walking_dist', 'flights_climbed', 'resting_energy', 'active_energy']:
-        if col in minute_df_copy.columns:
-            agg_dict[col] = 'sum'
+    # Sum metrics
+    if 'step_count' in apple_df.columns:
+        agg_dict['step_count'] = 'sum'
+    if 'walking_dist' in apple_df.columns:
+        agg_dict['walking_dist'] = 'sum'
+    if 'flights_climbed' in apple_df.columns:
+        agg_dict['flights_climbed'] = 'sum'
+    if 'active_energy' in apple_df.columns:
+        agg_dict['active_energy'] = 'sum'
+    if 'resting_energy' in apple_df.columns:
+        agg_dict['resting_energy'] = 'sum'
 
-    # Body metrics (mean)
-    for col in ['step_length', 'walking_speed', 'heart_rate', 'body_weight', 'body_fat_percent', 'audio_exposure']:
-        if col in minute_df_copy.columns:
-            agg_dict[col] = 'mean'
+    # Average metrics
+    if 'step_length' in apple_df.columns:
+        agg_dict['step_length'] = 'mean'
+    if 'walking_speed' in apple_df.columns:
+        agg_dict['walking_speed'] = 'mean'
+    if 'heart_rate' in apple_df.columns:
+        agg_dict['heart_rate'] = 'mean'
+    if 'audio_exposure' in apple_df.columns:
+        agg_dict['audio_exposure'] = 'mean'
+    if 'body_weight' in apple_df.columns:
+        agg_dict['body_weight'] = 'mean'
+    if 'body_fat_percent' in apple_df.columns:
+        agg_dict['body_fat_percent'] = 'mean'
 
-    # Perform aggregation
-    daily_df = minute_df_copy.groupby('date_only').agg(agg_dict).reset_index()
+    # Aggregate main metrics
+    if agg_dict:
+        apple_hourly = apple_df.groupby(['_date', '_hour']).agg(agg_dict).reset_index()
+        apple_hourly.columns = ['_date', '_hour'] + [f'_{c}' for c in agg_dict.keys()]
+    else:
+        apple_hourly = pd.DataFrame(columns=['_date', '_hour'])
 
-    # Rename columns
-    rename_dict = {
-        'date_only': 'date',
-        'step_count': 'daily_steps',
-        'step_length': 'avg_step_length',
-        'walking_dist': 'daily_walking_dist',
-        'flights_climbed': 'daily_flights_climbed',
-        'walking_speed': 'avg_walking_speed',
-        'resting_energy': 'daily_resting_energy',
-        'active_energy': 'daily_active_energy',
-        'heart_rate': 'avg_heart_rate',
-        'body_weight': 'avg_body_weight',
-        'body_fat_percent': 'avg_body_fat_percent',
-        'audio_exposure': 'avg_audio_exposure'
-    }
-
-    daily_df = daily_df.rename(columns=rename_dict)
-
-    # Handle sleep_analysis (pivot to count minutes per phase)
-    if 'sleep_analysis' in minute_df_copy.columns:
-        print("   💤 Processing sleep phases...")
-        sleep_df = minute_df_copy[minute_df_copy['sleep_analysis'].notna()].copy()
+    # Handle sleep separately (need to pivot by phase)
+    if 'sleep_analysis' in apple_df.columns:
+        print("   Processing sleep phases...")
+        sleep_df = apple_df[apple_df['sleep_analysis'].notna() & (apple_df['sleep_analysis'] != '')]
 
         if len(sleep_df) > 0:
-            # Pivot to get minutes per sleep phase
-            sleep_pivot = sleep_df.groupby(['date_only', 'sleep_analysis']).size().unstack(fill_value=0)
-            sleep_pivot = sleep_pivot.reset_index()
+            # Count minutes per phase per hour
+            sleep_counts = sleep_df.groupby(['_date', '_hour', 'sleep_analysis']).size().reset_index(name='minutes')
 
-            # Rename columns based on actual phases present
+            # Pivot to get one column per phase
+            sleep_pivot = sleep_counts.pivot_table(
+                index=['_date', '_hour'],
+                columns='sleep_analysis',
+                values='minutes',
+                fill_value=0
+            ).reset_index()
+
+            # Rename columns
             phase_mapping = {
-                'Deep sleep': 'sleep_deep_sleep_minutes',
-                'REM sleep': 'sleep_rem_sleep_minutes',
-                'Core sleep': 'sleep_core_sleep_minutes',
-                'Awake': 'sleep_awake_minutes',
-                'In bed': 'sleep_in_bed_minutes',
-                'Unspecified': 'sleep_unspecified_minutes'
+                'Deep sleep': '_deep_sleep',
+                'REM sleep': '_rem_sleep',
+                'Core sleep': '_core_sleep',
+                'Awake': '_awake'
             }
 
-            # Rename columns that exist
-            rename_sleep = {'date_only': 'date'}
             for old_name, new_name in phase_mapping.items():
                 if old_name in sleep_pivot.columns:
-                    rename_sleep[old_name] = new_name
+                    sleep_pivot = sleep_pivot.rename(columns={old_name: new_name})
 
-            sleep_pivot = sleep_pivot.rename(columns=rename_sleep)
-
-            # Calculate total sleep minutes (sum of all phases)
-            sleep_cols = [col for col in sleep_pivot.columns if col.startswith('sleep_') and col.endswith('_minutes')]
+            # Calculate total sleep
+            sleep_cols = [c for c in sleep_pivot.columns if c.startswith('_') and c != '_date' and c != '_hour']
             if sleep_cols:
-                sleep_pivot['sleep_minutes'] = sleep_pivot[sleep_cols].sum(axis=1)
+                sleep_pivot['_total_sleep'] = sleep_pivot[sleep_cols].sum(axis=1)
 
-            # Merge sleep data with daily aggregation
-            daily_df = daily_df.merge(sleep_pivot, on='date', how='left')
+            # Merge sleep with other metrics
+            if len(apple_hourly) > 0:
+                apple_hourly = apple_hourly.merge(sleep_pivot, on=['_date', '_hour'], how='outer')
+            else:
+                apple_hourly = sleep_pivot
 
-            print(f"      Sleep phases tracked: {', '.join([col.replace('sleep_', '').replace('_minutes', '') for col in sleep_cols])}")
+    # Now merge with hourly_df
+    print("   Merging metrics with hourly segments...")
+    hourly_df['_date'] = hourly_df['date']
+    hourly_df['_hour'] = hourly_df['hour']
 
-    # Aggregate location metrics
-    if 'city' in minute_df_copy.columns:
-        print("   📍 Processing location metrics...")
-        location_daily = minute_df_copy.groupby('date_only').agg({
-            'city': ['nunique', lambda x: x.mode()[0] if len(x.mode()) > 0 and len(x) > 0 else None],
-            'country': 'nunique',
-            'timezone': ['nunique', lambda x: x.mode()[0] if len(x.mode()) > 0 and len(x) > 0 else None]
-        }).reset_index()
+    # Merge
+    hourly_df = hourly_df.merge(apple_hourly, on=['_date', '_hour'], how='left')
 
-        location_daily.columns = [
-            'date',
-            'cities_visited',
-            'dominant_city',
-            'countries_visited',
-            'timezone_changes',
-            'dominant_timezone'
-        ]
+    # Calculate proportion for Google Maps segments (vectorized)
+    hourly_df['_proportion'] = np.where(
+        hourly_df['data_source'] == 'google_maps',
+        hourly_df['segment_duration_minutes'] / 60.0,
+        1.0
+    )
 
-        # Calculate location_type percentages
-        if 'location_type' in minute_df_copy.columns:
-            location_type_daily = minute_df_copy.groupby('date_only')['location_type'].apply(
-                lambda x: x.value_counts(normalize=True) * 100
-            ).unstack(fill_value=0).reset_index()
+    # Apply proportion and rename columns
+    if '_step_count' in hourly_df.columns:
+        hourly_df['steps'] = (hourly_df['_step_count'].fillna(0) * hourly_df['_proportion']).astype(int)
 
-            location_type_daily.columns = ['date'] + [f'percent_time_{col}' for col in location_type_daily.columns[1:]]
+    if '_walking_dist' in hourly_df.columns:
+        hourly_df['apple_distance_meters'] = (hourly_df['_walking_dist'].fillna(0) * 1000 * hourly_df['_proportion']).round(1)
 
-            # Merge location type percentages
-            location_daily = location_daily.merge(location_type_daily, on='date', how='left')
+    if '_flights_climbed' in hourly_df.columns:
+        hourly_df['flights_climbed'] = (hourly_df['_flights_climbed'].fillna(0) * hourly_df['_proportion']).astype(int)
 
-        # Merge with main daily dataframe
-        daily_df = daily_df.merge(location_daily, on='date', how='left')
+    if '_active_energy' in hourly_df.columns:
+        hourly_df['active_energy_kcal'] = (hourly_df['_active_energy'].fillna(0) * hourly_df['_proportion']).round(1)
 
-    # Aggregate screen time metrics
-    if 'screen_time' in minute_df_copy.columns:
-        print("   📱 Processing screen time metrics...")
-        screen_daily = minute_df_copy.groupby('date_only').agg({
-            'screen_time': 'sum',
-            'pickups': 'sum',
-            'within_hour_before_sleep': 'sum'
-        }).reset_index()
+    if '_resting_energy' in hourly_df.columns:
+        hourly_df['resting_energy_kcal'] = (hourly_df['_resting_energy'].fillna(0) * hourly_df['_proportion']).round(1)
 
-        # Rename aggregation columns
-        screen_daily = screen_daily.rename(columns={
-            'date_only': 'date',
-            'pickups': 'total_pickups'
-        })
+    # Average metrics (no proportion needed)
+    if '_step_length' in hourly_df.columns:
+        hourly_df['avg_step_length_cm'] = (hourly_df['_step_length'] * 100).round(1)
 
-        # Convert screen_time from seconds to minutes and hours
-        screen_daily['total_screen_minutes'] = (screen_daily['screen_time'] / 60).round(0).astype(int)
-        screen_daily['total_screen_hours'] = (screen_daily['screen_time'] / 3600).round(2)
+    if '_walking_speed' in hourly_df.columns:
+        hourly_df['avg_walking_speed_kmh'] = hourly_df['_walking_speed'].round(2)
 
-        # Convert sleep screen time from seconds to minutes
-        screen_daily['screen_before_sleep_minutes'] = (screen_daily['within_hour_before_sleep'] / 60).round(0).astype(int)
+    if '_heart_rate' in hourly_df.columns:
+        hourly_df['avg_heart_rate'] = hourly_df['_heart_rate'].round(1)
 
-        # Drop intermediate columns
-        screen_daily = screen_daily.drop(columns=['screen_time', 'within_hour_before_sleep'])
+    if '_audio_exposure' in hourly_df.columns:
+        hourly_df['avg_audio_exposure'] = hourly_df['_audio_exposure'].round(1)
 
-        # Merge with main daily dataframe
-        daily_df = daily_df.merge(screen_daily, on='date', how='left')
+    if '_body_weight' in hourly_df.columns:
+        hourly_df['body_weight_kg'] = hourly_df['_body_weight'].round(1)
 
-    print(f"✅ Daily aggregation complete: {len(daily_df):,} daily records")
+    if '_body_fat_percent' in hourly_df.columns:
+        hourly_df['body_fat_percent'] = hourly_df['_body_fat_percent'].round(1)
 
+    # Sleep metrics (with proportion)
+    if '_total_sleep' in hourly_df.columns:
+        hourly_df['sleep_minutes'] = (hourly_df['_total_sleep'].fillna(0) * hourly_df['_proportion']).astype(int)
+
+    if '_deep_sleep' in hourly_df.columns:
+        hourly_df['deep_sleep_minutes'] = (hourly_df['_deep_sleep'].fillna(0) * hourly_df['_proportion']).astype(int)
+
+    if '_rem_sleep' in hourly_df.columns:
+        hourly_df['rem_sleep_minutes'] = (hourly_df['_rem_sleep'].fillna(0) * hourly_df['_proportion']).astype(int)
+
+    if '_core_sleep' in hourly_df.columns:
+        hourly_df['core_sleep_minutes'] = (hourly_df['_core_sleep'].fillna(0) * hourly_df['_proportion']).astype(int)
+
+    if '_awake' in hourly_df.columns:
+        hourly_df['awake_minutes'] = (hourly_df['_awake'].fillna(0) * hourly_df['_proportion']).astype(int)
+
+    # Clean up temporary columns
+    temp_cols = [c for c in hourly_df.columns if c.startswith('_')]
+    hourly_df = hourly_df.drop(columns=temp_cols)
+
+    print(f"✅ Attributed metrics to {len(hourly_df):,} hourly records")
+    return hourly_df
+
+
+def attribute_screen_time_to_segments(hourly_df, screen_df, apple_df):
+    """
+    Attribute screen time metrics to hourly segments using vectorized operations.
+    Also calculates screen_time_minutes_before_sleep.
+    """
+    print("📱 Attributing screen time to segments...")
+
+    if hourly_df is None:
+        return hourly_df
+
+    # Initialize columns
+    hourly_df['screen_time_minutes'] = 0.0
+    hourly_df['phone_pickups'] = 0
+    hourly_df['screen_time_minutes_before_sleep'] = 0.0
+
+    if screen_df is None or len(screen_df) == 0:
+        print("⚠️  No screen time data to attribute")
+        return hourly_df
+
+    # Pre-aggregate screen data by date+hour
+    print("   Pre-aggregating screen time by hour...")
+    screen_df = screen_df.copy()
+    screen_df['_date'] = screen_df['date'].dt.date
+    screen_df['_hour'] = screen_df['date'].dt.hour
+
+    agg_dict = {}
+    if 'screen_time' in screen_df.columns:
+        agg_dict['screen_time'] = 'sum'
+    if 'pickups' in screen_df.columns:
+        agg_dict['pickups'] = 'sum'
+
+    if agg_dict:
+        screen_hourly = screen_df.groupby(['_date', '_hour']).agg(agg_dict).reset_index()
+        # Convert screen_time from seconds to minutes
+        if 'screen_time' in screen_hourly.columns:
+            screen_hourly['screen_time'] = (screen_hourly['screen_time'] / 60).round(1)
+    else:
+        screen_hourly = pd.DataFrame(columns=['_date', '_hour'])
+
+    # Find first sleep time per day for "before sleep" calculation
+    sleep_hours = {}
+    if apple_df is not None and 'sleep_analysis' in apple_df.columns:
+        sleep_phases = ['Deep sleep', 'REM sleep', 'Core sleep', 'Unspecified']
+        sleep_records = apple_df[
+            apple_df['sleep_analysis'].isin(sleep_phases)
+        ].copy()
+
+        if len(sleep_records) > 0:
+            # Handle overnight sleep: if hour < 6, attribute to previous day (vectorized)
+            hours = sleep_records['date'].dt.hour
+            sleep_records['sleep_date'] = np.where(
+                hours < 6,
+                (sleep_records['date'] - pd.Timedelta(days=1)).dt.date,
+                sleep_records['date'].dt.date
+            )
+            first_sleep = sleep_records.groupby('sleep_date')['date'].min()
+            # Store the hour before sleep for each date
+            for date_val, sleep_time in first_sleep.items():
+                before_sleep_hour = (sleep_time - timedelta(hours=1)).hour
+                sleep_hours[date_val] = before_sleep_hour
+
+    # Create before_sleep lookup for screen data
+    if sleep_hours:
+        print("   Calculating screen time before sleep...")
+        # Create a DataFrame of before-sleep hours
+        before_sleep_df = pd.DataFrame([
+            {'_date': date_val, '_before_sleep_hour': hour_val}
+            for date_val, hour_val in sleep_hours.items()
+        ])
+
+        # Merge to get screen time for before-sleep hours
+        screen_before_sleep = screen_hourly.merge(
+            before_sleep_df,
+            left_on=['_date', '_hour'],
+            right_on=['_date', '_before_sleep_hour'],
+            how='inner'
+        )
+
+        if len(screen_before_sleep) > 0:
+            before_sleep_lookup = screen_before_sleep.set_index(['_date', '_hour'])['screen_time'].to_dict()
+        else:
+            before_sleep_lookup = {}
+    else:
+        before_sleep_lookup = {}
+
+    # Merge screen data with hourly_df
+    print("   Merging screen time with hourly segments...")
+    hourly_df['_date'] = hourly_df['date']
+    hourly_df['_hour'] = hourly_df['hour']
+
+    hourly_df = hourly_df.merge(
+        screen_hourly.rename(columns={'screen_time': '_screen_time', 'pickups': '_pickups'}),
+        on=['_date', '_hour'],
+        how='left'
+    )
+
+    # Apply values
+    if '_screen_time' in hourly_df.columns:
+        hourly_df['screen_time_minutes'] = hourly_df['_screen_time'].fillna(0.0)
+
+    if '_pickups' in hourly_df.columns:
+        hourly_df['phone_pickups'] = hourly_df['_pickups'].fillna(0).astype(int)
+
+    # Apply before-sleep screen time (vectorized via merge)
+    if before_sleep_lookup:
+        before_sleep_series = pd.DataFrame([
+            {'_date': k[0], '_hour': k[1], '_before_sleep_screen': v}
+            for k, v in before_sleep_lookup.items()
+        ])
+        hourly_df = hourly_df.merge(before_sleep_series, on=['_date', '_hour'], how='left')
+        hourly_df['screen_time_minutes_before_sleep'] = hourly_df['_before_sleep_screen'].fillna(0.0)
+
+    # Clean up temporary columns
+    temp_cols = [c for c in hourly_df.columns if c.startswith('_')]
+    hourly_df = hourly_df.drop(columns=temp_cols)
+
+    print(f"✅ Attributed screen time to {len(hourly_df):,} hourly records")
+    return hourly_df
+
+
+# ============================================================================
+# DAILY AGGREGATION FUNCTIONS
+# ============================================================================
+
+def create_daily_file(nutrilio_df, apple_df, hourly_df):
+    """
+    Create the daily health file with:
+    - Nutrilio subjective metrics
+    - Sleep start/wake up times
+    - Daily totals for weighted averages
+
+    Uses vectorized operations for performance.
+    """
+    print("📅 Creating daily health file...")
+
+    # Start with all dates from Apple Health
+    all_dates = sorted(apple_df['date'].dt.date.unique())
+    daily_df = pd.DataFrame({'date': all_dates})
+
+    # 1. Merge Nutrilio data (vectorized)
+    print("   Merging Nutrilio data...")
+    if nutrilio_df is not None and len(nutrilio_df) > 0:
+        nutrilio_cols = ['sleep_quality', 'sleep_quality_text', 'dreams', 'dream_description',
+                         'sleep_rest_feeling', 'fitness_feeling', 'overall_evaluation', 'notes_summary']
+        nutrilio_subset = nutrilio_df.copy()
+        nutrilio_subset['_date'] = nutrilio_subset['date'].dt.date
+
+        # Keep only columns that exist
+        existing_cols = ['_date'] + [c for c in nutrilio_cols if c in nutrilio_subset.columns]
+        nutrilio_subset = nutrilio_subset[existing_cols].drop_duplicates(subset=['_date'])
+
+        daily_df = daily_df.merge(nutrilio_subset, left_on='date', right_on='_date', how='left')
+        if '_date' in daily_df.columns:
+            daily_df = daily_df.drop(columns=['_date'])
+
+    # 2. Calculate sleep times (vectorized)
+    print("   Calculating sleep times...")
+    sleep_times_df = calculate_all_sleep_times(apple_df, all_dates)
+    if sleep_times_df is not None:
+        daily_df = daily_df.merge(sleep_times_df, on='date', how='left')
+
+    # 3. Calculate daily totals from hourly data (vectorized)
+    print("   Aggregating daily totals from hourly data...")
+    if hourly_df is not None and len(hourly_df) > 0:
+        # Aggregate hourly to daily
+        agg_cols = {
+            'steps': 'sum',
+            'apple_distance_meters': 'sum',
+            'flights_climbed': 'sum',
+            'active_energy_kcal': 'sum',
+            'resting_energy_kcal': 'sum',
+            'sleep_minutes': 'sum',
+            'deep_sleep_minutes': 'sum',
+            'rem_sleep_minutes': 'sum',
+            'core_sleep_minutes': 'sum',
+            'awake_minutes': 'sum',
+            'screen_time_minutes': 'sum',
+            'phone_pickups': 'sum',
+            'screen_time_minutes_before_sleep': 'sum'
+        }
+
+        # Only aggregate columns that exist
+        existing_agg = {k: v for k, v in agg_cols.items() if k in hourly_df.columns}
+
+        if existing_agg:
+            hourly_daily = hourly_df.groupby('date').agg(existing_agg).reset_index()
+
+            # Rename columns with total_ prefix
+            rename_map = {col: f'total_{col}' for col in existing_agg.keys()}
+            hourly_daily = hourly_daily.rename(columns=rename_map)
+
+            daily_df = daily_df.merge(hourly_daily, on='date', how='left')
+
+    # Convert date to datetime
+    daily_df['date'] = pd.to_datetime(daily_df['date'])
+
+    print(f"✅ Created daily file: {len(daily_df):,} records")
     return daily_df
 
 
-def merge_daily_nutrilio(daily_df, nutrilio_df):
+def calculate_all_sleep_times(apple_df, all_dates):
     """
-    Merge Nutrilio mental health data into daily aggregated data.
-
-    Args:
-        daily_df: Daily aggregated DataFrame
-        nutrilio_df: Nutrilio mental health DataFrame (daily)
-
-    Returns:
-        DataFrame: Final daily DataFrame with Nutrilio data merged
+    Calculate sleep start and wake up times for all dates at once.
+    Uses vectorized operations where possible.
+    Returns a DataFrame with date, sleep_start_time, wake_up_time.
     """
-    if nutrilio_df is None:
-        print("⚠️  No Nutrilio data to merge")
-        return daily_df
+    if 'sleep_analysis' not in apple_df.columns:
+        return None
 
-    print("\n🔗 Merging Nutrilio mental health data...")
+    print("   Finding sleep sessions...")
 
-    # Merge on date
-    final_df = daily_df.merge(nutrilio_df, on='date', how='left')
+    # Sleep phases (excluding 'In bed' and 'Awake')
+    sleep_phases = ['Deep sleep', 'REM sleep', 'Core sleep', 'Unspecified']
 
-    # Coalesce weight: Apple Health primary, Nutrilio fallback
-    if 'avg_body_weight' in final_df.columns and 'weight_(kg)' in final_df.columns:
-        # Count how many gaps will be filled
-        apple_nulls = final_df['avg_body_weight'].isna().sum()
-        nutrilio_fills = final_df[final_df['avg_body_weight'].isna() & final_df['weight_(kg)'].notna()].shape[0]
+    # Filter to only sleep records
+    sleep_df = apple_df[apple_df['sleep_analysis'].isin(sleep_phases)].copy()
 
-        # Fill Apple Health gaps with Nutrilio data
-        final_df['avg_body_weight'] = final_df['avg_body_weight'].fillna(final_df['weight_(kg)'])
+    if len(sleep_df) == 0:
+        return None
 
-        # Drop the separate Nutrilio weight column (now merged into avg_body_weight)
-        final_df = final_df.drop(columns=['weight_(kg)'])
+    sleep_df = sleep_df.sort_values('date')
 
-        if nutrilio_fills > 0:
-            print(f"   ⚖️  Filled {nutrilio_fills} body weight gaps using Nutrilio data (out of {apple_nulls} missing)")
+    # Assign each sleep record to a "sleep date" (the night it belongs to)
+    # Sleep before 6am belongs to the previous calendar day (vectorized)
+    hours = sleep_df['date'].dt.hour
+    sleep_df['sleep_date'] = np.where(
+        hours < 6,
+        (sleep_df['date'] - pd.Timedelta(days=1)).dt.date,
+        sleep_df['date'].dt.date
+    )
 
-    print(f"✅ Nutrilio data merged: {len(nutrilio_df):,} daily mental health records added")
+    # Find sessions per sleep_date
+    # A session is a continuous block with gaps <= 30 min
+    results = []
 
-    return final_df
+    for sleep_date in sleep_df['sleep_date'].unique():
+        date_records = sleep_df[sleep_df['sleep_date'] == sleep_date].sort_values('date')
+
+        if len(date_records) == 0:
+            continue
+
+        # Find sessions using time differences
+        times = date_records['date'].values
+
+        # Calculate gaps between consecutive records (in minutes)
+        if len(times) > 1:
+            gaps = np.diff(times).astype('timedelta64[m]').astype(float)
+            # Session breaks where gap > 30 min
+            session_breaks = np.where(gaps > 30)[0] + 1
+            session_ids = np.zeros(len(times), dtype=int)
+            for i, brk in enumerate(session_breaks):
+                session_ids[brk:] = i + 1
+        else:
+            session_ids = np.zeros(len(times), dtype=int)
+
+        date_records = date_records.copy()
+        date_records['session_id'] = session_ids
+
+        # Find start/end of each session
+        sessions = date_records.groupby('session_id').agg(
+            start=('date', 'min'),
+            end=('date', 'max')
+        ).reset_index()
+
+        sessions['duration'] = (sessions['end'] - sessions['start']).dt.total_seconds()
+
+        # Get longest session
+        if len(sessions) > 0:
+            longest = sessions.loc[sessions['duration'].idxmax()]
+
+            # Validate times
+            start_hour = longest['start'].hour
+            end_hour = longest['end'].hour
+
+            is_valid_start = start_hour >= 20 or start_hour <= 3
+            is_valid_end = end_hour <= 12
+
+            if is_valid_start and is_valid_end:
+                results.append({
+                    'date': sleep_date,
+                    'sleep_start_time': longest['start'].strftime('%H:%M'),
+                    'wake_up_time': longest['end'].strftime('%H:%M')
+                })
+
+    if results:
+        return pd.DataFrame(results)
+    return None
+
+
+def safe_sum(df, column):
+    """Safely sum a column, returning None if all values are None."""
+    if column not in df.columns:
+        return None
+    values = df[column].dropna()
+    if len(values) == 0:
+        return None
+    return round(values.sum(), 1)
 
 
 # ============================================================================
@@ -775,14 +959,12 @@ def merge_daily_nutrilio(daily_df, nutrilio_df):
 
 def create_health_files():
     """
-    Main processing function that merges all health data sources
-    and generates minute-level, daily aggregated, and hourly aggregated files.
-
-    Returns:
-        bool: True if successful, False otherwise
+    Main processing function that creates two clean CSV files:
+    1. health_daily.csv - Daily metrics
+    2. health_hourly.csv - Hourly segment data
     """
     print("\n" + "="*70)
-    print("🏥 HEALTH DATA PROCESSING - MULTI-SOURCE MERGE")
+    print("🏥 HEALTH DATA PROCESSING - REORGANIZED VERSION")
     print("="*70)
 
     try:
@@ -795,88 +977,99 @@ def create_health_files():
             return False
 
         nutrilio_df = load_nutrilio_mental_health()
-        location_df = load_location_data()
+        gmaps_minute_df = load_google_maps_minute_data()
+        location_daily_df = load_location_daily_data()
         screen_df = load_screentime_data()
-        google_maps_df = load_google_maps_data()  # Load Google Maps for hourly aggregation
 
-        # Determine cutoff date for incremental hourly processing
-        # Only data from Nutrilio date onwards needs reprocessing (older Apple Health data is static)
-        nutrilio_cutoff_date = None
-        existing_hourly_path = 'files/website_files/health/health_page_hourly.csv'
+        # Step 2: Create segments from Google Maps
+        print("\n🔀 STEP 2: Creating segments from Google Maps...")
+        segments_df = create_segments_from_google_maps(gmaps_minute_df)
 
-        if nutrilio_df is not None and os.path.exists(existing_hourly_path):
-            nutrilio_cutoff_date = nutrilio_df['date'].min().date()
-            print(f"   ⚡ Incremental processing enabled: Cutoff date = {nutrilio_cutoff_date}")
-        else:
-            if nutrilio_df is None:
-                print("   ℹ️  Full processing: No Nutrilio data available")
-            else:
-                print("   ℹ️  Full processing: No existing hourly file found")
+        # Step 3: Expand segments to hourly
+        print("\n⏰ STEP 3: Expanding segments to hourly records...")
+        hourly_gmaps_df = expand_segments_to_hourly(segments_df)
 
-        # Step 2: Merge at minute-level
-        print("\n🔗 STEP 2: Merging minute-level data...")
-        minute_merged_df = merge_minute_level_data(apple_df, location_df, screen_df)
+        # Get dates covered by Google Maps
+        gmaps_dates = None
+        if hourly_gmaps_df is not None:
+            gmaps_dates = set(hourly_gmaps_df['date'].unique())
 
-        # Step 3: Aggregate to daily
-        print("\n📊 STEP 3: Aggregating to daily level...")
-        daily_df = aggregate_to_daily(minute_merged_df)
-
-        # Step 4: Merge Nutrilio (daily)
-        print("\n🔗 STEP 4: Merging Nutrilio mental health data...")
-        final_daily_df = merge_daily_nutrilio(daily_df, nutrilio_df)
-
-        # Step 5: Aggregate to hourly (with Google Maps data for richer details)
-        # Uses incremental processing if existing hourly file and Nutrilio data are available
-        print("\n⏰ STEP 5: Aggregating to hourly level with JSON details...")
-        hourly_df = aggregate_to_hourly(
-            minute_merged_df,
-            google_maps_df,
-            existing_hourly_path=existing_hourly_path,
-            nutrilio_cutoff_date=nutrilio_cutoff_date
+        # Step 4: Create fallback hourly records for pre-Google Maps dates
+        print("\n📋 STEP 4: Creating fallback hourly records...")
+        hourly_fallback_df = create_fallback_hourly_records(
+            apple_df, location_daily_df, gmaps_dates
         )
 
-        # Step 6: Enforce snake_case
-        print("\n🔤 STEP 6: Enforcing snake_case...")
-        minute_merged_df = enforce_snake_case(minute_merged_df, "health_minute_level")
-        final_daily_df = enforce_snake_case(final_daily_df, "health_daily_aggregated")
-        hourly_df = enforce_snake_case(hourly_df, "health_hourly_aggregated")
+        # Step 5: Combine hourly data
+        print("\n🔗 STEP 5: Combining hourly data...")
+        hourly_dfs = [df for df in [hourly_gmaps_df, hourly_fallback_df] if df is not None]
 
-        # Step 7: Save files
-        print("\n💾 STEP 7: Saving processed files...")
+        if hourly_dfs:
+            hourly_df = pd.concat(hourly_dfs, ignore_index=True)
+            hourly_df = hourly_df.sort_values(['date', 'hour', 'hour_segment_id'])
+        else:
+            print("❌ No hourly data created")
+            return False
+
+        print(f"✅ Combined hourly data: {len(hourly_df):,} records")
+
+        # Step 5b: Fill in missing hours for dates with partial coverage
+        print("\n🔧 STEP 5b: Filling gaps in hourly data...")
+        hourly_df = fill_missing_hours(hourly_df, location_daily_df)
+        hourly_df = hourly_df.sort_values(['date', 'hour', 'hour_segment_id'])
+        print(f"✅ Hourly data after gap fill: {len(hourly_df):,} records")
+
+        # Step 6: Attribute Apple metrics to segments
+        print("\n📊 STEP 6: Attributing metrics to segments...")
+        hourly_df = attribute_apple_metrics_to_segments(hourly_df, apple_df, gmaps_minute_df)
+        hourly_df = attribute_screen_time_to_segments(hourly_df, screen_df, apple_df)
+
+        # Step 7: Create daily file
+        print("\n📅 STEP 7: Creating daily file...")
+        daily_df = create_daily_file(nutrilio_df, apple_df, hourly_df)
+
+        # Step 8: Enforce snake_case
+        print("\n🔤 STEP 8: Enforcing snake_case...")
+        daily_df = enforce_snake_case(daily_df, "health_daily")
+        hourly_df = enforce_snake_case(hourly_df, "health_hourly")
+
+        # Step 9: Save files
+        print("\n💾 STEP 9: Saving processed files...")
+
+        # Save to topic_processed_files
         health_dir = 'files/topic_processed_files/health'
         os.makedirs(health_dir, exist_ok=True)
 
-        # Sort by date descending (most recent first)
-        minute_merged_df = minute_merged_df.sort_values('date', ascending=False)
-        final_daily_df = final_daily_df.sort_values('date', ascending=False)
-        hourly_df = hourly_df.sort_values('datetime', ascending=False)
+        daily_df = daily_df.sort_values('date', ascending=False)
+        hourly_df = hourly_df.sort_values(['date', 'hour', 'hour_segment_id'], ascending=[False, False, True])
 
-        # Save minute-level file
-        minute_path = f'{health_dir}/health_minute_processed.csv'
-        minute_merged_df.to_csv(minute_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Minute-level: {len(minute_merged_df):,} records → {minute_path}")
-
-        # Save daily aggregated file
         daily_path = f'{health_dir}/health_daily_processed.csv'
-        final_daily_df.to_csv(daily_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Daily aggregated: {len(final_daily_df):,} records → {daily_path}")
-
-        # Save hourly aggregated file
         hourly_path = f'{health_dir}/health_hourly_processed.csv'
-        hourly_df.to_csv(hourly_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Hourly aggregated: {len(hourly_df):,} records → {hourly_path}")
 
-        # Generate website files (including hourly)
-        generate_health_website_files(minute_merged_df, final_daily_df, hourly_df)
+        daily_df.to_csv(daily_path, sep='|', index=False, encoding='utf-8')
+        hourly_df.to_csv(hourly_path, sep='|', index=False, encoding='utf-8')
+
+        print(f"✅ Daily file: {len(daily_df):,} records → {daily_path}")
+        print(f"✅ Hourly file: {len(hourly_df):,} records → {hourly_path}")
+
+        # Generate website files
+        generate_health_website_files(daily_df, hourly_df)
 
         print("\n" + "="*70)
         print("🎉 HEALTH DATA PROCESSING COMPLETE!")
         print("="*70)
         print(f"📊 Summary:")
-        print(f"   • Minute-level: {len(minute_merged_df):,} records")
-        print(f"   • Hourly aggregated: {len(hourly_df):,} records")
-        print(f"   • Daily aggregated: {len(final_daily_df):,} records")
-        print(f"   • Date range: {final_daily_df['date'].min()} to {final_daily_df['date'].max()}")
+        print(f"   • Daily file: {len(daily_df):,} records ({len(daily_df.columns)} columns)")
+        print(f"   • Hourly file: {len(hourly_df):,} records ({len(hourly_df.columns)} columns)")
+        print(f"   • Date range: {daily_df['date'].min()} to {daily_df['date'].max()}")
+
+        # Show data source breakdown
+        if 'data_source' in hourly_df.columns:
+            source_counts = hourly_df['data_source'].value_counts()
+            print(f"   • Data sources:")
+            for source, count in source_counts.items():
+                print(f"      - {source}: {count:,} records")
+
         print("="*70)
 
         return True
@@ -892,49 +1085,27 @@ def create_health_files():
 # WEBSITE FILE GENERATION
 # ============================================================================
 
-def generate_health_website_files(minute_df, daily_df, hourly_df=None):
-    """
-    Generate website-optimized files for the Health page.
-
-    Args:
-        minute_df: Minute-level merged DataFrame (already in snake_case)
-        daily_df: Daily aggregated DataFrame (already in snake_case)
-        hourly_df: Hourly aggregated DataFrame with JSON columns (optional)
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
+def generate_health_website_files(daily_df, hourly_df):
+    """Generate website-optimized files for the Health page."""
     print("\n🌐 Generating website files for Health page...")
 
     try:
-        # Ensure output directory exists
         website_dir = 'files/website_files/health'
         os.makedirs(website_dir, exist_ok=True)
 
-        # Generate minute-level website file
-        minute_web = minute_df.copy()
-        minute_web = enforce_snake_case(minute_web, "health_page_minute")
-        minute_web = minute_web.sort_values('date', ascending=False)
-        minute_path = f'{website_dir}/health_page_minute.csv'
-        minute_web.to_csv(minute_path, sep='|', index=False, encoding='utf-8')
-        print(f"✅ Minute-level website file: {len(minute_web):,} records → {minute_path}")
-
-        # Generate daily aggregated website file
-        daily_web = daily_df.copy()
-        daily_web = enforce_snake_case(daily_web, "health_page_daily")
+        # Daily file
+        daily_web = enforce_snake_case(daily_df.copy(), "health_page_daily")
         daily_web = daily_web.sort_values('date', ascending=False)
         daily_path = f'{website_dir}/health_page_daily.csv'
         daily_web.to_csv(daily_path, sep='|', index=False, encoding='utf-8')
         print(f"✅ Daily website file: {len(daily_web):,} records → {daily_path}")
 
-        # Generate hourly aggregated website file (for IntensityHeatmap)
-        if hourly_df is not None:
-            hourly_web = hourly_df.copy()
-            hourly_web = enforce_snake_case(hourly_web, "health_page_hourly")
-            hourly_web = hourly_web.sort_values('datetime', ascending=False)
-            hourly_path = f'{website_dir}/health_page_hourly.csv'
-            hourly_web.to_csv(hourly_path, sep='|', index=False, encoding='utf-8')
-            print(f"✅ Hourly website file: {len(hourly_web):,} records → {hourly_path}")
+        # Hourly file
+        hourly_web = enforce_snake_case(hourly_df.copy(), "health_page_hourly")
+        hourly_web = hourly_web.sort_values(['date', 'hour', 'hour_segment_id'], ascending=[False, False, True])
+        hourly_path = f'{website_dir}/health_page_hourly.csv'
+        hourly_web.to_csv(hourly_path, sep='|', index=False, encoding='utf-8')
+        print(f"✅ Hourly website file: {len(hourly_web):,} records → {hourly_path}")
 
         return True
 
@@ -950,21 +1121,14 @@ def generate_health_website_files(minute_df, daily_df, hourly_df=None):
 # ============================================================================
 
 def upload_health_results():
-    """
-    Uploads the processed health files to Google Drive.
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
+    """Uploads the processed health files to Google Drive."""
     print("\n☁️  Uploading health results to Google Drive...")
 
     files_to_upload = [
         'files/website_files/health/health_page_daily.csv',
-        #'files/website_files/health/health_page_minute.csv',
         'files/website_files/health/health_page_hourly.csv'
     ]
 
-    # Filter to only existing files
     existing_files = [f for f in files_to_upload if os.path.exists(f)]
 
     if not existing_files:
@@ -994,13 +1158,6 @@ def full_health_pipeline(auto_full=False, auto_process_only=False):
     1. Download new data, process, and upload to Drive
     2. Process existing data and upload to Drive
     3. Upload existing processed files to Drive
-
-    Args:
-        auto_full (bool): If True, automatically runs option 1 without user input
-        auto_process_only (bool): If True, automatically runs option 2 without user input
-
-    Returns:
-        bool: True if pipeline completed successfully, False otherwise
     """
     print("\n" + "="*70)
     print("🏥 HEALTH DATA COORDINATION PIPELINE")
@@ -1025,157 +1182,102 @@ def full_health_pipeline(auto_full=False, auto_process_only=False):
     if choice == "1":
         print("\n🚀 Option 1: Download, process, and upload...")
 
-        # ============================================================
-        # PHASE 1: DOWNLOAD - All user interaction upfront
-        # ============================================================
+        # DOWNLOAD PHASE
         print("\n" + "="*60)
         print("📥 DOWNLOAD PHASE - User interaction required")
         print("="*60)
-        print("\nYou will be prompted to download each data source.")
-        print("After all downloads are complete, processing will run automatically.\n")
 
         download_status = {}
 
-        # Download 1: Apple Health (CRITICAL)
+        # Download Apple Health
         print("\n🍎 Download 1/4: Apple Health...")
-        print("-" * 40)
         download_confirmed = download_apple_data()
         if download_confirmed:
             move_success = move_apple_files()
             download_status['apple'] = move_success
-            if move_success:
-                print("✅ Apple Health files ready")
-            else:
-                print("⚠️  Apple Health file move failed")
         else:
             download_status['apple'] = False
-            print("⏭️  Skipping Apple Health download")
 
-        # Download 2: Nutrilio (OPTIONAL)
+        # Download Nutrilio
         print("\n🥗 Download 2/4: Nutrilio...")
-        print("-" * 40)
         download_confirmed = download_nutrilio_data()
         if download_confirmed:
             move_success = move_nutrilio_files()
             download_status['nutrilio'] = move_success
-            if move_success:
-                print("✅ Nutrilio files ready")
-            else:
-                print("⚠️  Nutrilio file move failed")
         else:
             download_status['nutrilio'] = False
-            print("⏭️  Skipping Nutrilio download")
 
-        # Download 3: Google Maps (for Location - OPTIONAL)
-        print("\n📍 Download 3/4: Google Maps (for Location)...")
-        print("-" * 40)
+        # Download Google Maps
+        print("\n📍 Download 3/4: Google Maps...")
         download_confirmed = download_google_data()
         if download_confirmed:
             move_success = move_google_files()
             download_status['google_maps'] = move_success
-            if move_success:
-                print("✅ Google Maps files ready")
-            else:
-                print("⚠️  Google Maps file move failed")
         else:
             download_status['google_maps'] = False
-            print("⏭️  Skipping Google Maps download")
 
-        # Download 4: Offscreen/Screen Time (OPTIONAL)
-        print("\n📱 Download 4/4: Screen Time (Offscreen)...")
-        print("-" * 40)
+        # Download Screen Time
+        print("\n📱 Download 4/4: Screen Time...")
         download_confirmed = download_offscreen_data()
         if download_confirmed:
             move_success = move_offscreen_files()
             download_status['offscreen'] = move_success
-            if move_success:
-                print("✅ Screen Time files ready")
-            else:
-                print("⚠️  Screen Time file move failed")
         else:
             download_status['offscreen'] = False
-            print("⏭️  Skipping Screen Time download")
 
-        # Summary of downloads
+        # PROCESSING PHASE
         print("\n" + "="*60)
-        print("📋 DOWNLOAD SUMMARY")
-        print("="*60)
-        for source, status in download_status.items():
-            status_icon = "✅" if status else "⏭️"
-            print(f"   {status_icon} {source.replace('_', ' ').title()}: {'Ready' if status else 'Skipped'}")
-
-        # Check if Apple Health was downloaded (critical)
-        if not download_status.get('apple', False):
-            print("\n⚠️  Warning: Apple Health is the critical data source.")
-            print("   The pipeline may fail without Apple Health data.")
-
-        # ============================================================
-        # PHASE 2: PROCESSING - Automated, no user interaction
-        # ============================================================
-        print("\n" + "="*60)
-        print("⚙️  AUTOMATED PROCESSING PHASE - No more user input needed")
+        print("⚙️  AUTOMATED PROCESSING PHASE")
         print("="*60)
 
-        # Step 1: Process Apple Health (CRITICAL)
-        print("\n🍎 Step 1/5: Processing Apple Health data...")
+        # Process Apple Health
+        print("\n🍎 Step 1/5: Processing Apple Health...")
         try:
             apple_success = full_apple_pipeline(auto_process_only=True)
             if not apple_success:
-                print("❌ Apple Health pipeline failed, stopping health coordination pipeline")
+                print("❌ Apple Health pipeline failed")
                 return False
         except Exception as e:
             print(f"❌ Error in Apple Health pipeline: {e}")
             return False
 
-        # Step 2: Process Nutrilio (OPTIONAL)
-        print("\n🥗 Step 2/5: Processing Nutrilio mental health data...")
+        # Process Nutrilio
+        print("\n🥗 Step 2/5: Processing Nutrilio...")
         try:
-            nutrilio_success = full_nutrilio_pipeline(auto_process_only=True)
-            if not nutrilio_success:
-                print("⚠️  Nutrilio pipeline failed, but continuing (optional data source)")
+            full_nutrilio_pipeline(auto_process_only=True)
         except Exception as e:
-            print(f"⚠️  Error in Nutrilio pipeline: {e}, but continuing (optional data source)")
+            print(f"⚠️  Nutrilio pipeline error: {e}")
 
-        # Step 3: Process Location (OPTIONAL)
-        print("\n📍 Step 3/5: Processing Location data...")
+        # Process Location
+        print("\n📍 Step 3/5: Processing Location...")
         try:
-            location_success = full_location_pipeline(auto_process_only=True)
-            if not location_success:
-                print("⚠️  Location pipeline failed, but continuing (optional data source)")
+            full_location_pipeline(auto_process_only=True)
         except Exception as e:
-            print(f"⚠️  Error in Location pipeline: {e}, but continuing (optional data source)")
+            print(f"⚠️  Location pipeline error: {e}")
 
-        # Step 4: Process Screen Time (OPTIONAL)
-        print("\n📱 Step 4/5: Processing Screen Time data...")
+        # Process Screen Time
+        print("\n📱 Step 4/5: Processing Screen Time...")
         try:
-            screen_success = full_offscreen_pipeline(auto_process_only=True)
-            if not screen_success:
-                print("⚠️  Screen Time pipeline failed, but continuing (optional data source)")
+            full_offscreen_pipeline(auto_process_only=True)
         except Exception as e:
-            print(f"⚠️  Error in Screen Time pipeline: {e}, but continuing (optional data source)")
+            print(f"⚠️  Screen Time pipeline error: {e}")
 
-        # Step 5: Merge all health data
-        print("\n🔗 Step 5/5: Merging all health data sources...")
+        # Create health files
+        print("\n🔗 Step 5/5: Creating health files...")
         process_success = create_health_files()
         if not process_success:
-            print("❌ Health coordination merge failed, stopping pipeline")
             return False
 
-        # Upload results
-        print("\n☁️  Uploading results to Google Drive...")
+        # Upload
         success = upload_health_results()
 
     elif choice == "2":
         print("\n⚙️  Option 2: Process existing data and upload...")
-        print("   (Merges already-processed source files)")
-
-        # Merge all health data from existing processed files
         process_success = create_health_files()
 
         if process_success:
             success = upload_health_results()
         else:
-            print("❌ Processing failed, skipping upload")
             success = False
 
     elif choice == "3":
@@ -1190,7 +1292,6 @@ def full_health_pipeline(auto_full=False, auto_process_only=False):
     print("\n" + "="*70)
     if success:
         print("✅ Health coordination pipeline completed successfully!")
-        # Record successful run
         record_successful_run('topic_health', 'active')
     else:
         print("❌ Health coordination pipeline failed")
@@ -1204,16 +1305,13 @@ def full_health_pipeline(auto_full=False, auto_process_only=False):
 # ============================================================================
 
 if __name__ == "__main__":
-    # Allow running this file directly
     print("🏥 Health Data Coordination Tool")
-    print("This tool merges health data from multiple sources.")
+    print("This tool creates clean daily and hourly health files.")
 
-    # Test drive connection first
     if not verify_drive_connection():
         print("⚠️  Warning: Google Drive connection issues detected")
         proceed = input("Continue anyway? (Y/N): ").upper() == 'Y'
         if not proceed:
             exit()
 
-    # Run the pipeline
     full_health_pipeline(auto_full=False)

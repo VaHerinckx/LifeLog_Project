@@ -72,50 +72,22 @@ def expand_df(df, processed_file_path):
     return new_df
 
 
-def screentime_before_sleep(df):
-    """Computes the screentime in the hour before sleep"""
-    sleep_file = 'files/topic_processed_files/health/garmin_sleep_processed.csv'
+# NOTE: screentime_before_sleep calculation has been moved to health_processing.py
+# It now uses Apple Health sleep_analysis data instead of Garmin sleep data.
+# This ensures accurate calculation using the authoritative sleep source.
+# The function below is kept for reference but is no longer called.
 
-    # Check if sleep file exists
-    if not os.path.exists(sleep_file):
-        print(f"⚠️  Warning: Sleep data file not found: {sleep_file}")
-        print("   Adding empty sleep-related columns")
-        df['is_within_hour_before_sleep'] = 0
-        df['sleep_start_timestamp_local'] = None
-        return df
+def _legacy_screentime_before_sleep(df):
+    """
+    DEPRECATED: This function is no longer used.
+    Screen time before sleep is now calculated in health_processing.py
+    using Apple Health sleep_analysis data for accuracy.
 
-    print(f"📁 Loading sleep data from {sleep_file}")
-    df2 = pd.read_csv(sleep_file, sep='|', encoding='utf-8')
-
-    # Ensure date column is datetime
-    df['date'] = pd.to_datetime(df['date'], utc=True).dt.tz_localize(None)
-
-    # Calculate sleep date (date before sleep, accounting for early morning hours)
-    df['sleep_date'] = df['date'].apply(lambda x: x - pd.Timedelta(days=1) if x.hour < 6 else x).dt.date
-    df['sleep_date'] = pd.to_datetime(df['sleep_date'], utc=True).dt.tz_localize(None)
-
-    # Process sleep data
-    df2['sleep_date'] = pd.to_datetime(df2['calendar_date'], utc=True).dt.tz_localize(None) - pd.Timedelta(days=1)
-
-    # Merge with sleep data
-    merged_df = pd.merge(
-        df,
-        df2[['sleep_date', "sleep_start_timestamp_local"]],
-        on='sleep_date',
-        how='left'
-    )
-
-    # Calculate time difference and flag within hour before sleep
-    merged_df['time_diff'] = (
-        pd.to_datetime(merged_df['sleep_start_timestamp_local']).dt.tz_localize(None) -
-        merged_df['date']
-    )
-    merged_df['is_within_hour_before_sleep'] = merged_df['time_diff'].apply(
-        lambda x: 1 if pd.notna(x) and x <= pd.Timedelta(hours=1) and x >= pd.Timedelta(0) else 0
-    )
-
-    # Drop temporary columns
-    return merged_df.drop(["sleep_date", "time_diff"], axis=1)
+    The calculation is done AFTER Apple Health data is merged,
+    which provides the actual first sleep timestamp.
+    """
+    print("⚠️  This function is deprecated - sleep calculation moved to health_processing.py")
+    return df
 
 
 def download_offscreen_data():
@@ -212,9 +184,9 @@ def create_offscreen_file():
         print("🔄 Expanding data to minute-level granularity...")
         df = expand_df(df, output_file)
 
-        # Add sleep-related features
-        print("😴 Computing screentime before sleep...")
-        df = screentime_before_sleep(df)
+        # NOTE: Sleep-related features (screen_before_sleep) are now calculated
+        # in health_processing.py using Apple Health sleep data for accuracy.
+        # This ensures we use the authoritative sleep source.
 
         # Sort by date (descending)
         df = df.sort_values("date", ascending=False)
