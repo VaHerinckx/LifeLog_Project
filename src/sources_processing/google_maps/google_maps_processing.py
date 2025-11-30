@@ -76,6 +76,184 @@ def clean_geocoding_cache():
 
 
 # ============================================================================
+# PLACE NAME MAPPING FUNCTIONS
+# ============================================================================
+
+PLACE_NAME_MAPPINGS_PATH = 'files/work_files/google_maps_work_files/place_name_mappings.json'
+
+
+def load_place_name_mappings(coordinate_mapping: Dict = None) -> Dict:
+    """
+    Load custom place name mappings from work file.
+    If coordinate_mapping is provided, migrates old coordinates to canonical coordinates.
+
+    Args:
+        coordinate_mapping: Optional dict mapping original coords to canonical coords
+
+    Returns:
+        dict: Mapping of coordinates to custom place name info
+    """
+    if not os.path.exists(PLACE_NAME_MAPPINGS_PATH):
+        return {}
+
+    try:
+        with open(PLACE_NAME_MAPPINGS_PATH, 'r', encoding='utf-8') as f:
+            mappings = json.load(f)
+    except Exception as e:
+        print(f"⚠️  Error loading place name mappings: {e}")
+        return {}
+
+    # Migrate old coordinates to canonical coordinates if mapping provided
+    if coordinate_mapping:
+        migrated_mappings = {}
+        migrations_needed = False
+
+        for old_coord, mapping_info in mappings.items():
+            canonical_coord = coordinate_mapping.get(old_coord, old_coord)
+
+            if canonical_coord != old_coord:
+                migrations_needed = True
+
+            # Check if we already have an entry for this canonical coordinate
+            if canonical_coord in migrated_mappings:
+                # Conflict: keep the most recently updated one
+                existing_updated = migrated_mappings[canonical_coord].get('last_updated', '')
+                new_updated = mapping_info.get('last_updated', '')
+                if new_updated > existing_updated:
+                    migrated_mappings[canonical_coord] = mapping_info
+            else:
+                migrated_mappings[canonical_coord] = mapping_info
+
+        if migrations_needed:
+            # Save migrated mappings
+            print(f"🔄 Migrating {len(mappings)} place name mappings to canonical coordinates...")
+            save_place_name_mappings(migrated_mappings)
+            return migrated_mappings
+
+    return mappings
+
+
+def save_place_name_mappings(mappings: Dict):
+    """
+    Save custom place name mappings to work file.
+
+    Args:
+        mappings: Dict of coordinates to custom place name info
+    """
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(PLACE_NAME_MAPPINGS_PATH), exist_ok=True)
+
+    try:
+        with open(PLACE_NAME_MAPPINGS_PATH, 'w', encoding='utf-8') as f:
+            json.dump(mappings, f, indent=2, ensure_ascii=False)
+        print(f"💾 Saved {len(mappings)} place name mappings")
+    except Exception as e:
+        print(f"❌ Error saving place name mappings: {e}")
+
+
+def apply_place_name_mappings(geocoding_cache: Dict, mappings: Dict) -> Dict:
+    """
+    Apply custom place names to geocoding cache entries.
+    Returns updated geocoding cache with custom place names applied.
+
+    Args:
+        geocoding_cache: Dict of coordinates to location info
+        mappings: Dict of coordinates to custom place name info
+
+    Returns:
+        Updated geocoding cache with custom place_names
+    """
+    updated_count = 0
+    for coordinates, mapping_info in mappings.items():
+        if coordinates in geocoding_cache:
+            custom_name = mapping_info.get('custom_place_name')
+            if custom_name:
+                geocoding_cache[coordinates]['place_name'] = custom_name
+                updated_count += 1
+
+    if updated_count > 0:
+        print(f"📍 Applied {updated_count} custom place names")
+
+    return geocoding_cache
+
+
+def consolidate_geocoding_cache(geocoding_cache: Dict) -> tuple:
+    """
+    Consolidate coordinates that share the same address into a single canonical coordinate.
+    This handles GPS drift where the same physical location has slightly different coordinates.
+
+    Args:
+        geocoding_cache: Dict of coordinates to location info
+
+    Returns:
+        tuple: (updated_geocoding_cache, coordinate_mapping)
+            - updated_geocoding_cache: Cache with canonical coordinates added
+            - coordinate_mapping: Dict mapping original coordinates to canonical coordinates
+    """
+    from collections import defaultdict
+
+    # Group coordinates by address
+    address_to_coords = defaultdict(list)
+    for coordinates, info in geocoding_cache.items():
+        address = info.get('address', '')
+        if address:  # Only consolidate if there's an actual address
+            address_to_coords[address].append(coordinates)
+
+    # Find addresses with multiple coordinates
+    coordinate_mapping = {}
+    consolidated_count = 0
+
+    for address, coords_list in address_to_coords.items():
+        if len(coords_list) > 1:
+            # Calculate average coordinates
+            lats = []
+            lons = []
+            for coord in coords_list:
+                lat, lon = parse_coordinates(coord)
+                if lat != 0.0 or lon != 0.0:
+                    lats.append(lat)
+                    lons.append(lon)
+
+            if lats and lons:
+                avg_lat = sum(lats) / len(lats)
+                avg_lon = sum(lons) / len(lons)
+                canonical_coord = f"geo:{avg_lat:.6f},{avg_lon:.6f}"
+
+                # Get info from first coordinate (they should all have same address/city)
+                first_info = geocoding_cache[coords_list[0]]
+
+                # Check if any of the original coordinates has a custom place name
+                # (from place_name_mappings applied earlier)
+                best_place_name = first_info.get('place_name')
+                for coord in coords_list:
+                    coord_info = geocoding_cache[coord]
+                    place_name = coord_info.get('place_name')
+                    # Prefer non-numeric place names (custom names are usually not just numbers)
+                    if place_name and not str(place_name).isdigit():
+                        best_place_name = place_name
+                        break
+
+                # Add canonical coordinate to cache
+                geocoding_cache[canonical_coord] = {
+                    'city': first_info.get('city', ''),
+                    'country': first_info.get('country', ''),
+                    'place_name': best_place_name,
+                    'address': address
+                }
+
+                # Map all original coordinates to canonical
+                for coord in coords_list:
+                    coordinate_mapping[coord] = canonical_coord
+
+                consolidated_count += 1
+
+    if consolidated_count > 0:
+        print(f"🔗 Consolidated {consolidated_count} addresses with multiple coordinates")
+
+    return geocoding_cache, coordinate_mapping
+
+
+# ============================================================================
 # DOWNLOAD FUNCTIONS
 # ============================================================================
 
@@ -457,6 +635,15 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
     else:
         print(f"✅ All {len(unique_coordinates)} locations already cached!")
 
+    # Consolidate coordinates that share the same address (GPS drift fix)
+    # This must happen BEFORE applying place name mappings so mappings use canonical coordinates
+    geocoding_cache, coordinate_mapping = consolidate_geocoding_cache(geocoding_cache)
+
+    # Apply custom place name mappings (uses canonical coordinates)
+    place_name_mappings = load_place_name_mappings(coordinate_mapping)
+    if place_name_mappings:
+        geocoding_cache = apply_place_name_mappings(geocoding_cache, place_name_mappings)
+
     # Step 3: Generate minute-by-minute records (visits + activities)
     print("📝 Generating minute-by-minute records from visits and activities...")
 
@@ -486,8 +673,17 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
         current_minute = record['start_time'].replace(second=0, microsecond=0)
         end_minute = record['end_time'].replace(second=0, microsecond=0)
 
-        lat, lon = parse_coordinates(record['coordinates'])
-        location_info = geocoding_cache[record['coordinates']]
+        # Use canonical coordinate if available (consolidation)
+        original_coord = record['coordinates']
+        canonical_coord = coordinate_mapping.get(original_coord, original_coord)
+        lat, lon = parse_coordinates(canonical_coord)
+        location_info = geocoding_cache[canonical_coord]
+
+        # Get place_name, replacing numeric-only names with address
+        place_name = location_info.get('place_name')
+        address = location_info.get('address', '')
+        if place_name and str(place_name).isdigit():
+            place_name = address if address else None
 
         while current_minute <= end_minute:
             if current_minute not in minute_records:  # Don't duplicate overlapping visits
@@ -495,12 +691,12 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
                     'timestamp': current_minute.isoformat(),
                     'latitude': lat,
                     'longitude': lon,
-                    'coordinates': record['coordinates'],
+                    'coordinates': canonical_coord,
                     'timezone': record['timezone'],
                     'city': location_info['city'],
                     'country': location_info['country'],
-                    'place_name': location_info.get('place_name'),
-                    'address': location_info.get('address', ''),
+                    'place_name': place_name,
+                    'address': address,
                     'is_home': record['is_home'],
                     'record_type': record['record_type'],
                     'activity_type': record['activity_type'],
@@ -516,8 +712,18 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
         current_minute = record['start_time'].replace(second=0, microsecond=0)
         end_minute = record['end_time'].replace(second=0, microsecond=0)
 
-        lat, lon = parse_coordinates(record['coordinates'])
-        location_info = geocoding_cache[record['coordinates']]
+        # Use canonical coordinate if available (consolidation)
+        original_coord = record['coordinates']
+        canonical_coord = coordinate_mapping.get(original_coord, original_coord)
+        lat, lon = parse_coordinates(canonical_coord)
+        location_info = geocoding_cache[canonical_coord]
+
+        # Calculate distance per minute (distribute total distance across all minutes)
+        total_minutes = int((record['end_time'] - record['start_time']).total_seconds() / 60) + 1
+        if record['distance_meters'] and total_minutes > 0:
+            distance_per_minute = round(record['distance_meters'] / total_minutes, 2)
+        else:
+            distance_per_minute = None
 
         while current_minute <= end_minute:
             if current_minute not in minute_records:  # Don't overwrite visits
@@ -525,7 +731,7 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
                     'timestamp': current_minute.isoformat(),
                     'latitude': lat,
                     'longitude': lon,
-                    'coordinates': record['coordinates'],
+                    'coordinates': canonical_coord,
                     'timezone': record['timezone'],
                     'city': location_info['city'],
                     'country': location_info['country'],
@@ -536,7 +742,7 @@ def create_minute_location_records(location_data: List[Dict]) -> List[Dict]:
                     'activity_type': record['activity_type'],
                     'data_quality': record['data_quality'],
                     'confidence': record['confidence'],
-                    'distance_meters': record['distance_meters'],
+                    'distance_meters': distance_per_minute,
                     'is_moving': True
                 }
             current_minute += timedelta(minutes=1)
@@ -717,6 +923,303 @@ def create_google_maps_file():
 
 
 # ============================================================================
+# PLACE NAME MANAGEMENT FUNCTIONS
+# ============================================================================
+
+def identify_frequent_places():
+    """
+    Identify addresses actually visited 3+ times and prompt user to name them.
+    Only includes stationary visits (not transit/activity records).
+    Shows dates visited to help user remember the place.
+    Excludes places without a proper address (just city name).
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n" + "="*70)
+    print("📍 IDENTIFY AND NAME FREQUENT PLACES")
+    print("="*70)
+
+    # Load existing minute-level data to count visits
+    minute_file = 'files/source_processed_files/google_maps/google_maps_minute_processed.csv'
+    if not os.path.exists(minute_file):
+        print(f"❌ Minute-level file not found: {minute_file}")
+        print("   Run option 2 first to process existing data.")
+        return False
+
+    try:
+        df = pd.read_csv(minute_file, sep='|', encoding='utf-8')
+        print(f"✅ Loaded {len(df):,} minute records")
+    except Exception as e:
+        print(f"❌ Error loading minute file: {e}")
+        return False
+
+    # Filter for actual visits only (not transit/activity records)
+    # record_type == 'visit' means stationary visits to places
+    visits_only = df[df['record_type'] == 'visit'].copy()
+    print(f"📍 Filtered to {len(visits_only):,} visit records (excluding transit)")
+
+    if len(visits_only) == 0:
+        print("❌ No visit records found")
+        return False
+
+    # Filter out records without a proper address
+    visits_only = visits_only[visits_only['address'].notna() & (visits_only['address'] != '')]
+    print(f"📍 {len(visits_only):,} records have actual addresses")
+
+    if len(visits_only) == 0:
+        print("❌ No visit records with addresses found")
+        return False
+
+    # Parse timestamp to extract date
+    visits_only['date'] = pd.to_datetime(visits_only['timestamp']).dt.date
+
+    # Count unique visit dates per coordinates (actual visits, not minutes)
+    visit_stats = visits_only.groupby('coordinates').agg({
+        'place_name': 'first',
+        'address': 'first',
+        'city': 'first',
+        'date': lambda x: sorted(list(x.unique())),  # Sorted list of unique dates visited
+        'timestamp': 'count'  # Total minutes at location
+    }).rename(columns={'timestamp': 'minute_count', 'date': 'dates_visited'})
+
+    # Add visit count (number of unique dates)
+    visit_stats['visit_count'] = visit_stats['dates_visited'].apply(len)
+
+    # Filter for places visited on at least 3 different dates
+    frequent_places = visit_stats[visit_stats['visit_count'] >= 3].copy()
+    frequent_places = frequent_places.sort_values('visit_count', ascending=False)
+
+    print(f"📊 Found {len(frequent_places)} places visited on 3+ different dates")
+
+    # Load existing mappings
+    existing_mappings = load_place_name_mappings()
+    print(f"📂 {len(existing_mappings)} existing custom place names")
+
+    # Filter out already-named places
+    unnamed_places = []
+    for coordinates in frequent_places.index:
+        if coordinates not in existing_mappings:
+            place_info = frequent_places.loc[coordinates]
+            unnamed_places.append({
+                'coordinates': coordinates,
+                'place_name': place_info['place_name'],
+                'address': place_info['address'],
+                'city': place_info['city'],
+                'visit_count': place_info['visit_count'],
+                'minute_count': place_info['minute_count'],
+                'dates_visited': place_info['dates_visited']
+            })
+
+    if not unnamed_places:
+        print("✅ All frequent places already have custom names!")
+        return True
+
+    print(f"\n📝 {len(unnamed_places)} frequent places need naming:")
+    print("-" * 70)
+
+    # Sort by visit_count descending (most visited first)
+    unnamed_places.sort(key=lambda x: x['visit_count'], reverse=True)
+
+    named_count = 0
+    for i, place in enumerate(unnamed_places, 1):
+        current_name = place['place_name'] if place['place_name'] else '(no name)'
+
+        # Format dates for display (show up to 5 most recent)
+        dates = place['dates_visited']
+        dates_str = ', '.join(str(d) for d in dates[-5:])  # Last 5 dates
+        if len(dates) > 5:
+            dates_str = f"... {dates_str} (and {len(dates) - 5} earlier)"
+
+        print(f"\n[{i}/{len(unnamed_places)}] Visited on {place['visit_count']} different dates ({place['minute_count']:,} total minutes)")
+        print(f"   Current name: {current_name}")
+        print(f"   Address: {place['address']}")
+        print(f"   City: {place['city']}")
+        print(f"   Dates: {dates_str}")
+
+        new_name = input("   Enter a name (or press Enter to skip, 'quit' to stop): ").strip()
+
+        if new_name.lower() == 'quit':
+            print("\n⏹️  Stopping naming process...")
+            break
+
+        if new_name:
+            existing_mappings[place['coordinates']] = {
+                'original_place_name': place['place_name'],
+                'custom_place_name': new_name,
+                'address': place['address'],
+                'city': place['city'],
+                'visit_count': int(place['visit_count']),
+                'last_updated': datetime.now().isoformat()
+            }
+            named_count += 1
+            print(f"   ✅ Named as: {new_name}")
+
+    if named_count > 0:
+        # Save updated mappings
+        save_place_name_mappings(existing_mappings)
+        print(f"\n✅ Named {named_count} places")
+
+        # Re-run processing to apply new names
+        print("\n🔄 Re-processing data to apply new place names...")
+        success = create_google_maps_file()
+        return success
+    else:
+        print("\n❌ No places were named")
+        return True
+
+
+def update_place_name():
+    """
+    Manually update place name for a specific address.
+    Similar to update_cover_url in reading_processing.py.
+    Uses canonical coordinates (after consolidation) to avoid duplicates.
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    print("\n" + "="*70)
+    print("📝 MANUALLY UPDATE PLACE NAME")
+    print("="*70)
+
+    # Load geocoding cache for searching
+    geocoding_cache = load_geocoding_cache()
+    if not geocoding_cache:
+        print("❌ Geocoding cache is empty. Run processing first.")
+        return False
+
+    print(f"✅ Loaded {len(geocoding_cache)} cached locations")
+
+    # Consolidate to get canonical coordinates
+    geocoding_cache, coordinate_mapping = consolidate_geocoding_cache(geocoding_cache)
+
+    # Load existing mappings (with migration if needed)
+    existing_mappings = load_place_name_mappings(coordinate_mapping)
+
+    # Build set of canonical coordinates (either from mapping or unchanged)
+    canonical_coords = set()
+    for coord in geocoding_cache.keys():
+        # Use the canonical coordinate if this coord maps to one, otherwise use as-is
+        canonical = coordinate_mapping.get(coord, coord)
+        canonical_coords.add(canonical)
+
+    # Convert cache to searchable list (only canonical coordinates)
+    locations_list = []
+    for coordinates in canonical_coords:
+        if coordinates not in geocoding_cache:
+            continue
+        info = geocoding_cache[coordinates]
+        # Check if there's already a custom name
+        custom_name = None
+        if coordinates in existing_mappings:
+            custom_name = existing_mappings[coordinates].get('custom_place_name')
+
+        locations_list.append({
+            'coordinates': coordinates,
+            'place_name': info.get('place_name', ''),
+            'custom_place_name': custom_name,
+            'address': info.get('address', ''),
+            'city': info.get('city', '')
+        })
+
+    updated_places = []
+
+    # Loop to allow multiple updates
+    while True:
+        search_term = input("\nEnter part of address to search (or 'quit' to finish): ").strip()
+        if not search_term or search_term.lower() == 'quit':
+            break
+
+        # Find matching locations (case-insensitive search in address)
+        matches = [loc for loc in locations_list
+                   if search_term.lower() in str(loc['address']).lower()
+                   or search_term.lower() in str(loc['place_name']).lower()
+                   or search_term.lower() in str(loc['city']).lower()]
+
+        if not matches:
+            print(f"❌ No locations found containing '{search_term}'")
+            continue
+
+        print(f"\n📍 Found {len(matches)} locations:")
+        print("-" * 70)
+
+        # Display matches with numbers
+        for i, loc in enumerate(matches[:20], 1):  # Limit to 20 results
+            current_name = loc['custom_place_name'] or loc['place_name'] or '(no name)'
+            display_name = current_name[:40] + "..." if len(str(current_name)) > 40 else current_name
+            address = loc['address'][:50] + "..." if len(str(loc['address'])) > 50 else loc['address']
+            custom_indicator = " [custom]" if loc['custom_place_name'] else ""
+            print(f"{i:2}. {display_name}{custom_indicator}")
+            print(f"    Address: {address}")
+            print()
+
+        if len(matches) > 20:
+            print(f"   ... and {len(matches) - 20} more. Refine your search to see others.")
+
+        # Get user selection
+        try:
+            choice = int(input(f"Select location (1-{min(len(matches), 20)}): "))
+            if choice < 1 or choice > min(len(matches), 20):
+                print(f"❌ Invalid choice. Please select 1-{min(len(matches), 20)}")
+                continue
+        except ValueError:
+            print("❌ Invalid input. Please enter a number.")
+            continue
+
+        # Get selected location
+        selected = matches[choice - 1]
+        current_display = selected['custom_place_name'] or selected['place_name'] or 'None'
+
+        print(f"\n✅ Selected: {selected['address']}")
+        print(f"   Current name: {current_display}")
+        print(f"   Coordinates: {selected['coordinates']}")
+
+        # Get new name
+        new_name = input("\nEnter new place name: ").strip()
+        if not new_name:
+            print("❌ No name provided, skipping")
+            continue
+
+        # Update mapping
+        existing_mappings[selected['coordinates']] = {
+            'original_place_name': selected['place_name'],
+            'custom_place_name': new_name,
+            'address': selected['address'],
+            'city': selected['city'],
+            'last_updated': datetime.now().isoformat()
+        }
+
+        # Also update the local list so subsequent searches show new name
+        selected['custom_place_name'] = new_name
+
+        print(f"✅ Updated place name to: {new_name}")
+        updated_places.append(new_name)
+
+        # Ask if user wants to continue
+        continue_choice = input("\nUpdate another place? (y/n): ").strip().lower()
+        if continue_choice not in ['y', 'yes']:
+            break
+
+    if not updated_places:
+        print("❌ No places were updated")
+        return False
+
+    # Save updated mappings
+    save_place_name_mappings(existing_mappings)
+
+    # Re-run processing to apply new names
+    print(f"\n🔄 Re-processing data to apply {len(updated_places)} updated place names...")
+    success = create_google_maps_file()
+
+    if success:
+        print(f"\n✅ Successfully updated {len(updated_places)} place names:")
+        for name in updated_places:
+            print(f"   • {name}")
+
+    return success
+
+
+# ============================================================================
 # PIPELINE FUNCTIONS
 # ============================================================================
 
@@ -727,6 +1230,8 @@ def full_google_maps_pipeline(auto_full=False):
     Options:
     1. Download new data and process
     2. Process existing data
+    3. Identify and name frequent places
+    4. Manually update a place name
 
     Args:
         auto_full (bool): If True, automatically runs option 1 without user input
@@ -745,8 +1250,10 @@ def full_google_maps_pipeline(auto_full=False):
         print("\nSelect an option:")
         print("1. Download new data and process")
         print("2. Process existing data")
+        print("3. Identify and name frequent places")
+        print("4. Manually update a place name")
 
-        choice = input("\nEnter your choice (1-2): ").strip()
+        choice = input("\nEnter your choice (1-4): ").strip()
 
     success = False
 
@@ -770,8 +1277,16 @@ def full_google_maps_pipeline(auto_full=False):
         print("\n⚙️  Option 2: Process existing data...")
         success = create_google_maps_file()
 
+    elif choice == "3":
+        print("\n📍 Option 3: Identify and name frequent places...")
+        success = identify_frequent_places()
+
+    elif choice == "4":
+        print("\n📝 Option 4: Manually update a place name...")
+        success = update_place_name()
+
     else:
-        print("❌ Invalid choice. Please select 1-2.")
+        print("❌ Invalid choice. Please select 1-4.")
         return False
 
     # Final status

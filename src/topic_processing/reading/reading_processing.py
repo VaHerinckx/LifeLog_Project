@@ -11,6 +11,7 @@ from src.sources_processing.goodreads.goodreads_processing import full_goodreads
 from src.sources_processing.kindle.kindle_processing import full_kindle_pipeline, download_kindle_data, move_kindle_files
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
+from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
 
 
 def check_prerequisite_files():
@@ -1037,6 +1038,8 @@ def full_books_pipeline(auto_full=False, auto_process_only=False):
         print("📊 Your unified books dataset is ready for analysis!")
         # Record successful run with new tracking name
         record_successful_run('topic_reading', 'active')
+        # Update website tracking file
+        full_website_maintenance_pipeline(auto_mode=True, quiet=True)
     else:
         print("❌ Reading topic coordinator failed")
     print("="*60)

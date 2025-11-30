@@ -10,17 +10,21 @@ from src.utils.drive_operations import upload_multiple_files, verify_drive_conne
 from src.utils.utils_functions import record_successful_run
 
 
-def create_website_maintenance_file():
+def create_website_maintenance_file(quiet=False):
     """
     Creates website maintenance file with both refresh dates and latest data dates.
     Combines data from last_successful_runs.csv and website files.
 
     Output: files/website_files/web_maintenance/maintenance_web_data.csv (pipe-delimited)
 
+    Args:
+        quiet (bool): If True, reduces log verbosity
+
     Returns:
         bool: True if successful, False otherwise
     """
-    print("\n📊 Creating website maintenance file...")
+    if not quiet:
+        print("\n📊 Creating website maintenance file...")
 
     # Topic file mappings: topic_name -> (file_path, date_column)
     topic_files = {
@@ -42,7 +46,8 @@ def create_website_maintenance_file():
             return False
 
         df_tracking = pd.read_csv(tracking_file)
-        print(f"✅ Loaded tracking data: {len(df_tracking)} records")
+        if not quiet:
+            print(f"✅ Loaded tracking data: {len(df_tracking)} records")
 
         # Add latest_data_date column
         latest_dates = []
@@ -67,15 +72,20 @@ def create_website_maintenance_file():
 
                             if pd.notna(max_date):
                                 latest_date = max_date.strftime('%Y-%m-%d %H:%M:%S')
-                                print(f"   ✓ {source_name}: Latest data = {latest_date}")
+                                if not quiet:
+                                    print(f"   ✓ {source_name}: Latest data = {latest_date}")
                             else:
-                                print(f"   ⚠️  {source_name}: No valid dates found")
+                                if not quiet:
+                                    print(f"   ⚠️  {source_name}: No valid dates found")
                         else:
-                            print(f"   ⚠️  {source_name}: Column '{date_column}' not found")
+                            if not quiet:
+                                print(f"   ⚠️  {source_name}: Column '{date_column}' not found")
                     except Exception as e:
-                        print(f"   ⚠️  {source_name}: Error reading file - {e}")
+                        if not quiet:
+                            print(f"   ⚠️  {source_name}: Error reading file - {e}")
                 else:
-                    print(f"   ⚠️  {source_name}: File not found - {file_path}")
+                    if not quiet:
+                        print(f"   ⚠️  {source_name}: File not found - {file_path}")
 
             latest_dates.append(latest_date if latest_date else '')
 
@@ -93,9 +103,10 @@ def create_website_maintenance_file():
         output_file = os.path.join(output_dir, 'maintenance_web_data.csv')
         df_tracking.to_csv(output_file, sep='|', index=False, encoding='utf-8')
 
-        print(f"\n✅ Website maintenance file created: {output_file}")
-        print(f"   Total records: {len(df_tracking)}")
-        print(f"   Records with latest data: {len([d for d in latest_dates if d])}")
+        if not quiet:
+            print(f"\n✅ Website maintenance file created: {output_file}")
+            print(f"   Total records: {len(df_tracking)}")
+            print(f"   Records with latest data: {len([d for d in latest_dates if d])}")
 
         return True
 
@@ -104,7 +115,7 @@ def create_website_maintenance_file():
         return False
 
 
-def full_website_maintenance_pipeline(auto_mode=False):
+def full_website_maintenance_pipeline(auto_mode=False, quiet=False):
     """
     Website Maintenance pipeline - Creates and uploads maintenance file.
 
@@ -113,50 +124,64 @@ def full_website_maintenance_pipeline(auto_mode=False):
 
     Args:
         auto_mode (bool): If True, runs without user input
+        quiet (bool): If True, reduces log verbosity (for post-pipeline calls)
 
     Returns:
         bool: True if pipeline completed successfully, False otherwise
     """
-    print("\n" + "="*60)
-    print("🌐 WEBSITE MAINTENANCE PIPELINE")
-    print("="*60)
+    if not quiet:
+        print("\n" + "="*60)
+        print("🌐 WEBSITE MAINTENANCE PIPELINE")
+        print("="*60)
 
     # Verify Drive connection first
-    print("\n🔍 Verifying Google Drive connection...")
+    if not quiet:
+        print("\n🔍 Verifying Google Drive connection...")
     if not verify_drive_connection():
         print("❌ Cannot connect to Google Drive. Please check credentials.")
         return False
 
     # Create the maintenance file
-    if not create_website_maintenance_file():
-        print("\n" + "="*60)
-        print("❌ WEBSITE MAINTENANCE PIPELINE FAILED")
-        print("="*60)
+    if not create_website_maintenance_file(quiet=quiet):
+        if not quiet:
+            print("\n" + "="*60)
+            print("❌ WEBSITE MAINTENANCE PIPELINE FAILED")
+            print("="*60)
+        else:
+            print("❌ Website tracking update failed")
         return False
 
     # Upload to Drive
     maintenance_file = 'files/website_files/web_maintenance/maintenance_web_data.csv'
-    print(f"\n📤 Uploading {maintenance_file}...")
+    if not quiet:
+        print(f"\n📤 Uploading {maintenance_file}...")
 
     success = upload_multiple_files([maintenance_file])
 
     if success:
-        print("\n✅ Maintenance file uploaded successfully!")
-        print("\n📝 Next steps:")
-        print("   1. Copy the file ID from the upload output above")
-        print("   2. Add it to lifelog_website/.env:")
-        print("      VITE_TRACKING_FILE_ID=<file_id_from_output>")
+        if not quiet:
+            print("\n✅ Maintenance file uploaded successfully!")
+            print("\n📝 Next steps:")
+            print("   1. Copy the file ID from the upload output above")
+            print("   2. Add it to lifelog_website/.env:")
+            print("      VITE_TRACKING_FILE_ID=<file_id_from_output>")
 
         record_successful_run('website_maintenance', 'active')
 
-        print("\n" + "="*60)
-        print("✅ WEBSITE MAINTENANCE PIPELINE COMPLETED SUCCESSFULLY")
-        print("="*60)
+        if not quiet:
+            print("\n" + "="*60)
+            print("✅ WEBSITE MAINTENANCE PIPELINE COMPLETED SUCCESSFULLY")
+            print("="*60)
+        else:
+            print("📊 Website tracking updated")
     else:
-        print("❌ Failed to upload maintenance file")
-        print("\n" + "="*60)
-        print("❌ WEBSITE MAINTENANCE PIPELINE FAILED")
-        print("="*60)
+        if not quiet:
+            print("❌ Failed to upload maintenance file")
+            print("\n" + "="*60)
+            print("❌ WEBSITE MAINTENANCE PIPELINE FAILED")
+            print("="*60)
+        else:
+            print("❌ Website tracking update failed")
 
     return success
 

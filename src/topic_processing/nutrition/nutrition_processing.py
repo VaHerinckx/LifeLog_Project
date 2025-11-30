@@ -3,6 +3,7 @@ import os
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 from src.sources_processing.nutrilio.nutrilio_processing import full_nutrilio_pipeline
+from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
 
 
 # ============================================================================
@@ -441,6 +442,8 @@ def full_nutrition_pipeline(auto_full=False, auto_process_only=False):
         print("📊 Your nutrition dataset is ready for analysis!")
         # Record successful run
         record_successful_run('topic_nutrition', 'active')
+        # Update website tracking file
+        full_website_maintenance_pipeline(auto_mode=True, quiet=True)
     else:
         print("❌ Nutrition coordination pipeline failed")
     print("="*70)

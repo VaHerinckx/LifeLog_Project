@@ -24,6 +24,7 @@ from src.sources_processing.nutrilio.nutrilio_processing import full_nutrilio_pi
 from src.topic_processing.location.location_processing import full_location_pipeline
 from src.sources_processing.google_maps.google_maps_processing import download_google_data, move_google_files
 from src.sources_processing.offscreen.offscreen_processing import full_offscreen_pipeline, download_offscreen_data, move_offscreen_files
+from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
 
 
 # ============================================================================
@@ -188,10 +189,16 @@ def create_segments_from_google_maps(gmaps_df):
     # Sort by timestamp
     df = gmaps_df.sort_values('timestamp').copy()
 
+    # Fill NaN values with sentinel strings for proper comparison
+    # (NaN != NaN is True in pandas, which would create a new segment for each minute)
+    df['_record_type'] = df['record_type'].fillna('__NONE__')
+    df['_activity_type'] = df['activity_type'].fillna('__NONE__')
+    df['_place_name'] = df['place_name'].fillna('__NONE__')
+
     # Create segment boundaries when record_type, activity_type, place, or DATE changes
-    df['prev_record_type'] = df['record_type'].shift(1)
-    df['prev_activity_type'] = df['activity_type'].shift(1)
-    df['prev_place_name'] = df['place_name'].shift(1)
+    df['prev_record_type'] = df['_record_type'].shift(1)
+    df['prev_activity_type'] = df['_activity_type'].shift(1)
+    df['prev_place_name'] = df['_place_name'].shift(1)
 
     # CRITICAL: Also break segments at day boundaries to ensure each day has its own segments
     df['current_date'] = df['timestamp'].dt.date
@@ -199,9 +206,9 @@ def create_segments_from_google_maps(gmaps_df):
 
     # New segment when record_type changes, OR activity_type changes, OR place changes, OR date changes
     df['new_segment'] = (
-        (df['record_type'] != df['prev_record_type']) |
-        (df['activity_type'] != df['prev_activity_type']) |
-        ((df['record_type'] == 'visit') & (df['place_name'] != df['prev_place_name'])) |
+        (df['_record_type'] != df['prev_record_type']) |
+        (df['_activity_type'] != df['prev_activity_type']) |
+        ((df['_record_type'] == 'visit') & (df['_place_name'] != df['prev_place_name'])) |
         (df['current_date'] != df['prev_date'])  # Break at day boundaries
     )
 
@@ -254,6 +261,7 @@ def expand_segments_to_hourly(segments_df):
     One row per segment per hour it spans.
 
     Returns DataFrame with hour_segment_id for uniqueness within each hour.
+    hour_segment_id format: YYYYMMDD_HH_N where N is sequential within each hour.
     """
     if segments_df is None or len(segments_df) == 0:
         return None
@@ -271,8 +279,10 @@ def expand_segments_to_hourly(segments_df):
         start_hour = segment['start_time'].replace(minute=0, second=0, microsecond=0)
         end_hour = segment['end_time'].replace(minute=0, second=0, microsecond=0)
 
+        # Calculate total segment duration for proportional distance distribution
+        total_segment_minutes = (segment['end_time'] - segment['start_time']).total_seconds() / 60
+
         current_hour = start_hour
-        hour_seq = 1
 
         while current_hour <= end_hour:
             # Calculate duration within this hour
@@ -285,15 +295,25 @@ def expand_segments_to_hourly(segments_df):
             duration_minutes = (seg_end_in_hour - seg_start_in_hour).total_seconds() / 60
 
             if duration_minutes > 0:
+                # Calculate proportional distance for this hour slice
+                if segment['segment_type'] == 'moving' and segment['distance_meters'] and total_segment_minutes > 0:
+                    proportion = duration_minutes / total_segment_minutes
+                    proportional_distance = round(segment['distance_meters'] * proportion, 2)
+                else:
+                    proportional_distance = None
+
                 all_hourly_records.append({
                     'date': current_hour.date(),
                     'hour': current_hour.hour,
                     'weekday': current_hour.weekday(),
                     'time_period': get_time_period(current_hour.hour),
                     'segment_id': segment['segment_id'],
-                    'hour_segment_id': f"{current_hour.strftime('%Y%m%d_%H')}_{hour_seq}",
+                    'segment_start_time': segment['start_time'].strftime('%H:%M'),
+                    'segment_end_time': segment['end_time'].strftime('%H:%M'),
+                    '_hour_key': current_hour.strftime('%Y%m%d_%H'),  # Temp key for sequencing
                     'segment_type': segment['segment_type'],
                     'segment_duration_minutes': round(duration_minutes, 1),
+                    # Preserve ALL location fields from Google Maps
                     'place_name': segment['place_name'] if segment['segment_type'] == 'stationary' else None,
                     'address': segment['address'] if segment['segment_type'] == 'stationary' else None,
                     'city': segment['city'],
@@ -302,14 +322,22 @@ def expand_segments_to_hourly(segments_df):
                     'location_type': None,  # Will be enriched later
                     'coordinates': segment['coordinates'],
                     'activity_type': segment['activity_type'],
-                    'distance_meters': segment['distance_meters'] if segment['segment_type'] == 'moving' else None,
+                    'distance_meters': proportional_distance,
                     'data_source': 'google_maps'
                 })
-                hour_seq += 1
 
             current_hour += timedelta(hours=1)
 
     hourly_df = pd.DataFrame(all_hourly_records)
+
+    # Generate hour_segment_id with proper per-hour sequential numbering
+    # Group by hour_key and assign sequential numbers within each hour
+    if len(hourly_df) > 0:
+        hourly_df = hourly_df.sort_values(['date', 'hour', 'segment_id'])
+        hourly_df['_seq'] = hourly_df.groupby('_hour_key').cumcount() + 1
+        hourly_df['hour_segment_id'] = hourly_df['_hour_key'] + '_' + hourly_df['_seq'].astype(str)
+        hourly_df = hourly_df.drop(columns=['_hour_key', '_seq'])
+
     print(f"✅ Created {len(hourly_df):,} hourly segment records")
 
     return hourly_df
@@ -654,10 +682,15 @@ def attribute_apple_metrics_to_segments(hourly_df, apple_df, gmaps_minute_df):
     return hourly_df
 
 
-def attribute_screen_time_to_segments(hourly_df, screen_df, apple_df):
+def attribute_screen_time_to_segments(hourly_df, screen_df, sleep_times):
     """
     Attribute screen time metrics to hourly segments using vectorized operations.
-    Also calculates screen_time_minutes_before_sleep.
+    Also calculates screen_time_minutes_before_sleep - screen time within 60 minutes of sleep start.
+
+    Args:
+        hourly_df: DataFrame with hourly segments
+        screen_df: DataFrame with minute-level screen time data
+        sleep_times: Dict mapping date -> sleep_start_datetime (full datetime, not just time)
     """
     print("📱 Attributing screen time to segments...")
 
@@ -673,12 +706,13 @@ def attribute_screen_time_to_segments(hourly_df, screen_df, apple_df):
         print("⚠️  No screen time data to attribute")
         return hourly_df
 
-    # Pre-aggregate screen data by date+hour
-    print("   Pre-aggregating screen time by hour...")
+    # Work with a copy of screen data
     screen_df = screen_df.copy()
     screen_df['_date'] = screen_df['date'].dt.date
     screen_df['_hour'] = screen_df['date'].dt.hour
 
+    # Pre-aggregate screen data by date+hour for regular screen time
+    print("   Pre-aggregating screen time by hour...")
     agg_dict = {}
     if 'screen_time' in screen_df.columns:
         agg_dict['screen_time'] = 'sum'
@@ -693,51 +727,44 @@ def attribute_screen_time_to_segments(hourly_df, screen_df, apple_df):
     else:
         screen_hourly = pd.DataFrame(columns=['_date', '_hour'])
 
-    # Find first sleep time per day for "before sleep" calculation
-    sleep_hours = {}
-    if apple_df is not None and 'sleep_analysis' in apple_df.columns:
-        sleep_phases = ['Deep sleep', 'REM sleep', 'Core sleep', 'Unspecified']
-        sleep_records = apple_df[
-            apple_df['sleep_analysis'].isin(sleep_phases)
-        ].copy()
+    # Calculate screen time before sleep at minute level using pre-calculated sleep_times
+    before_sleep_hourly = {}  # (date, hour) -> screen_time_minutes_before_sleep
+    if sleep_times and 'screen_time' in screen_df.columns:
+        print("   Calculating screen time before sleep (minute-level)...")
 
-        if len(sleep_records) > 0:
-            # Handle overnight sleep: if hour < 6, attribute to previous day (vectorized)
-            hours = sleep_records['date'].dt.hour
-            sleep_records['sleep_date'] = np.where(
-                hours < 6,
-                (sleep_records['date'] - pd.Timedelta(days=1)).dt.date,
-                sleep_records['date'].dt.date
+        # Map each screen minute's date to its sleep_start_datetime
+        screen_df['_sleep_start'] = screen_df['_date'].map(sleep_times)
+
+        # For each minute, check if it's within 60 minutes before sleep
+        mask_has_sleep = screen_df['_sleep_start'].notna()
+        screen_with_sleep = screen_df[mask_has_sleep].copy()
+
+        if len(screen_with_sleep) > 0:
+            # Calculate time difference in minutes (sleep_start - current_minute)
+            screen_with_sleep['_minutes_until_sleep'] = (
+                screen_with_sleep['_sleep_start'] - screen_with_sleep['date']
+            ).dt.total_seconds() / 60
+
+            # Screen time counts as "before sleep" if:
+            # - It's BEFORE sleep (minutes_until_sleep > 0)
+            # - It's within 60 minutes of sleep (minutes_until_sleep <= 60)
+            mask_before_sleep = (
+                (screen_with_sleep['_minutes_until_sleep'] > 0) &
+                (screen_with_sleep['_minutes_until_sleep'] <= 60)
             )
-            first_sleep = sleep_records.groupby('sleep_date')['date'].min()
-            # Store the hour before sleep for each date
-            for date_val, sleep_time in first_sleep.items():
-                before_sleep_hour = (sleep_time - timedelta(hours=1)).hour
-                sleep_hours[date_val] = before_sleep_hour
 
-    # Create before_sleep lookup for screen data
-    if sleep_hours:
-        print("   Calculating screen time before sleep...")
-        # Create a DataFrame of before-sleep hours
-        before_sleep_df = pd.DataFrame([
-            {'_date': date_val, '_before_sleep_hour': hour_val}
-            for date_val, hour_val in sleep_hours.items()
-        ])
+            before_sleep_minutes = screen_with_sleep[mask_before_sleep].copy()
 
-        # Merge to get screen time for before-sleep hours
-        screen_before_sleep = screen_hourly.merge(
-            before_sleep_df,
-            left_on=['_date', '_hour'],
-            right_on=['_date', '_before_sleep_hour'],
-            how='inner'
-        )
+            if len(before_sleep_minutes) > 0:
+                # Aggregate by date+hour
+                before_sleep_agg = before_sleep_minutes.groupby(['_date', '_hour'])['screen_time'].sum().reset_index()
+                # Convert seconds to minutes
+                before_sleep_agg['screen_time'] = (before_sleep_agg['screen_time'] / 60).round(1)
 
-        if len(screen_before_sleep) > 0:
-            before_sleep_lookup = screen_before_sleep.set_index(['_date', '_hour'])['screen_time'].to_dict()
-        else:
-            before_sleep_lookup = {}
-    else:
-        before_sleep_lookup = {}
+                for _, row in before_sleep_agg.iterrows():
+                    before_sleep_hourly[(row['_date'], row['_hour'])] = row['screen_time']
+
+                print(f"   Found {len(before_sleep_minutes):,} screen time minutes within 60 min of sleep")
 
     # Merge screen data with hourly_df
     print("   Merging screen time with hourly segments...")
@@ -757,13 +784,13 @@ def attribute_screen_time_to_segments(hourly_df, screen_df, apple_df):
     if '_pickups' in hourly_df.columns:
         hourly_df['phone_pickups'] = hourly_df['_pickups'].fillna(0).astype(int)
 
-    # Apply before-sleep screen time (vectorized via merge)
-    if before_sleep_lookup:
-        before_sleep_series = pd.DataFrame([
+    # Apply before-sleep screen time
+    if before_sleep_hourly:
+        before_sleep_df = pd.DataFrame([
             {'_date': k[0], '_hour': k[1], '_before_sleep_screen': v}
-            for k, v in before_sleep_lookup.items()
+            for k, v in before_sleep_hourly.items()
         ])
-        hourly_df = hourly_df.merge(before_sleep_series, on=['_date', '_hour'], how='left')
+        hourly_df = hourly_df.merge(before_sleep_df, on=['_date', '_hour'], how='left')
         hourly_df['screen_time_minutes_before_sleep'] = hourly_df['_before_sleep_screen'].fillna(0.0)
 
     # Clean up temporary columns
@@ -778,7 +805,7 @@ def attribute_screen_time_to_segments(hourly_df, screen_df, apple_df):
 # DAILY AGGREGATION FUNCTIONS
 # ============================================================================
 
-def create_daily_file(nutrilio_df, apple_df, hourly_df):
+def create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df=None):
     """
     Create the daily health file with:
     - Nutrilio subjective metrics
@@ -786,6 +813,9 @@ def create_daily_file(nutrilio_df, apple_df, hourly_df):
     - Daily totals for weighted averages
 
     Uses vectorized operations for performance.
+
+    Args:
+        sleep_times_df: Pre-calculated sleep times DataFrame (optional, will calculate if not provided)
     """
     print("📅 Creating daily health file...")
 
@@ -809,11 +839,15 @@ def create_daily_file(nutrilio_df, apple_df, hourly_df):
         if '_date' in daily_df.columns:
             daily_df = daily_df.drop(columns=['_date'])
 
-    # 2. Calculate sleep times (vectorized)
-    print("   Calculating sleep times...")
-    sleep_times_df = calculate_all_sleep_times(apple_df, all_dates)
+    # 2. Merge sleep times (use pre-calculated if provided)
+    print("   Merging sleep times...")
+    if sleep_times_df is None:
+        sleep_times_df = calculate_all_sleep_times(apple_df, all_dates)
     if sleep_times_df is not None:
-        daily_df = daily_df.merge(sleep_times_df, on='date', how='left')
+        # Only keep columns needed for daily file (exclude sleep_start_datetime)
+        sleep_cols = ['date', 'sleep_start_time', 'wake_up_time']
+        sleep_subset = sleep_times_df[[c for c in sleep_cols if c in sleep_times_df.columns]]
+        daily_df = daily_df.merge(sleep_subset, on='date', how='left')
 
     # 3. Calculate daily totals from hourly data (vectorized)
     print("   Aggregating daily totals from hourly data...")
@@ -877,10 +911,11 @@ def calculate_all_sleep_times(apple_df, all_dates):
     sleep_df = sleep_df.sort_values('date')
 
     # Assign each sleep record to a "sleep date" (the night it belongs to)
-    # Sleep before 6am belongs to the previous calendar day (vectorized)
+    # Sleep before noon belongs to the previous calendar day (vectorized)
+    # Using 12 (noon) ensures late wake-ups (6-11 AM) are assigned to previous night
     hours = sleep_df['date'].dt.hour
     sleep_df['sleep_date'] = np.where(
-        hours < 6,
+        hours < 12,
         (sleep_df['date'] - pd.Timedelta(days=1)).dt.date,
         sleep_df['date'].dt.date
     )
@@ -935,6 +970,7 @@ def calculate_all_sleep_times(apple_df, all_dates):
                 results.append({
                     'date': sleep_date,
                     'sleep_start_time': longest['start'].strftime('%H:%M'),
+                    'sleep_start_datetime': longest['start'],  # Full datetime for calculations
                     'wake_up_time': longest['end'].strftime('%H:%M')
                 })
 
@@ -1019,22 +1055,34 @@ def create_health_files():
         hourly_df = hourly_df.sort_values(['date', 'hour', 'hour_segment_id'])
         print(f"✅ Hourly data after gap fill: {len(hourly_df):,} records")
 
-        # Step 6: Attribute Apple metrics to segments
-        print("\n📊 STEP 6: Attributing metrics to segments...")
+        # Step 6: Calculate sleep times first (needed for screen time before sleep)
+        print("\n😴 STEP 6: Calculating sleep times...")
+        all_dates = sorted(apple_df['date'].dt.date.unique())
+        sleep_times_df = calculate_all_sleep_times(apple_df, all_dates)
+
+        # Create sleep_times dict: date -> sleep_start_datetime
+        sleep_times = {}
+        if sleep_times_df is not None and 'sleep_start_datetime' in sleep_times_df.columns:
+            for _, row in sleep_times_df.iterrows():
+                sleep_times[row['date']] = row['sleep_start_datetime']
+            print(f"✅ Found sleep times for {len(sleep_times):,} dates")
+
+        # Step 7: Attribute Apple metrics to segments
+        print("\n📊 STEP 7: Attributing metrics to segments...")
         hourly_df = attribute_apple_metrics_to_segments(hourly_df, apple_df, gmaps_minute_df)
-        hourly_df = attribute_screen_time_to_segments(hourly_df, screen_df, apple_df)
+        hourly_df = attribute_screen_time_to_segments(hourly_df, screen_df, sleep_times)
 
-        # Step 7: Create daily file
-        print("\n📅 STEP 7: Creating daily file...")
-        daily_df = create_daily_file(nutrilio_df, apple_df, hourly_df)
+        # Step 8: Create daily file
+        print("\n📅 STEP 8: Creating daily file...")
+        daily_df = create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df)
 
-        # Step 8: Enforce snake_case
-        print("\n🔤 STEP 8: Enforcing snake_case...")
+        # Step 9: Enforce snake_case
+        print("\n🔤 STEP 9: Enforcing snake_case...")
         daily_df = enforce_snake_case(daily_df, "health_daily")
         hourly_df = enforce_snake_case(hourly_df, "health_hourly")
 
-        # Step 9: Save files
-        print("\n💾 STEP 9: Saving processed files...")
+        # Step 10: Save files
+        print("\n💾 STEP 10: Saving processed files...")
 
         # Save to topic_processed_files
         health_dir = 'files/topic_processed_files/health'
@@ -1102,6 +1150,8 @@ def generate_health_website_files(daily_df, hourly_df):
 
         # Hourly file
         hourly_web = enforce_snake_case(hourly_df.copy(), "health_page_hourly")
+        # Add datetime column combining date and hour for filtering purposes
+        hourly_web['datetime'] = hourly_web['date'] + ' ' + hourly_web['hour'].astype(str).str.zfill(2) + ':00:00'
         hourly_web = hourly_web.sort_values(['date', 'hour', 'hour_segment_id'], ascending=[False, False, True])
         hourly_path = f'{website_dir}/health_page_hourly.csv'
         hourly_web.to_csv(hourly_path, sep='|', index=False, encoding='utf-8')
@@ -1293,6 +1343,8 @@ def full_health_pipeline(auto_full=False, auto_process_only=False):
     if success:
         print("✅ Health coordination pipeline completed successfully!")
         record_successful_run('topic_health', 'active')
+        # Update website tracking file
+        full_website_maintenance_pipeline(auto_mode=True, quiet=True)
     else:
         print("❌ Health coordination pipeline failed")
     print("="*70)

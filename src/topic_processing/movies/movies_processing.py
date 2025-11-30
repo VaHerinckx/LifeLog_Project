@@ -3,6 +3,7 @@ import os
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 from src.sources_processing.letterboxd.letterboxd_processing import full_letterboxd_pipeline
+from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
 
 
 def generate_movies_website_page_files(df):
@@ -237,6 +238,8 @@ def full_movies_pipeline(auto_full=False, auto_process_only=False, skip_source=F
         print("✅ Movies topic pipeline completed successfully!")
         # Record successful run
         record_successful_run('topic_movies', 'active')
+        # Update website tracking file
+        full_website_maintenance_pipeline(auto_mode=True, quiet=True)
     else:
         print("❌ Movies topic pipeline failed")
     print("="*60)

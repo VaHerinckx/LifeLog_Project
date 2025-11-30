@@ -28,6 +28,7 @@ from src.utils.utils_functions import enforce_snake_case, record_successful_run
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.spotify_api_utils import spotify_authentication, get_artist_info, get_track_info
 from src.topic_processing.music.genre_mapping import get_simplified_genre
+from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
 from src.sources_processing.lastfm.lastfm_processing import full_lastfm_pipeline
 
 load_dotenv()
@@ -745,7 +746,7 @@ def full_music_pipeline(auto_full=False, auto_process_only=False):
         success = upload_success
 
         if success:
-            record_successful_run('music_topic', 'coordination')
+            record_successful_run('topic_music', 'coordination')
 
     elif choice == "2":
         print("\n⚙️  Option 2: Process existing topic data and upload...")
@@ -779,7 +780,7 @@ def full_music_pipeline(auto_full=False, auto_process_only=False):
         success = upload_success
 
         if success:
-            record_successful_run('music_topic', 'coordination')
+            record_successful_run('topic_music', 'coordination')
 
     elif choice == "3":
         print("\n📤 Option 3: Upload existing processed files...")
@@ -797,7 +798,7 @@ def full_music_pipeline(auto_full=False, auto_process_only=False):
         success = upload_success
 
         if success:
-            record_successful_run('music_topic', 'coordination')
+            record_successful_run('topic_music', 'coordination')
 
     else:
         print("❌ Invalid choice. Please select 1-3.")
@@ -809,6 +810,8 @@ def full_music_pipeline(auto_full=False, auto_process_only=False):
         print("✅ Music topic coordinator completed successfully!")
         print("📊 Topic output: files/topic_processed_files/music/music_processed.csv")
         print("🌐 Website output: files/website_files/music/music_page_data.csv")
+        # Update website tracking file
+        full_website_maintenance_pipeline(auto_mode=True, quiet=True)
     else:
         print("❌ Music topic coordinator failed")
     print("="*70)
