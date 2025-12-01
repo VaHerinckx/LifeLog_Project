@@ -164,6 +164,158 @@ def load_screentime_data():
     return df
 
 
+def load_garmin_sleep_data():
+    """Load Garmin sleep data for backfilling Apple Health gaps and extra metrics."""
+    garmin_sleep_path = 'files/source_processed_files/garmin/garmin_sleep_processed.csv'
+
+    if not os.path.exists(garmin_sleep_path):
+        print(f"⚠️  Garmin sleep file not found: {garmin_sleep_path}")
+        return None
+
+    print(f"⌚ Loading Garmin sleep data...")
+    df = pd.read_csv(garmin_sleep_path, sep='|', encoding='utf-8')
+
+    # Parse timestamps
+    df['sleepStartTimestampLocal'] = pd.to_datetime(df['sleepStartTimestampLocal'])
+    df['sleepEndTimestampLocal'] = pd.to_datetime(df['sleepEndTimestampLocal'])
+    df['calendarDate'] = pd.to_datetime(df['calendarDate']).dt.date
+
+    # Convert seconds to minutes for sleep stages
+    df['deep_sleep_minutes'] = df['deepSleepSeconds'].fillna(0) / 60
+    df['core_sleep_minutes'] = df['lightSleepSeconds'].fillna(0) / 60  # Garmin light = Apple core
+    df['rem_sleep_minutes'] = df['remSleepSeconds'].fillna(0) / 60
+    df['awake_minutes'] = df['awakeSleepSeconds'].fillna(0) / 60
+    df['total_sleep_minutes'] = df['deep_sleep_minutes'] + df['core_sleep_minutes'] + df['rem_sleep_minutes']
+
+    # Filter for valid confirmed sleep records
+    valid_types = ['ENHANCED_CONFIRMED_FINAL', 'ENHANCED_CONFIRMED']
+    df = df[df['sleepWindowConfirmationType'].isin(valid_types)]
+
+    print(f"✅ Loaded Garmin sleep: {len(df):,} records")
+    print(f"   Date range: {df['calendarDate'].min()} to {df['calendarDate'].max()}")
+
+    return df
+
+
+def load_garmin_training_history():
+    """Load Garmin training history data."""
+    training_path = 'files/source_processed_files/garmin/garmin_training_history_processed.csv'
+
+    if not os.path.exists(training_path):
+        print(f"⚠️  Garmin training history file not found: {training_path}")
+        return None
+
+    print(f"🏋️ Loading Garmin training history...")
+    df = pd.read_csv(training_path, sep='|', encoding='utf-8')
+    df['calendarDate'] = pd.to_datetime(df['calendarDate']).dt.date
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+    print(f"✅ Loaded Garmin training: {len(df):,} records")
+    print(f"   Date range: {df['calendarDate'].min()} to {df['calendarDate'].max()}")
+
+    return df
+
+
+def load_garmin_stress_data():
+    """Load Garmin stress level data."""
+    stress_path = 'files/source_processed_files/garmin/garmin_stress_level_processed.csv'
+
+    if not os.path.exists(stress_path):
+        print(f"⚠️  Garmin stress file not found: {stress_path}")
+        return None
+
+    print(f"😰 Loading Garmin stress data...")
+    df = pd.read_csv(stress_path, sep='|', encoding='utf-8', low_memory=False)
+    df['stress_level_time'] = pd.to_datetime(df['stress_level_time'])
+
+    # Filter out invalid readings (negative values indicate unavailable)
+    df = df[df['stress_level_value'] >= 0].copy()
+
+    # Add date and hour columns for aggregation
+    df['date'] = df['stress_level_time'].dt.date
+    df['hour'] = df['stress_level_time'].dt.hour
+
+    print(f"✅ Loaded Garmin stress: {len(df):,} valid records")
+    print(f"   Date range: {df['date'].min()} to {df['date'].max()}")
+
+    return df
+
+
+# ============================================================================
+# GARMIN DATA AGGREGATION FUNCTIONS
+# ============================================================================
+
+def aggregate_training_history_daily(training_df):
+    """Aggregate training history to daily level - take latest entry per day."""
+    if training_df is None or len(training_df) == 0:
+        return None
+
+    print("📊 Aggregating training history to daily level...")
+
+    # Sort by timestamp and take the last entry per day (most recent status)
+    training_df = training_df.sort_values('timestamp')
+    daily = training_df.groupby('calendarDate').last().reset_index()
+
+    # Keep relevant columns and rename
+    columns_to_keep = {
+        'calendarDate': 'date',
+        'weeklyTrainingLoadSum': 'training_load_weekly',
+        'trainingStatus': 'training_status',
+        'fitnessLevelTrend': 'fitness_trend',
+        'loadLevelTrend': 'load_trend'
+    }
+
+    daily = daily[[c for c in columns_to_keep.keys() if c in daily.columns]].copy()
+    daily = daily.rename(columns=columns_to_keep)
+
+    print(f"✅ Aggregated training history: {len(daily):,} daily records")
+    return daily
+
+
+def aggregate_stress_hourly(stress_df):
+    """Aggregate stress data to hourly level."""
+    if stress_df is None or len(stress_df) == 0:
+        return None
+
+    print("📊 Aggregating stress data to hourly level...")
+
+    # Group by date and hour
+    hourly = stress_df.groupby(['date', 'hour']).agg(
+        stress_avg=('stress_level_value', 'mean'),
+        stress_max=('stress_level_value', 'max'),
+        stress_minutes_high=('stress_level_value', lambda x: (x >= 76).sum()),  # High stress
+        stress_minutes_medium=('stress_level_value', lambda x: ((x >= 51) & (x < 76)).sum())  # Medium stress
+    ).reset_index()
+
+    # Round averages
+    hourly['stress_avg'] = hourly['stress_avg'].round(1)
+
+    print(f"✅ Aggregated stress hourly: {len(hourly):,} records")
+    return hourly
+
+
+def aggregate_stress_daily(stress_df):
+    """Aggregate stress data to daily level."""
+    if stress_df is None or len(stress_df) == 0:
+        return None
+
+    print("📊 Aggregating stress data to daily level...")
+
+    # Group by date
+    daily = stress_df.groupby('date').agg(
+        daily_stress_avg=('stress_level_value', 'mean'),
+        daily_stress_max=('stress_level_value', 'max'),
+        daily_stress_minutes_high=('stress_level_value', lambda x: (x >= 76).sum()),
+        daily_stress_minutes_medium=('stress_level_value', lambda x: ((x >= 51) & (x < 76)).sum())
+    ).reset_index()
+
+    # Round averages
+    daily['daily_stress_avg'] = daily['daily_stress_avg'].round(1)
+
+    print(f"✅ Aggregated stress daily: {len(daily):,} records")
+    return daily
+
+
 # ============================================================================
 # SEGMENT PROCESSING FUNCTIONS
 # ============================================================================
@@ -302,6 +454,10 @@ def expand_segments_to_hourly(segments_df):
                 else:
                     proportional_distance = None
 
+                # Calculate duration in different units
+                duration_hours = round(duration_minutes / 60, 4)
+                duration_days = round(duration_hours / 24, 6)
+
                 all_hourly_records.append({
                     'date': current_hour.date(),
                     'hour': current_hour.hour,
@@ -313,6 +469,8 @@ def expand_segments_to_hourly(segments_df):
                     '_hour_key': current_hour.strftime('%Y%m%d_%H'),  # Temp key for sequencing
                     'segment_type': segment['segment_type'],
                     'segment_duration_minutes': round(duration_minutes, 1),
+                    'segment_duration_hours': duration_hours,
+                    'segment_duration_days': duration_days,
                     # Preserve ALL location fields from Google Maps
                     'place_name': segment['place_name'] if segment['segment_type'] == 'stationary' else None,
                     'address': segment['address'] if segment['segment_type'] == 'stationary' else None,
@@ -394,6 +552,8 @@ def create_fallback_hourly_records(apple_df, location_daily_df, gmaps_dates):
                 'hour_segment_id': f"{date.strftime('%Y%m%d')}_{hour:02d}_1",
                 'segment_type': 'stationary',
                 'segment_duration_minutes': 60,
+                'segment_duration_hours': 1.0,
+                'segment_duration_days': round(1.0 / 24, 6),
                 'place_name': None,
                 'address': None,
                 'city': location['city'],
@@ -472,6 +632,8 @@ def fill_missing_hours(hourly_df, location_daily_df):
                     'hour_segment_id': f"{date_str}_{hour:02d}_gap_1",
                     'segment_type': 'stationary',
                     'segment_duration_minutes': 60,
+                    'segment_duration_hours': 1.0,
+                    'segment_duration_days': round(1.0 / 24, 6),
                     'place_name': None,
                     'address': None,
                     'city': location['city'],
@@ -682,6 +844,133 @@ def attribute_apple_metrics_to_segments(hourly_df, apple_df, gmaps_minute_df):
     return hourly_df
 
 
+def attribute_garmin_sleep_to_hourly(hourly_df, garmin_sleep_df):
+    """
+    Attribute Garmin sleep data to hourly records for dates where Apple data is not available.
+
+    Uses Garmin sleep sessions and distributes sleep stages proportionally across sleep hours.
+    Only fills in for dates before Apple sleep stages start (2023-12-28).
+    """
+    if garmin_sleep_df is None or len(garmin_sleep_df) == 0:
+        return hourly_df
+
+    APPLE_SLEEP_STAGES_START = date(2023, 12, 28)
+
+    print("😴 Attributing Garmin sleep data to hourly records...")
+
+    # Initialize sleep columns if they don't exist
+    sleep_cols = ['sleep_minutes', 'deep_sleep_minutes', 'rem_sleep_minutes', 'core_sleep_minutes', 'awake_minutes', 'sleep_data_source']
+    for col in sleep_cols:
+        if col not in hourly_df.columns:
+            hourly_df[col] = None if col == 'sleep_data_source' else 0
+
+    # Create a mapping of (date, hour) -> hourly_df index for faster lookup
+    hourly_df['_date_obj'] = pd.to_datetime(hourly_df['date']).dt.date
+    hourly_lookup = {}
+    for idx, row in hourly_df.iterrows():
+        key = (row['_date_obj'], row['hour'])
+        if key not in hourly_lookup:
+            hourly_lookup[key] = []
+        hourly_lookup[key].append(idx)
+
+    records_updated = 0
+
+    for _, sleep_row in garmin_sleep_df.iterrows():
+        sleep_date = sleep_row['calendarDate']
+
+        # Only process dates before Apple sleep stages start
+        if sleep_date >= APPLE_SLEEP_STAGES_START:
+            continue
+
+        sleep_start = sleep_row['sleepStartTimestampLocal']
+        sleep_end = sleep_row['sleepEndTimestampLocal']
+        total_sleep_duration = (sleep_end - sleep_start).total_seconds() / 60  # in minutes
+
+        if total_sleep_duration <= 0:
+            continue
+
+        # Get sleep stage totals from Garmin
+        deep_total = sleep_row['deep_sleep_minutes']
+        core_total = sleep_row['core_sleep_minutes']  # Garmin light → Apple core
+        rem_total = sleep_row['rem_sleep_minutes']
+        awake_total = sleep_row['awake_minutes']
+        sleep_total = deep_total + core_total + rem_total
+
+        # Distribute across hours that the sleep session spans
+        current_time = sleep_start
+        while current_time < sleep_end:
+            hour_start = current_time.replace(minute=0, second=0, microsecond=0)
+            hour_end = hour_start + timedelta(hours=1)
+
+            # Calculate overlap with this hour
+            overlap_start = max(current_time, hour_start)
+            overlap_end = min(sleep_end, hour_end)
+            overlap_minutes = (overlap_end - overlap_start).total_seconds() / 60
+
+            if overlap_minutes > 0:
+                # Proportion of this hour's overlap vs total sleep duration
+                proportion = overlap_minutes / total_sleep_duration
+
+                # The date for this hour - sleep hours before midnight belong to previous day
+                hour_date = hour_start.date()
+                if hour_start.hour < 12 and hour_start.date() > sleep_date:
+                    # This is morning hours of the next calendar day, but belongs to sleep_date
+                    hour_date = sleep_date
+
+                # Find matching hourly records
+                key = (hour_date, hour_start.hour)
+                if key in hourly_lookup:
+                    for idx in hourly_lookup[key]:
+                        # Only update if no Apple sleep data
+                        if pd.isna(hourly_df.at[idx, 'sleep_data_source']) or hourly_df.at[idx, 'sleep_data_source'] is None:
+                            hourly_df.at[idx, 'sleep_minutes'] = int(round(sleep_total * proportion))
+                            hourly_df.at[idx, 'deep_sleep_minutes'] = int(round(deep_total * proportion))
+                            hourly_df.at[idx, 'core_sleep_minutes'] = int(round(core_total * proportion))
+                            hourly_df.at[idx, 'rem_sleep_minutes'] = int(round(rem_total * proportion))
+                            hourly_df.at[idx, 'awake_minutes'] = int(round(awake_total * proportion))
+                            hourly_df.at[idx, 'sleep_data_source'] = 'garmin'
+                            records_updated += 1
+
+            current_time = hour_end
+
+    # Clean up temp column
+    hourly_df = hourly_df.drop(columns=['_date_obj'])
+
+    print(f"✅ Attributed Garmin sleep to {records_updated:,} hourly records")
+    return hourly_df
+
+
+def attribute_stress_to_hourly(hourly_df, stress_hourly_df):
+    """
+    Merge hourly stress aggregations into hourly health data.
+    """
+    if stress_hourly_df is None or len(stress_hourly_df) == 0:
+        return hourly_df
+
+    print("😰 Merging stress data with hourly records...")
+
+    # Ensure date types match
+    hourly_df['_date_obj'] = pd.to_datetime(hourly_df['date']).dt.date
+    stress_hourly_df['date'] = pd.to_datetime(stress_hourly_df['date']).dt.date if not isinstance(stress_hourly_df['date'].iloc[0], date) else stress_hourly_df['date']
+
+    # Merge on date and hour
+    hourly_df = hourly_df.merge(
+        stress_hourly_df,
+        left_on=['_date_obj', 'hour'],
+        right_on=['date', 'hour'],
+        how='left',
+        suffixes=('', '_stress')
+    )
+
+    # Clean up duplicate columns and temp columns
+    if 'date_stress' in hourly_df.columns:
+        hourly_df = hourly_df.drop(columns=['date_stress'])
+    hourly_df = hourly_df.drop(columns=['_date_obj'])
+
+    print(f"✅ Merged stress data with hourly records")
+    return hourly_df
+
+
 def attribute_screen_time_to_segments(hourly_df, screen_df, sleep_times):
     """
     Attribute screen time metrics to hourly segments using vectorized operations.
@@ -805,17 +1094,22 @@ def attribute_screen_time_to_segments(hourly_df, screen_df, sleep_times):
 # DAILY AGGREGATION FUNCTIONS
 # ============================================================================
 
-def create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df=None):
+def create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df=None,
+                      training_daily_df=None, stress_daily_df=None):
     """
     Create the daily health file with:
     - Nutrilio subjective metrics
-    - Sleep start/wake up times
+    - Sleep start/wake up times (from Apple + Garmin)
     - Daily totals for weighted averages
+    - Training history from Garmin
+    - Stress aggregates from Garmin
 
     Uses vectorized operations for performance.
 
     Args:
-        sleep_times_df: Pre-calculated sleep times DataFrame (optional, will calculate if not provided)
+        sleep_times_df: Pre-calculated sleep times DataFrame (includes Garmin extras)
+        training_daily_df: Daily training history from Garmin
+        stress_daily_df: Daily stress aggregates from Garmin
     """
     print("📅 Creating daily health file...")
 
@@ -839,13 +1133,15 @@ def create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df=None):
         if '_date' in daily_df.columns:
             daily_df = daily_df.drop(columns=['_date'])
 
-    # 2. Merge sleep times (use pre-calculated if provided)
+    # 2. Merge sleep times (includes Garmin extras like SPO2, HR, respiration)
     print("   Merging sleep times...")
     if sleep_times_df is None:
         sleep_times_df = calculate_all_sleep_times(apple_df, all_dates)
     if sleep_times_df is not None:
-        # Only keep columns needed for daily file (exclude sleep_start_datetime)
-        sleep_cols = ['date', 'sleep_start_time', 'wake_up_time']
+        # Keep all sleep columns including Garmin extras (exclude sleep_start_datetime)
+        sleep_cols = ['date', 'sleep_start_time', 'sleep_start_time_minutes', 'wake_up_time',
+                      'wake_up_time_minutes', 'sleep_data_source', 'sleep_avg_spo2', 'sleep_avg_hr',
+                      'sleep_avg_respiration', 'sleep_lowest_respiration', 'sleep_highest_respiration']
         sleep_subset = sleep_times_df[[c for c in sleep_cols if c in sleep_times_df.columns]]
         daily_df = daily_df.merge(sleep_subset, on='date', how='left')
 
@@ -881,6 +1177,18 @@ def create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df=None):
 
             daily_df = daily_df.merge(hourly_daily, on='date', how='left')
 
+    # 4. Merge Garmin training history
+    print("   Merging training history...")
+    if training_daily_df is not None and len(training_daily_df) > 0:
+        daily_df = daily_df.merge(training_daily_df, on='date', how='left')
+        print(f"      Merged training data for {len(training_daily_df):,} dates")
+
+    # 5. Merge Garmin stress daily aggregates
+    print("   Merging stress data...")
+    if stress_daily_df is not None and len(stress_daily_df) > 0:
+        daily_df = daily_df.merge(stress_daily_df, on='date', how='left')
+        print(f"      Merged stress data for {len(stress_daily_df):,} dates")
+
     # Convert date to datetime
     daily_df['date'] = pd.to_datetime(daily_df['date'])
 
@@ -888,94 +1196,153 @@ def create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df=None):
     return daily_df
 
 
-def calculate_all_sleep_times(apple_df, all_dates):
+def calculate_all_sleep_times(apple_df, all_dates, garmin_sleep_df=None):
     """
     Calculate sleep start and wake up times for all dates at once.
-    Uses vectorized operations where possible.
-    Returns a DataFrame with date, sleep_start_time, wake_up_time.
+    Uses Apple Health data as primary source for dates >= 2023-12-28,
+    falls back to Garmin for earlier dates.
+
+    Args:
+        apple_df: Apple Health minute-level data
+        all_dates: List of all dates to process
+        garmin_sleep_df: Optional Garmin sleep data for backfilling
+
+    Returns:
+        DataFrame with date, sleep_start_time, wake_up_time, sleep_data_source, and Garmin extras.
     """
-    if 'sleep_analysis' not in apple_df.columns:
-        return None
+    # Cutoff date - Apple sleep stages only start from this date
+    APPLE_SLEEP_STAGES_START = date(2023, 12, 28)
 
     print("   Finding sleep sessions...")
 
-    # Sleep phases (excluding 'In bed' and 'Awake')
-    sleep_phases = ['Deep sleep', 'REM sleep', 'Core sleep', 'Unspecified']
-
-    # Filter to only sleep records
-    sleep_df = apple_df[apple_df['sleep_analysis'].isin(sleep_phases)].copy()
-
-    if len(sleep_df) == 0:
-        return None
-
-    sleep_df = sleep_df.sort_values('date')
-
-    # Assign each sleep record to a "sleep date" (the night it belongs to)
-    # Sleep before noon belongs to the previous calendar day (vectorized)
-    # Using 12 (noon) ensures late wake-ups (6-11 AM) are assigned to previous night
-    hours = sleep_df['date'].dt.hour
-    sleep_df['sleep_date'] = np.where(
-        hours < 12,
-        (sleep_df['date'] - pd.Timedelta(days=1)).dt.date,
-        sleep_df['date'].dt.date
-    )
-
-    # Find sessions per sleep_date
-    # A session is a continuous block with gaps <= 30 min
     results = []
+    apple_dates_with_sleep = set()
 
-    for sleep_date in sleep_df['sleep_date'].unique():
-        date_records = sleep_df[sleep_df['sleep_date'] == sleep_date].sort_values('date')
+    # Process Apple sleep data first
+    if 'sleep_analysis' in apple_df.columns:
+        # Sleep phases (excluding 'In bed' and 'Awake')
+        sleep_phases = ['Deep sleep', 'REM sleep', 'Core sleep', 'Unspecified']
 
-        if len(date_records) == 0:
-            continue
+        # Filter to only sleep records
+        sleep_df = apple_df[apple_df['sleep_analysis'].isin(sleep_phases)].copy()
 
-        # Find sessions using time differences
-        times = date_records['date'].values
+        if len(sleep_df) > 0:
+            sleep_df = sleep_df.sort_values('date')
 
-        # Calculate gaps between consecutive records (in minutes)
-        if len(times) > 1:
-            gaps = np.diff(times).astype('timedelta64[m]').astype(float)
-            # Session breaks where gap > 30 min
-            session_breaks = np.where(gaps > 30)[0] + 1
-            session_ids = np.zeros(len(times), dtype=int)
-            for i, brk in enumerate(session_breaks):
-                session_ids[brk:] = i + 1
-        else:
-            session_ids = np.zeros(len(times), dtype=int)
+            # Assign each sleep record to a "sleep date" (the night it belongs to)
+            hours = sleep_df['date'].dt.hour
+            sleep_df['sleep_date'] = np.where(
+                hours < 12,
+                (sleep_df['date'] - pd.Timedelta(days=1)).dt.date,
+                sleep_df['date'].dt.date
+            )
 
-        date_records = date_records.copy()
-        date_records['session_id'] = session_ids
+            # Process each sleep date
+            for sleep_date in sleep_df['sleep_date'].unique():
+                # Skip dates before Apple sleep stages start if we have Garmin data
+                if garmin_sleep_df is not None and sleep_date < APPLE_SLEEP_STAGES_START:
+                    continue
 
-        # Find start/end of each session
-        sessions = date_records.groupby('session_id').agg(
-            start=('date', 'min'),
-            end=('date', 'max')
-        ).reset_index()
+                date_records = sleep_df[sleep_df['sleep_date'] == sleep_date].sort_values('date')
 
-        sessions['duration'] = (sessions['end'] - sessions['start']).dt.total_seconds()
+                if len(date_records) == 0:
+                    continue
 
-        # Get longest session
-        if len(sessions) > 0:
-            longest = sessions.loc[sessions['duration'].idxmax()]
+                # Find sessions using time differences
+                times = date_records['date'].values
 
-            # Validate times
-            start_hour = longest['start'].hour
-            end_hour = longest['end'].hour
+                if len(times) > 1:
+                    gaps = np.diff(times).astype('timedelta64[m]').astype(float)
+                    session_breaks = np.where(gaps > 30)[0] + 1
+                    session_ids = np.zeros(len(times), dtype=int)
+                    for i, brk in enumerate(session_breaks):
+                        session_ids[brk:] = i + 1
+                else:
+                    session_ids = np.zeros(len(times), dtype=int)
 
-            is_valid_start = start_hour >= 20 or start_hour <= 3
-            is_valid_end = end_hour <= 12
+                date_records = date_records.copy()
+                date_records['session_id'] = session_ids
 
-            if is_valid_start and is_valid_end:
+                sessions = date_records.groupby('session_id').agg(
+                    start=('date', 'min'),
+                    end=('date', 'max')
+                ).reset_index()
+
+                sessions['duration'] = (sessions['end'] - sessions['start']).dt.total_seconds()
+
+                if len(sessions) > 0:
+                    longest = sessions.loc[sessions['duration'].idxmax()]
+
+                    start_hour = longest['start'].hour
+                    end_hour = longest['end'].hour
+
+                    is_valid_start = start_hour >= 20 or start_hour <= 3
+                    is_valid_end = end_hour <= 12
+
+                    if is_valid_start and is_valid_end:
+                        sleep_start_minutes = longest['start'].hour * 60 + longest['start'].minute
+                        wake_up_minutes = longest['end'].hour * 60 + longest['end'].minute
+
+                        results.append({
+                            'date': sleep_date,
+                            'sleep_start_time': longest['start'].strftime('%H:%M'),
+                            'sleep_start_time_minutes': sleep_start_minutes,
+                            'sleep_start_datetime': longest['start'],
+                            'wake_up_time': longest['end'].strftime('%H:%M'),
+                            'wake_up_time_minutes': wake_up_minutes,
+                            'sleep_data_source': 'apple'
+                        })
+                        apple_dates_with_sleep.add(sleep_date)
+
+    # Process Garmin sleep data for gap period and extras
+    if garmin_sleep_df is not None and len(garmin_sleep_df) > 0:
+        print("   Processing Garmin sleep data for backfill and extras...")
+
+        for _, row in garmin_sleep_df.iterrows():
+            sleep_date = row['calendarDate']
+
+            # For dates before Apple cutoff OR dates where Apple has no data, use Garmin as primary
+            if sleep_date < APPLE_SLEEP_STAGES_START or sleep_date not in apple_dates_with_sleep:
+                sleep_start = row['sleepStartTimestampLocal']
+                sleep_end = row['sleepEndTimestampLocal']
+
+                sleep_start_minutes = sleep_start.hour * 60 + sleep_start.minute
+                wake_up_minutes = sleep_end.hour * 60 + sleep_end.minute
+
                 results.append({
                     'date': sleep_date,
-                    'sleep_start_time': longest['start'].strftime('%H:%M'),
-                    'sleep_start_datetime': longest['start'],  # Full datetime for calculations
-                    'wake_up_time': longest['end'].strftime('%H:%M')
+                    'sleep_start_time': sleep_start.strftime('%H:%M'),
+                    'sleep_start_time_minutes': sleep_start_minutes,
+                    'sleep_start_datetime': sleep_start,
+                    'wake_up_time': sleep_end.strftime('%H:%M'),
+                    'wake_up_time_minutes': wake_up_minutes,
+                    'sleep_data_source': 'garmin',
+                    # Garmin extras
+                    'sleep_avg_spo2': row.get('averageSPO2'),
+                    'sleep_avg_hr': row.get('averageHR'),
+                    'sleep_avg_respiration': row.get('averageRespiration'),
+                    'sleep_lowest_respiration': row.get('lowestRespiration'),
+                    'sleep_highest_respiration': row.get('highestRespiration')
                 })
+            else:
+                # For overlap period, merge Garmin extras into existing Apple record
+                for result in results:
+                    if result['date'] == sleep_date and result['sleep_data_source'] == 'apple':
+                        result['sleep_data_source'] = 'apple+garmin'
+                        result['sleep_avg_spo2'] = row.get('averageSPO2')
+                        result['sleep_avg_hr'] = row.get('averageHR')
+                        result['sleep_avg_respiration'] = row.get('averageRespiration')
+                        result['sleep_lowest_respiration'] = row.get('lowestRespiration')
+                        result['sleep_highest_respiration'] = row.get('highestRespiration')
+                        break
 
     if results:
-        return pd.DataFrame(results)
+        df = pd.DataFrame(results)
+        print(f"   Found sleep times for {len(df):,} dates")
+        source_counts = df['sleep_data_source'].value_counts()
+        for source, count in source_counts.items():
+            print(f"      - {source}: {count:,}")
+        return df
     return None
 
 
@@ -1017,6 +1384,11 @@ def create_health_files():
         location_daily_df = load_location_daily_data()
         screen_df = load_screentime_data()
 
+        # Load Garmin data sources
+        garmin_sleep_df = load_garmin_sleep_data()
+        garmin_training_df = load_garmin_training_history()
+        garmin_stress_df = load_garmin_stress_data()
+
         # Step 2: Create segments from Google Maps
         print("\n🔀 STEP 2: Creating segments from Google Maps...")
         segments_df = create_segments_from_google_maps(gmaps_minute_df)
@@ -1056,9 +1428,10 @@ def create_health_files():
         print(f"✅ Hourly data after gap fill: {len(hourly_df):,} records")
 
         # Step 6: Calculate sleep times first (needed for screen time before sleep)
-        print("\n😴 STEP 6: Calculating sleep times...")
+        # Now includes Garmin sleep data for backfill and extras
+        print("\n😴 STEP 6: Calculating sleep times (Apple + Garmin)...")
         all_dates = sorted(apple_df['date'].dt.date.unique())
-        sleep_times_df = calculate_all_sleep_times(apple_df, all_dates)
+        sleep_times_df = calculate_all_sleep_times(apple_df, all_dates, garmin_sleep_df)
 
         # Create sleep_times dict: date -> sleep_start_datetime
         sleep_times = {}
@@ -1067,14 +1440,29 @@ def create_health_files():
                 sleep_times[row['date']] = row['sleep_start_datetime']
             print(f"✅ Found sleep times for {len(sleep_times):,} dates")
 
-        # Step 7: Attribute Apple metrics to segments
+        # Step 7: Attribute metrics to segments
         print("\n📊 STEP 7: Attributing metrics to segments...")
         hourly_df = attribute_apple_metrics_to_segments(hourly_df, apple_df, gmaps_minute_df)
         hourly_df = attribute_screen_time_to_segments(hourly_df, screen_df, sleep_times)
 
+        # Step 7b: Attribute Garmin sleep to hourly (for gap period)
+        print("\n😴 STEP 7b: Attributing Garmin sleep data...")
+        hourly_df = attribute_garmin_sleep_to_hourly(hourly_df, garmin_sleep_df)
+
+        # Step 7c: Aggregate and attribute stress data
+        print("\n😰 STEP 7c: Processing stress data...")
+        stress_hourly_df = aggregate_stress_hourly(garmin_stress_df)
+        stress_daily_df = aggregate_stress_daily(garmin_stress_df)
+        hourly_df = attribute_stress_to_hourly(hourly_df, stress_hourly_df)
+
+        # Step 7d: Aggregate training history
+        print("\n🏋️ STEP 7d: Processing training history...")
+        training_daily_df = aggregate_training_history_daily(garmin_training_df)
+
         # Step 8: Create daily file
         print("\n📅 STEP 8: Creating daily file...")
-        daily_df = create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df)
+        daily_df = create_daily_file(nutrilio_df, apple_df, hourly_df, sleep_times_df,
+                                     training_daily_df, stress_daily_df)
 
         # Step 9: Enforce snake_case
         print("\n🔤 STEP 9: Enforcing snake_case...")
@@ -1114,9 +1502,24 @@ def create_health_files():
         # Show data source breakdown
         if 'data_source' in hourly_df.columns:
             source_counts = hourly_df['data_source'].value_counts()
-            print(f"   • Data sources:")
+            print(f"   • Location data sources:")
             for source, count in source_counts.items():
                 print(f"      - {source}: {count:,} records")
+
+        # Show sleep data source breakdown
+        if 'sleep_data_source' in daily_df.columns:
+            sleep_source_counts = daily_df['sleep_data_source'].value_counts()
+            print(f"   • Sleep data sources:")
+            for source, count in sleep_source_counts.items():
+                print(f"      - {source}: {count:,} days")
+
+        # Show Garmin integration stats
+        garmin_cols = ['training_load_weekly', 'daily_stress_avg', 'sleep_avg_spo2']
+        for col in garmin_cols:
+            if col in daily_df.columns:
+                non_null = daily_df[col].notna().sum()
+                if non_null > 0:
+                    print(f"   • {col}: {non_null:,} days with data")
 
         print("="*70)
 
@@ -1151,7 +1554,7 @@ def generate_health_website_files(daily_df, hourly_df):
         # Hourly file
         hourly_web = enforce_snake_case(hourly_df.copy(), "health_page_hourly")
         # Add datetime column combining date and hour for filtering purposes
-        hourly_web['datetime'] = hourly_web['date'] + ' ' + hourly_web['hour'].astype(str).str.zfill(2) + ':00:00'
+        hourly_web['datetime'] = pd.to_datetime(hourly_web['date']).dt.strftime('%Y-%m-%d') + ' ' + hourly_web['hour'].astype(str).str.zfill(2) + ':00:00'
         hourly_web = hourly_web.sort_values(['date', 'hour', 'hour_segment_id'], ascending=[False, False, True])
         hourly_path = f'{website_dir}/health_page_hourly.csv'
         hourly_web.to_csv(hourly_path, sep='|', index=False, encoding='utf-8')

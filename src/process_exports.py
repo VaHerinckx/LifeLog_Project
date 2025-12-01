@@ -36,7 +36,7 @@ from src.sources_processing.offscreen.offscreen_processing import full_offscreen
 from src.sources_processing.moneymgr.moneymgr_processing import full_moneymgr_pipeline, move_moneymgr_files, download_moneymgr_data
 from src.sources_processing.google_maps.google_maps_processing import download_google_data, move_google_files, full_google_maps_pipeline
 from src.sources_processing.manual_location.manual_location_processing import full_manual_location_pipeline
-from src.sources_processing.weather.weather_processing import full_weather_pipeline
+from src.sources_processing.meteostat.meteostat_processing import full_meteostat_pipeline
 
 # Topic coordinators
 from src.topic_processing.reading.reading_processing import full_books_pipeline
@@ -49,7 +49,6 @@ from src.topic_processing.movies.movies_processing import full_movies_pipeline
 from src.topic_processing.shows.shows_processing import full_shows_pipeline
 from src.topic_processing.fitness.fitness_processing import full_fitness_pipeline
 from src.topic_processing.finance.finance_processing import full_finance_pipeline
-from src.topic_processing.weather.weather_processing import full_weather_pipeline as full_weather_topic_pipeline
 from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
 
 
@@ -319,9 +318,9 @@ PIPELINE_REGISTRY = {
         'description': 'Processes Offscreen app usage data (source processor, feeds Health topic, requires timezone correction)',
         'user_selectable': True
     },
-    'weather': {
-        'name': 'Weather (Meteostat API) - SOURCE',
-        'function': full_weather_pipeline,
+    'meteostat': {
+        'name': 'Meteostat (Weather API) - SOURCE',
+        'function': full_meteostat_pipeline,
         'download_method': 'api',
         'requires_timezone': False,
         'move_function': None,
@@ -329,17 +328,6 @@ PIPELINE_REGISTRY = {
         'urls': [],
         'description': 'Fetches weather data from Meteostat API (source processor)',
         'user_selectable': True
-    },
-    'weather_topic': {
-        'name': 'Weather (Complete) - TOPIC',
-        'function': full_weather_topic_pipeline,
-        'download_method': 'coordination',
-        'requires_timezone': False,
-        'move_function': None,
-        'download_function': None,
-        'urls': [],
-        'description': 'Coordinates weather data and generates website files',
-        'user_selectable': False
     },
     'google_maps': {
         'name': 'Location (Google Maps) - SOURCE',
@@ -407,7 +395,6 @@ SOURCE_TO_TOPIC_MAP = {
     'trakt': ['shows_topic'],
     'garmin': ['fitness_topic'],
     'finance': ['finance_topic'],
-    'weather': ['weather_topic'],
 }
 
 

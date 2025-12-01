@@ -30,21 +30,39 @@ def generate_fitness_website_page_files(df):
 
 
 def create_fitness_topic_file():
-    """Creates the Fitness topic file by reading garmin source data."""
+    """Creates the Fitness topic file by merging Garmin and Polar source data."""
     print(f"⚙️  Creating Fitness topic files...")
 
-    source_file = "files/source_processed_files/garmin/garmin_processed.csv"
+    garmin_file = "files/source_processed_files/garmin/garmin_activities_list_processed.csv"
+    polar_file = "files/source_processed_files/garmin/polar_summary_processed.csv"
     topic_output_file = "files/topic_processed_files/fitness/fitness_processed.csv"
 
     try:
-        if not os.path.exists(source_file):
-            print(f"❌ Source file not found: {source_file}")
-            print(f"   Run the garmin source pipeline first.")
+        dataframes = []
+
+        # Load Garmin data
+        if os.path.exists(garmin_file):
+            print(f"📖 Reading Garmin data from {garmin_file}...")
+            df_garmin = pd.read_csv(garmin_file, sep='|', encoding='utf-8')
+            dataframes.append(df_garmin)
+            print(f"   ✅ Loaded {len(df_garmin)} Garmin records")
+        else:
+            print(f"⚠️  Garmin file not found: {garmin_file}")
+
+        # Load Polar data (optional - legacy data)
+        if os.path.exists(polar_file):
+            print(f"📖 Reading Polar data from {polar_file}...")
+            df_polar = pd.read_csv(polar_file, sep='|', encoding='utf-8')
+            dataframes.append(df_polar)
+            print(f"   ✅ Loaded {len(df_polar)} Polar records")
+
+        if not dataframes:
+            print(f"❌ No source files found. Run source pipelines first.")
             return False
 
-        print(f"📖 Reading source data from {source_file}...")
-        df = pd.read_csv(source_file, sep='|', encoding='utf-8')
-        print(f"✅ Loaded {len(df)} records")
+        # Merge all sources
+        df = pd.concat(dataframes, ignore_index=True)
+        print(f"📊 Total: {len(df)} fitness records")
 
         os.makedirs(os.path.dirname(topic_output_file), exist_ok=True)
         df.to_csv(topic_output_file, sep='|', index=False, encoding='utf-8')

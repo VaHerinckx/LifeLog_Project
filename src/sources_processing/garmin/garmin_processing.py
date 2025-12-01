@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 import json
-from src.utils.utils_functions import time_difference_correction, find_unzip_folder, clean_rename_move_folder
+from src.utils.utils_functions import time_difference_correction, find_unzip_folder, clean_rename_move_folder, record_successful_run
 import fnmatch
 import fitparse
 import re
@@ -247,16 +247,6 @@ def activity_summary_extract(path):
 
         df['Source'] = 'Garmin'
 
-        # Merge with Polar data if it exists
-        polar_file = 'files/source_processed_files/garmin/polar_summary_processed.csv'
-        if os.path.exists(polar_file):
-            try:
-                df_polar = pd.read_csv(polar_file, sep='|')
-                df = pd.concat([df_polar, df], ignore_index=True).reset_index(drop=True)
-                print("✅ Merged with existing Polar data")
-            except Exception as e:
-                print(f"⚠️  Could not merge with Polar data: {e}")
-
         # Calculate calories in kcal and fix elevation
         if 'calories' in df.columns:
             df['Calories_kcal'] = df['calories'] / 4.18
@@ -274,7 +264,7 @@ def activity_summary_extract(path):
         columns_to_drop = ['splits', 'splitSummaries', 'summarizedDiveInfo']
         columns_to_drop = [col for col in columns_to_drop if col in df.columns]
 
-        df.drop(columns_to_drop, axis=1).to_csv(output_path, sep='|', index=False)
+        df.drop(columns_to_drop, axis=1).to_csv(output_path, sep='|', index=False, encoding='utf-8')
 
         print(f"✅ Activity summary processed: {len(df)} records saved")
         return df
@@ -563,10 +553,10 @@ def stress_level_qualification(x):
     return stress_level
 
 
-def process_stress_level():
-    """Function to process stress level data from .fit files and save to a CSV file"""
+def process_fit_file_data():
+    """Extract multiple data types from FIT files: stress, respiration, body battery, HRV."""
     try:
-        print("😰 Processing stress level data...")
+        print("📊 Processing FIT file data (stress, respiration, body battery, HRV)...")
 
         # Extract ZIP file if it exists
         zip_file_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip"
@@ -578,13 +568,18 @@ def process_stress_level():
 
         fit_files = extract_fit_files_path()
         if not fit_files:
-            print("⚠️  No FIT files found for stress level processing")
+            print("⚠️  No FIT files found for processing")
             return False
 
         # Load existing dictionary
         dict_files = load_fit_files_dictionary()
 
-        data = []
+        # Data collectors for each type
+        stress_data = []
+        respiration_data = []
+        body_battery_data = []
+        hrv_data = []
+
         count_new_files = 0
 
         for fit_file in fit_files:
@@ -595,14 +590,34 @@ def process_stress_level():
                 count_new_files += 1
                 fitfile = fitparse.FitFile(fit_file)
 
+                # Extract stress level data
                 for record in fitfile.get_messages("stress_level"):
                     record_data = record.get_values()
                     if record_data:
-                        data.append(record_data)
+                        stress_data.append(record_data)
+
+                # Extract respiration rate data
+                for record in fitfile.get_messages("respiration_rate"):
+                    record_data = record.get_values()
+                    if record_data:
+                        respiration_data.append(record_data)
+
+                # Extract monitoring data (contains heart rate, activity type, intensity, steps)
+                for record in fitfile.get_messages("monitoring"):
+                    record_data = record.get_values()
+                    if record_data and 'timestamp' in record_data:
+                        body_battery_data.append(record_data)
+
+                # Extract HRV status data (try multiple message types)
+                for msg_type in ["hrv_status_summary", "hrv", "hrv_value"]:
+                    for record in fitfile.get_messages(msg_type):
+                        record_data = record.get_values()
+                        if record_data:
+                            hrv_data.append(record_data)
 
                 dict_files[fit_file] = "Yes"
 
-                if count_new_files % 50 == 0:
+                if count_new_files % 100 == 0:
                     print(f"📊 Processed {count_new_files} new FIT files...")
 
             except Exception as e:
@@ -612,45 +627,94 @@ def process_stress_level():
         # Save updated dictionary
         save_fit_files_dictionary(dict_files)
 
-        print(f"📈 Processed {count_new_files} new FIT files for stress level data")
+        print(f"📈 Processed {count_new_files} new FIT files")
 
-        # Load existing stress level data
-        stress_file_path = 'files/source_processed_files/garmin/garmin_stress_level_processed.csv'
+        # Process and save each data type
+        output_dir = 'files/source_processed_files/garmin'
+        os.makedirs(output_dir, exist_ok=True)
 
-        try:
-            df_stress_level = pd.read_csv(stress_file_path, sep='|')
-        except FileNotFoundError:
-            print("📝 Creating new stress level file")
-            df_stress_level = pd.DataFrame()
+        # 1. Stress Level Data
+        _save_fit_data(
+            data=stress_data,
+            file_path=f'{output_dir}/garmin_stress_level_processed.csv',
+            time_column='stress_level_time',
+            data_name='Stress level',
+            post_process=lambda df: df.assign(
+                stress_level=df['stress_level_value'].apply(stress_level_qualification)
+            ) if 'stress_level_value' in df.columns else df
+        )
 
-        if data:
-            new_df = pd.DataFrame(data)
-            df_stress_level = pd.concat([df_stress_level, new_df], ignore_index=True).drop_duplicates()
+        # 2. Respiration Rate Data
+        _save_fit_data(
+            data=respiration_data,
+            file_path=f'{output_dir}/garmin_respiration_rate_processed.csv',
+            time_column='timestamp',
+            data_name='Respiration rate'
+        )
 
-            # Apply timezone correction
-            if 'stress_level_time' in df_stress_level.columns:
-                print("🌍 Applying timezone correction to stress data...")
-                df_stress_level = time_difference_correction(df_stress_level, 'stress_level_time', 'GMT')
+        # 3. Body Battery Data
+        _save_fit_data(
+            data=body_battery_data,
+            file_path=f'{output_dir}/garmin_body_battery_processed.csv',
+            time_column='timestamp',
+            data_name='Body battery'
+        )
 
-            # Qualify stress levels
-            if 'stress_level_value' in df_stress_level.columns:
-                df_stress_level['stress_level'] = df_stress_level['stress_level_value'].apply(stress_level_qualification)
-
-            df_stress_level.sort_values('stress_level_time', inplace=True)
-
-            # Save processed file
-            os.makedirs(os.path.dirname(stress_file_path), exist_ok=True)
-            df_stress_level.to_csv(stress_file_path, sep='|', index=False)
-
-            print(f"✅ Stress level data processed: {len(df_stress_level)} records saved")
-        else:
-            print("ℹ️  No new stress level data found")
+        # 4. HRV Data
+        _save_fit_data(
+            data=hrv_data,
+            file_path=f'{output_dir}/garmin_hrv_processed.csv',
+            time_column='timestamp',
+            data_name='HRV'
+        )
 
         return True
 
     except Exception as e:
-        print(f"❌ Error processing stress level data: {e}")
+        print(f"❌ Error processing FIT file data: {e}")
+        import traceback
+        traceback.print_exc()
         return False
+
+
+def _save_fit_data(data, file_path, time_column, data_name, post_process=None):
+    """Helper function to save FIT data to CSV with timezone correction."""
+    try:
+        # Load existing data
+        try:
+            df_existing = pd.read_csv(file_path, sep='|', encoding='utf-8')
+        except FileNotFoundError:
+            df_existing = pd.DataFrame()
+
+        if data:
+            new_df = pd.DataFrame(data)
+            df = pd.concat([df_existing, new_df], ignore_index=True).drop_duplicates()
+
+            # Apply timezone correction if time column exists
+            if time_column in df.columns:
+                # Filter out rows with null timestamps before timezone correction
+                null_count = df[time_column].isna().sum()
+                if null_count > 0:
+                    print(f"   ⚠️  Filtering out {null_count} records with null timestamps")
+                    df = df.dropna(subset=[time_column])
+
+                print(f"   🌍 Applying timezone correction to {data_name.lower()} data...")
+                df = time_difference_correction(df, time_column, 'GMT')
+                df.sort_values(time_column, inplace=True)
+
+            # Apply any post-processing
+            if post_process:
+                df = post_process(df)
+
+            df.to_csv(file_path, sep='|', index=False, encoding='utf-8')
+            print(f"   ✅ {data_name} data: {len(df)} records saved")
+        elif not df_existing.empty:
+            print(f"   ℹ️  No new {data_name.lower()} data (existing: {len(df_existing)} records)")
+        else:
+            print(f"   ⚠️  No {data_name.lower()} data found")
+
+    except Exception as e:
+        print(f"   ❌ Error saving {data_name.lower()} data: {e}")
 
 
 def process_training_history():
@@ -805,8 +869,8 @@ def create_garmin_files():
         if process_training_history():
             success_count += 1
 
-        # Process stress level data
-        if process_stress_level():
+        # Process FIT file data (stress, respiration, body battery, HRV)
+        if process_fit_file_data():
             success_count += 1
 
         # Process sleep data
@@ -905,7 +969,6 @@ def full_garmin_pipeline(auto_full=False, auto_process_only=False):
         print("✅ Garmin source pipeline completed!")
         print("ℹ️  Note: To upload to Drive, run the Fitness topic pipeline.")
         # Record successful run
-        from src.utils.utils_functions import record_successful_run
         record_successful_run('source_garmin', 'active')
     else:
         print("❌ Garmin pipeline failed")
@@ -954,14 +1017,14 @@ def process_individual_data_type(data_type):
             return process_sleep_files()
 
         elif data_type == 'stress':
-            return process_stress_level()
+            return process_fit_file_data()
 
         elif data_type == 'training':
             return process_training_history()
 
         else:
             print(f"❌ Unknown data type: {data_type}")
-            print("Available types: activities, splits, sleep, stress, training")
+            print("Available types: activities, splits, sleep, stress (includes respiration/body battery/HRV), training")
             return False
 
     except Exception as e:
