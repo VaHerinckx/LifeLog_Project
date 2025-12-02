@@ -545,8 +545,10 @@ def find_unzip_folder(data_source, zip_file_path = None):
         with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
             zip_ref.extractall(unzip_folder)
         os.remove(zip_file_path)
+        return True
     else:
-        return f"No {data_source} file to unzip \n"
+        print(f"No {data_source} file to unzip")
+        return False
 
 
 def clean_rename_move_folder(export_folder, download_folder, folder_name, new_folder_name):
@@ -554,7 +556,7 @@ def clean_rename_move_folder(export_folder, download_folder, folder_name, new_fo
     folder_path = os.path.join(download_folder, folder_name)
     if not os.path.exists(folder_path):
         print(f"Folder {folder_path} does not exist in Downloads")
-        return None
+        return False
     old_export_folder = os.path.join(export_folder, new_folder_name)
     print(old_export_folder)
     shutil.rmtree(old_export_folder)
@@ -565,6 +567,7 @@ def clean_rename_move_folder(export_folder, download_folder, folder_name, new_fo
     # Move the renamed folder to the export folder
     export_folder_path = os.path.join(export_folder, new_folder_name)
     shutil.move(renamed_folder_path, export_folder_path)
+    return True
 
 
 def clean_rename_move_file(export_folder, download_folder, file_name, new_file_name, file_number = 1):

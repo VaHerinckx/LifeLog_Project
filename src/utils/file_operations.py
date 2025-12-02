@@ -5,8 +5,15 @@ import re
 
 
 def find_unzip_folder(data_source, zip_file_path=None):
-    """Unzips the folder specified in the path"""
+    """Unzips the folder specified in the path, or returns True if already unzipped"""
     download_folder = "/Users/valen/Downloads"
+    unzip_folder = os.path.join(download_folder, f"{data_source}_export_unzipped")
+
+    # Check if already unzipped folder exists in Downloads
+    if os.path.exists(unzip_folder) and os.path.isdir(unzip_folder):
+        print(f"✅ Found existing unzipped folder: {unzip_folder}")
+        return True
+
     # Get a list of all the zip files in the download folder
     zip_files = [f for f in os.listdir(download_folder) if f.endswith('.zip')]
 
@@ -32,7 +39,7 @@ def find_unzip_folder(data_source, zip_file_path=None):
 
     if zip_file_path is not None:
         # Extract the contents of the zip file to a new folder
-        unzip_folder = os.path.join(download_folder, f"{data_source}_export_unzipped")
+        print(f"📦 Extracting {os.path.basename(zip_file_path)}...")
         with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
             zip_ref.extractall(unzip_folder)
         os.remove(zip_file_path)
@@ -45,20 +52,21 @@ def find_unzip_folder(data_source, zip_file_path=None):
 def clean_rename_move_folder(export_folder, download_folder, folder_name, new_folder_name):
     """Removes the folder from Download, renames them and sends them within this directory"""
     folder_path = os.path.join(download_folder, folder_name)
+    export_folder_path = os.path.join(export_folder, new_folder_name)
+
     if not os.path.exists(folder_path):
         print(f"Folder {folder_path} does not exist in Downloads")
         return False
 
-    old_export_folder = os.path.join(export_folder, new_folder_name)
-    if os.path.exists(old_export_folder):
-        shutil.rmtree(old_export_folder)
+    # Remove old export folder if it exists
+    if os.path.exists(export_folder_path):
+        shutil.rmtree(export_folder_path)
 
     downloaded_folder_path = os.path.join(download_folder, folder_name)
     # Rename the downloaded folder
     renamed_folder_path = os.path.join(download_folder, new_folder_name)
     os.rename(downloaded_folder_path, renamed_folder_path)
     # Move the renamed folder to the export folder
-    export_folder_path = os.path.join(export_folder, new_folder_name)
     shutil.move(renamed_folder_path, export_folder_path)
     return True
 

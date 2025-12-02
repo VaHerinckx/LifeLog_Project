@@ -558,13 +558,21 @@ def process_fit_file_data():
     try:
         print("📊 Processing FIT file data (stress, respiration, body battery, HRV)...")
 
-        # Extract ZIP file if it exists
-        zip_file_path = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_0-_Part1.zip"
-        if os.path.exists(zip_file_path):
-            print("📦 Extracting FIT files from ZIP...")
-            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-                zip_ref.extractall("files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files/FitFiles")
-            os.remove(zip_file_path)
+        # Extract ALL ZIP files in the uploaded files folder
+        uploaded_files_folder = "files/exports/garmin_exports/DI_CONNECT/DI-Connect-Uploaded-Files"
+        fit_files_folder = os.path.join(uploaded_files_folder, "FitFiles")
+
+        if os.path.exists(uploaded_files_folder):
+            zip_files = [f for f in os.listdir(uploaded_files_folder) if f.endswith('.zip')]
+            if zip_files:
+                print(f"📦 Found {len(zip_files)} ZIP file(s) to extract...")
+                for zip_filename in zip_files:
+                    zip_file_path = os.path.join(uploaded_files_folder, zip_filename)
+                    print(f"   Extracting {zip_filename}...")
+                    with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+                        zip_ref.extractall(fit_files_folder)
+                    os.remove(zip_file_path)
+                print(f"✅ Extracted all ZIP files")
 
         fit_files = extract_fit_files_path()
         if not fit_files:
@@ -785,7 +793,7 @@ def download_garmin_data():
     """
     print("⌚ Starting Garmin data download...")
 
-    urls = ['https://connect.garmin.com/modern/settings/dataExport']
+    urls = ['https://www.garmin.com/fr-BE/account/datamanagement/exportdata']
     open_web_urls(urls)
 
     print("📝 Instructions:")
@@ -823,6 +831,9 @@ def move_garmin_files():
 
     if move_success:
         print("✅ Successfully moved Garmin files to exports folder")
+        # Clear FIT files dictionary to force reprocessing of all files
+        print("🔄 Clearing FIT files dictionary for fresh processing...")
+        save_fit_files_dictionary({})
     else:
         print("❌ Failed to move Garmin files")
 
