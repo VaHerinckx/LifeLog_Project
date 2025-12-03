@@ -3,15 +3,268 @@ import numpy as np
 import os
 import json
 import time
+import requests
 from pathlib import Path
 from datetime import datetime
 
 # Import the pipeline functions from source processors
-from src.sources_processing.goodreads.goodreads_processing import full_goodreads_pipeline, download_goodreads_data, move_goodreads_files
+from src.sources_processing.goodreads.goodreads_processing import full_goodreads_pipeline, download_goodreads_data, move_goodreads_files, clean_isbn
 from src.sources_processing.kindle.kindle_processing import full_kindle_pipeline, download_kindle_data, move_kindle_files
 from src.utils.drive_operations import upload_multiple_files, verify_drive_connection
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
+
+# Book enrichment constants
+ENRICHMENT_CACHE_PATH = 'files/work_files/book_enrichment_cache.json'
+GOOGLE_BOOKS_API = 'https://www.googleapis.com/books/v1/volumes'
+OPEN_LIBRARY_AUTHOR_API = 'https://openlibrary.org/search/authors.json'
+OPEN_LIBRARY_AUTHOR_PHOTO_URL = 'https://covers.openlibrary.org/a/olid/{}-L.jpg'
+API_DELAY_SECONDS = 1.0
+
+
+def load_enrichment_cache():
+    """Load the book enrichment cache from disk."""
+    if not os.path.exists(ENRICHMENT_CACHE_PATH):
+        return {}
+    try:
+        with open(ENRICHMENT_CACHE_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, Exception) as e:
+        print(f"⚠️  Warning: Could not load enrichment cache: {e}")
+        return {}
+
+
+def save_enrichment_cache(cache):
+    """Save the book enrichment cache to disk."""
+    os.makedirs(os.path.dirname(ENRICHMENT_CACHE_PATH), exist_ok=True)
+    try:
+        with open(ENRICHMENT_CACHE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(cache, f, indent=2, ensure_ascii=False, default=str)
+    except Exception as e:
+        print(f"❌ Error saving enrichment cache: {e}")
+
+
+def fetch_google_books_synopsis(identifier, search_type='isbn'):
+    """Fetch book synopsis from Google Books API."""
+    try:
+        if search_type in ('isbn', 'isbn10'):
+            query = f'isbn:{identifier}'
+        else:
+            query = identifier
+
+        params = {'q': query, 'maxResults': 1}
+        response = requests.get(GOOGLE_BOOKS_API, params=params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        if data.get('totalItems', 0) == 0:
+            return None
+
+        items = data.get('items', [])
+        if not items:
+            return None
+
+        return items[0].get('volumeInfo', {}).get('description')
+
+    except requests.RequestException as e:
+        print(f"⚠️  Google Books API error: {e}")
+        return None
+    except Exception as e:
+        print(f"⚠️  Error fetching Google Books data: {e}")
+        return None
+
+
+def fetch_open_library_author_photo(author_name):
+    """Fetch author photo URL from Open Library API."""
+    if not author_name:
+        return None
+
+    try:
+        # Step 1: Search for author
+        params = {'q': author_name}
+        response = requests.get(OPEN_LIBRARY_AUTHOR_API, params=params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        docs = data.get('docs', [])
+        if not docs:
+            return None
+
+        author_key = docs[0].get('key')
+        if not author_key:
+            return None
+
+        olid = author_key.split('/')[-1] if '/' in author_key else author_key
+
+        # Step 2: Fetch full author record to check if they have photos
+        author_url = f'https://openlibrary.org/authors/{olid}.json'
+        author_response = requests.get(author_url, timeout=10)
+        author_response.raise_for_status()
+
+        author_data = author_response.json()
+        photos = author_data.get('photos', [])
+
+        # Only return URL if author has actual photos listed
+        if not photos:
+            return None
+
+        # Use the first photo ID to construct the URL (more reliable than OLID)
+        photo_id = photos[0]
+        if photo_id and photo_id > 0:  # Valid photo IDs are positive integers
+            return f'https://covers.openlibrary.org/a/id/{photo_id}-L.jpg'
+
+        return None
+
+    except requests.RequestException as e:
+        print(f"⚠️  Open Library API error for '{author_name}': {e}")
+        return None
+    except Exception as e:
+        print(f"⚠️  Error fetching author photo: {e}")
+        return None
+
+
+def enrich_book(isbn13=None, isbn10=None, title=None, author=None, cache=None):
+    """Enrich a book with synopsis and author photo."""
+    cache_key = isbn13 or isbn10 or f"{title}|{author}"
+
+    if cache is None:
+        cache = load_enrichment_cache()
+
+    if cache_key in cache:
+        cached = cache[cache_key]
+        return {
+            'synopsis': cached.get('synopsis'),
+            'author_photo_url': cached.get('author_photo_url'),
+            'from_cache': True
+        }
+
+    synopsis = None
+    source = None
+
+    if isbn13:
+        synopsis = fetch_google_books_synopsis(isbn13, search_type='isbn')
+        if synopsis:
+            source = 'isbn13'
+
+    if not synopsis and isbn10:
+        time.sleep(API_DELAY_SECONDS)
+        synopsis = fetch_google_books_synopsis(isbn10, search_type='isbn10')
+        if synopsis:
+            source = 'isbn10'
+
+    if not synopsis and title and author:
+        time.sleep(API_DELAY_SECONDS)
+        fuzzy_query = f'intitle:{title} inauthor:{author}'
+        synopsis = fetch_google_books_synopsis(fuzzy_query, search_type='fuzzy')
+        if synopsis:
+            source = 'fuzzy'
+            print(f"   📖 Used fuzzy match for '{title}' by {author}")
+
+    time.sleep(API_DELAY_SECONDS)
+    author_photo_url = fetch_open_library_author_photo(author)
+
+    result = {
+        'synopsis': synopsis,
+        'author_photo_url': author_photo_url,
+        'enriched_at': datetime.now().isoformat(),
+        'source': source
+    }
+
+    cache[cache_key] = result
+    save_enrichment_cache(cache)
+
+    return {
+        'synopsis': synopsis,
+        'author_photo_url': author_photo_url,
+        'from_cache': False
+    }
+
+
+def enrich_books_dataframe(df, isbn13_col='isbn13', isbn10_col='isbn', title_col='title', author_col='author'):
+    """Enrich a DataFrame of books with synopsis and author photos."""
+    print("📚 Enriching books with API data...")
+
+    cache = load_enrichment_cache()
+    initial_cache_size = len(cache)
+
+    if 'book_id' in df.columns:
+        unique_books = df.drop_duplicates(subset=['book_id']).copy()
+    elif 'Book Id' in df.columns:
+        unique_books = df.drop_duplicates(subset=['Book Id']).copy()
+    else:
+        unique_books = df.drop_duplicates(subset=[title_col, author_col]).copy()
+
+    print(f"   📖 Processing {len(unique_books)} unique books...")
+
+    enriched_count = 0
+    cached_count = 0
+    failed_count = 0
+
+    synopsis_results = {}
+    author_photo_results = {}
+
+    for idx, row in unique_books.iterrows():
+        isbn13 = clean_isbn(row.get(isbn13_col)) if isbn13_col in row.index else None
+        isbn10 = clean_isbn(row.get(isbn10_col)) if isbn10_col in row.index else None
+        title = row.get(title_col)
+        author = row.get(author_col)
+
+        if 'book_id' in row.index:
+            book_key = row['book_id']
+        elif 'Book Id' in row.index:
+            book_key = row['Book Id']
+        else:
+            book_key = f"{title}|{author}"
+
+        result = enrich_book(isbn13=isbn13, isbn10=isbn10, title=title, author=author, cache=cache)
+
+        synopsis_results[book_key] = result['synopsis']
+        author_photo_results[book_key] = result['author_photo_url']
+
+        if result.get('from_cache'):
+            cached_count += 1
+        elif result['synopsis'] or result['author_photo_url']:
+            enriched_count += 1
+        else:
+            failed_count += 1
+
+        processed = cached_count + enriched_count + failed_count
+        if processed % 10 == 0:
+            print(f"   ⏳ Processed {processed}/{len(unique_books)} books...")
+
+    df = df.copy()
+
+    def get_synopsis(row):
+        if 'book_id' in row.index:
+            return synopsis_results.get(row['book_id'])
+        elif 'Book Id' in row.index:
+            return synopsis_results.get(row['Book Id'])
+        else:
+            return synopsis_results.get(f"{row.get(title_col)}|{row.get(author_col)}")
+
+    def get_author_photo(row):
+        if 'book_id' in row.index:
+            return author_photo_results.get(row['book_id'])
+        elif 'Book Id' in row.index:
+            return author_photo_results.get(row['Book Id'])
+        else:
+            return author_photo_results.get(f"{row.get(title_col)}|{row.get(author_col)}")
+
+    df['synopsis'] = df.apply(get_synopsis, axis=1)
+    df['author_photo_url'] = df.apply(get_author_photo, axis=1)
+
+    new_cache_entries = len(cache) - initial_cache_size
+    synopsis_found = df['synopsis'].notna().sum()
+    photos_found = df['author_photo_url'].notna().sum()
+
+    print(f"\n✅ Book enrichment complete:")
+    print(f"   📖 Synopsis found: {synopsis_found}/{len(unique_books)} books")
+    print(f"   📷 Author photos found: {photos_found}/{len(unique_books)} books")
+    print(f"   💾 From cache: {cached_count} | New API calls: {enriched_count} | No data: {failed_count}")
+    if new_cache_entries > 0:
+        print(f"   📝 Added {new_cache_entries} new entries to cache")
+
+    return df
 
 
 def check_prerequisite_files():
@@ -401,10 +654,10 @@ def create_books_file():
         # Enhance Kindle data with Goodreads metadata
         print("\n🔗 Enhancing Kindle data with Goodreads metadata...")
 
-        # Prepare Goodreads metadata for merging (including cover_url)
+        # Prepare Goodreads metadata for merging (including cover_url and ISBN)
         gr_metadata_columns = ['Book Id', 'Title', 'Author', 'Original Publication Year',
                               'My Rating', 'Average Rating', 'Genre', 'Fiction_yn',
-                              'Number of Pages', 'reading_duration', 'cover_url']
+                              'Number of Pages', 'reading_duration', 'cover_url', 'isbn', 'isbn13']
 
         # Keep only existing columns
         existing_gr_columns = [col for col in gr_metadata_columns if col in df_gr.columns]
@@ -502,6 +755,19 @@ def create_books_file():
 
         # Calculate reading duration per book
         final_df = calculate_reading_duration_per_book(final_df)
+
+        # Enrich books with API data (synopsis and author photos)
+        print("\n🌐 Enriching books with external API data...")
+        try:
+            final_df = enrich_books_dataframe(
+                final_df,
+                isbn13_col='isbn13',
+                isbn10_col='isbn',
+                title_col='Title',
+                author_col='Author'
+            )
+        except Exception as e:
+            print(f"⚠️  Book enrichment failed (continuing without enrichment): {e}")
 
         # Sort by timestamp (most recent first)
         final_df = final_df.sort_values('Timestamp', ascending=False)
@@ -644,10 +910,13 @@ def generate_reading_website_page_files(df):
             'book_id', 'title', 'author', 'original_publication_year',
             'my_rating', 'average_rating', 'genre', 'fiction_yn',
             'number_of_pages', 'pages_per_day', 'reading_duration_final', 'cover_url',
+            'synopsis', 'author_photo_url',
             'reading_format', 'timestamp', 'reading_year', 'reading_month', 'reading_quarter'
         ]
 
-        books_df = books_df[books_columns].copy()
+        # Only include columns that exist (synopsis/author_photo_url may not exist if enrichment failed)
+        existing_books_columns = [col for col in books_columns if col in books_df.columns]
+        books_df = books_df[existing_books_columns].copy()
 
         # Enforce snake_case before saving
         books_df = enforce_snake_case(books_df, "reading_page_books")

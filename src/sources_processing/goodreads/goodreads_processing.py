@@ -17,6 +17,45 @@ from src.utils.utils_functions import record_successful_run
 fiction_genres = ['drama', 'horror', 'thriller', 'classics', 'science-fiction']
 
 
+def clean_isbn(isbn_value):
+    """
+    Clean ISBN value from Excel format quirks in Goodreads export.
+
+    Args:
+        isbn_value: Raw ISBN value (may be like '="9780747582977"')
+
+    Returns:
+        str: Cleaned ISBN or None if invalid
+    """
+    if isbn_value is None or (isinstance(isbn_value, float) and pd.isna(isbn_value)):
+        return None
+
+    if not isbn_value:
+        return None
+
+    # Convert to string
+    isbn_str = str(isbn_value).strip()
+
+    # Remove Excel formatting: ="isbn" or ='isbn'
+    if isbn_str.startswith('="') and isbn_str.endswith('"'):
+        isbn_str = isbn_str[2:-1]
+    elif isbn_str.startswith("='") and isbn_str.endswith("'"):
+        isbn_str = isbn_str[2:-1]
+    elif isbn_str.startswith('='):
+        isbn_str = isbn_str[1:]
+
+    # Remove any remaining quotes
+    isbn_str = isbn_str.strip('"\'')
+
+    # Validate: should be 10 or 13 digits (allowing for X in ISBN-10)
+    cleaned = isbn_str.replace('-', '').replace(' ', '')
+    if len(cleaned) == 10 or len(cleaned) == 13:
+        if cleaned[:-1].isdigit() and (cleaned[-1].isdigit() or cleaned[-1].upper() == 'X'):
+            return cleaned
+
+    return None
+
+
 def load_reading_dates_json():
     """Load reading dates from JSON file"""
     json_path = 'files/work_files/gr_work_files/reading_dates.json'
@@ -582,6 +621,10 @@ def create_goodreads_file():
         for _, book in read_books.iterrows():
             book_id = str(book['Book Id'])
 
+            # Clean ISBN values from Excel format quirks
+            isbn10 = clean_isbn(book.get('ISBN', ''))
+            isbn13 = clean_isbn(book.get('ISBN13', ''))
+
             if book_id in books_with_dates:
                 # Add date information to book data
                 date_info = books_with_dates[book_id]
@@ -590,6 +633,15 @@ def create_goodreads_file():
                 book_with_dates['Date started'] = pd.to_datetime(date_info.get('date_started'), errors='coerce')
                 book_with_dates['Date ended'] = pd.to_datetime(date_info.get('date_ended'), errors='coerce')
                 book_with_dates['cover_url'] = date_info.get('cover_url', '')
+                book_with_dates['isbn'] = isbn10
+                book_with_dates['isbn13'] = isbn13
+
+                # Update JSON cache with ISBN if not already present
+                if isbn10 or isbn13:
+                    if 'isbn' not in dates_data.get(book_id, {}) or not dates_data[book_id].get('isbn'):
+                        dates_data[book_id] = dates_data.get(book_id, {})
+                        dates_data[book_id]['isbn'] = isbn10
+                        dates_data[book_id]['isbn13'] = isbn13
 
                 processed_books.append(book_with_dates)
             else:
@@ -598,6 +650,8 @@ def create_goodreads_file():
                 book_without_dates['Date started'] = pd.NaT
                 book_without_dates['Date ended'] = pd.NaT
                 book_without_dates['cover_url'] = ''
+                book_without_dates['isbn'] = isbn10
+                book_without_dates['isbn13'] = isbn13
 
                 processed_books.append(book_without_dates)
 
@@ -610,10 +664,13 @@ def create_goodreads_file():
             lambda x: "fiction" if str(x).lower() in fiction_genres else "non-fiction"
         )
 
+        # Save updated JSON with ISBN data
+        save_reading_dates_json(dates_data)
+
         # Prepare for expansion
         base_columns = ['Book Id', 'Title', 'Author', 'Original Publication Year', 'My Rating',
                        'Average Rating', 'Bookshelves', 'Fiction_yn', 'reading_duration',
-                       'Number of Pages', 'Date started', 'Date ended', 'cover_url']
+                       'Number of Pages', 'Date started', 'Date ended', 'cover_url', 'isbn', 'isbn13']
 
         # Only keep existing columns
         existing_columns = [col for col in base_columns if col in df_with_dates.columns]
