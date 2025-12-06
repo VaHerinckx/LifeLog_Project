@@ -4,6 +4,11 @@ from src.utils.drive_operations import upload_multiple_files, verify_drive_conne
 from src.utils.utils_functions import record_successful_run, enforce_snake_case
 from src.sources_processing.nutrilio.nutrilio_processing import full_nutrilio_pipeline
 from src.topic_processing.website_maintenance.website_maintenance_processing import full_website_maintenance_pipeline
+from src.topic_processing.nutrition.food_category_mapping import (
+    get_food_category,
+    get_drink_category,
+    analyze_unmapped_items
+)
 
 
 # ============================================================================
@@ -217,6 +222,27 @@ def generate_nutrition_website_file(df):
         print(f"🔄 Exploding food and drinks into individual rows...")
         df_web = explode_food_and_drinks(df_web)
         print(f"📊 Exploded to {len(df_web)} rows (from individual ingredients/drinks)")
+
+        # Add food and drink categories
+        print(f"🏷️  Adding food and drink categories...")
+        df_web['food_category'] = df_web['food'].apply(get_food_category)
+        df_web['drink_category'] = df_web['drink'].apply(get_drink_category)
+
+        # Reorder columns to place categories next to their items
+        cols = df_web.columns.tolist()
+        # Find positions and reorder
+        if 'food' in cols and 'food_category' in cols:
+            food_idx = cols.index('food')
+            cols.remove('food_category')
+            cols.insert(food_idx + 1, 'food_category')
+        if 'drink' in cols and 'drink_category' in cols:
+            drink_idx = cols.index('drink')
+            cols.remove('drink_category')
+            cols.insert(drink_idx + 1, 'drink_category')
+        df_web = df_web[cols]
+
+        # Analyze unmapped items (shows LLM prompt if any items need categorization)
+        analyze_unmapped_items(df_web, top_n=50)
 
         # Enforce snake_case before saving
         df_web = enforce_snake_case(df_web, "nutrition_page_data")
