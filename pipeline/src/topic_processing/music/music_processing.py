@@ -445,6 +445,7 @@ def generate_music_website_files(df):
         # listening_seconds = (completion * track_duration_ms) / 1000
         df_web['listening_seconds'] = (df_web['completion'] * df_web['track_duration']) / 1000
         df_web['listening_seconds'] = df_web['listening_seconds'].fillna(0).astype(int)
+        df_web['listening_minutes'] = df_web['listening_seconds'] / 60
         log.success(f"Added listening_seconds column")
 
         # Combine genres from available genre columns into single 'genres' column
@@ -483,7 +484,8 @@ def generate_music_website_files(df):
             'track_popularity',
             'completion',
             'is_skipped_track',
-            'listening_seconds'
+            'listening_seconds',
+            'listening_minutes'
         ]
 
         # Add discovery flag columns if they exist in the data

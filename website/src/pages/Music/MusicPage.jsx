@@ -376,7 +376,7 @@ const MusicPage = () => {
                 metricOptions={[
                   { value: 'toggle', label: 'Toggles', aggregation: 'count_distinct', field: 'toggle_id', decimals: 0 },
                   { value: 'artists', label: 'Artists', aggregation: 'count_distinct', field: 'artist_name', decimals: 0 },
-                  { value: 'listening time', label: 'Listening time', aggregation: 'sum', field: 'listening_seconds', decimals: 0 },
+                  { value: 'listening time', label: 'Listening time', aggregation: 'sum', field: 'listening_minutes', decimals: 0 },
                 ]}
                 defaultMetric="count"
                 title="Listening Activity Over Time"
@@ -397,7 +397,7 @@ const MusicPage = () => {
                  { value: 'genre', label: 'Genre', field: 'simplified_genre', labelFields: ['genre'] },
                ]}
                metricOptions={[
-                 { value: 'listening time', label: 'Listening Time', aggregation: 'sum', field: 'listening_seconds', suffix: ' seconds', decimals: 0 },
+                 { value: 'listening time', label: 'Listening Time', aggregation: 'sum', field: 'listening_minutes', suffix: ' minutes', decimals: 0 },
                  { value: 'toggles', label: 'Toggles', aggregation: 'count_distinct', field: 'toggle_id', suffix: ' toggles', decimals: 0 },
                ]}
                defaultDimension="genre"

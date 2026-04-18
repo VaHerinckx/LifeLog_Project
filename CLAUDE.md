@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-Guidance for Claude Code when working with this repository.
-
 ## Project Overview
 
 LifeLog Project - Personal data aggregation and visualization system processing data from multiple sources (fitness, reading, music, etc.) into a comprehensive dashboard.
@@ -12,12 +10,14 @@ LifeLog Project - Personal data aggregation and visualization system processing 
 - **Python Pipeline** (`pipeline/`) - Processes raw service exports
 - **React Dashboard** (`website/`) - Frontend visualization
 
+> Single git repo — `pipeline/` and `website/` are plain subdirectories, not submodules. All commits and pushes go through the root repo only.
+
 ## Development Commands
 
 ```bash
 # Python Pipeline
-cd pipeline && pip install -r requirements.txt
-python src/process_exports.py  # Interactive CLI
+pyenv activate general_coding  # activate environment first
+cd pipeline && python src/process_exports.py  # Interactive CLI
 
 # React Website
 cd website && npm install
@@ -41,7 +41,7 @@ npm run build      # Production build
 - Stack: React + Vite, Express proxy, Recharts
 - Backend: `server.js` proxies Google Drive API calls
 - Config: `src/config/config.js` (Drive file IDs)
-- Output format: Pipe-delimited UTF-8 CSV
+- Output format: Pipe-delimited UTF-8 CSV (UTF-16 breaks website parsing)
 
 ## Data Sources Mapping
 
@@ -61,18 +61,25 @@ npm run build      # Production build
 **Website:**
 - Page Structure: `ReadingPage.jsx` (gold standard — all pages must follow this)
 - Filters: `filterConfigs.jsx`
-- Design System: `variables.css`
-- Detailed guide: [docs/website-examples.md](docs/website-examples.md)
+- Design System: `src/styles/variables.css` + `src/styles/tokens/`
+- `docs/website-examples.md` — Component patterns, pagination, AnalysisTab API, new page workflow (6-step integration checklist)
 
 **Python:**
 - Pipeline Pattern: `moneymgr_processing.py` (gold standard)
 - Multi-Source: `books_processing.py`
 - Utils: `utils_functions.py`
-- Detailed guide: [docs/python-examples.md](docs/python-examples.md)
+- `docs/python-examples.md` — Code templates for pipeline pattern, function naming, UTF-8 encoding, timezone correction, status messages, run tracking
 
 **Integration:**
-- Adding data sources / testing checklist: [docs/data-integration.md](docs/data-integration.md)
-- Compliance improvements (200+ items): [docs/python_processing_compliance_checklist.txt](docs/python_processing_compliance_checklist.txt)
+- `docs/data-integration.md` — 3-step new data source setup (.env → config.js → DataContext), data sources→pages mapping (incl. unimplemented sources), impact testing checklist
+- `docs/python_processing_compliance_checklist.txt` — 200+ compliance items
+
+## Deployment
+
+**Website** is hosted on Render (static site + Express backend).
+- Render "Root Directory" must be set to `website/` (not the repo root)
+- Build command: `npm run build` | Publish directory: `dist`
+- If the `website/` directory is ever renamed, update Render's Root Directory setting
 
 ## Component-Specific Standards
 

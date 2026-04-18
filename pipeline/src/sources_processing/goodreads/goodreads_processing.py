@@ -395,7 +395,7 @@ def scrape_missing_reading_dates(books_needing_dates):
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--user-data-dir=/Users/valen/chrome_goodreads_profile")
 
-    driver = uc.Chrome(options=chrome_options, version_main=144)
+    driver = uc.Chrome(options=chrome_options, version_main=147)
     scraped_data = {}
 
     try:

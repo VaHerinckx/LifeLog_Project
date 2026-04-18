@@ -50,7 +50,7 @@
   gap: var(--spacing-sm);
 }
 
-.chart-filter label {
+.time-series-chart-container .chart-filter label {
   color: var(--color-text-primary);
   font-weight: var(--font-weight-medium);
   width: auto;
@@ -260,7 +260,7 @@
     gap: var(--spacing-xs);
   }
 
-  .chart-filter label {
+  .time-series-chart-container .chart-filter label {
     font-size: var(--font-size-xs);
   }
 
