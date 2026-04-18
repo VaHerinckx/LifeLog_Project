@@ -1,0 +1,268 @@
+# NEW PAGE CREATION TEMPLATE
+
+Fill in the sections below. I'll create the complete page following the ReadingPage.jsx gold standard pattern.
+
+================================================================================
+
+## 📋 WHAT I'LL BUILD
+
+Based on your inputs, I will:
+- ✅ Create the main page component (following ReadingPage.jsx structure)
+- ✅ Create [Item]Card.jsx component (similar to BookCard.jsx) with grid/list views
+- ✅ Create [Item]Details.jsx modal component (similar to BookDetails.jsx)
+- ✅ Add data source configuration to config.js and DataContext.jsx
+- ✅ Add environment variables to .env
+- ✅ Create CSS files using the design system from variables.css
+- ✅ Select appropriate lucide-react icons
+- ✅ Write all labels, descriptions, and helper text
+
+⚠️ ADDITIONAL INSTRUCTIONS (optional):
+
+Any special requirements or customizations?
+(e.g., "Display ratings as stars", "Color-code by category", "Show progress bars")
+
+_________________________________________________________________________
+_________________________________________________________________________
+_________________________________________________________________________
+
+================================================================================
+
+## 1️⃣ DATA SOURCE
+
+⚠️ Google Drive File URL(s):
+
+Primary file: _________________________________
+
+Secondary file (optional): _________________________________
+
+
+⚠️ DataContext fetch name(s):
+
+Primary: _________________ (e.g., 'movies', 'workouts')
+
+Secondary: _________________ (if multi-source, e.g., 'moviesSessions')
+
+================================================================================
+
+## 2️⃣ PAGE INFO
+
+⚠️ PAGE TITLE: _________________________________
+
+⚠️ PAGE DESCRIPTION: _________________________________
+
+⚠️ CONTENT TAB NAME: _________________ (e.g., "Movies", "Workouts")
+
+⚠️ ITEM NAME: _________________ (singular, e.g., "movie", "workout")
+
+================================================================================
+
+## 3️⃣ FILTERS
+
+⚠️ Copy this block for each filter you want:
+
+<Filter
+  type="_______"           // multiselect | singleselect | daterange
+  label="_______"          // Display name
+  field="_______"          // Exact CSV column name
+  placeholder="_______"    // (optional) Placeholder text
+  dataSources={['_______']} // Which data source(s) - use exact fetch names from #1
+  options={['_______']}    // Only for singleselect (include 'all' as first option)
+/>
+
+--------------------------------------------------------------------------------
+
+Filter Types:
+- multiselect - Multiple checkboxes, auto-populated from data
+- singleselect - Radio buttons, requires static options array
+- daterange - Date range picker for timestamp fields
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+<Filter
+  type="multiselect"
+  label="Genres"
+  field="genre"
+  placeholder="Select genres"
+  dataSources={['readingBooks', 'readingSessions']}
+/>
+
+<Filter
+  type="singleselect"
+  label="Fiction/Non-Fiction"
+  field="fiction_yn"
+  defaultValue="all"
+  dataSources={['readingBooks']}
+  options={['all', 'Fiction', 'Non-Fiction']}
+/>
+
+================================================================================
+
+## 4️⃣ KPI CARDS
+
+⚠️ Copy this block for each statistic card:
+
+<KpiCard
+  dataSource="_______"              // Which data source (from #1)
+  field="_______"                   // CSV column name (omit for 'count')
+  computation="_______"             // count | sum | average | median | min | max
+  computationOptions={{ decimals: _, filterZeros: true }}  // (optional)
+  label="_______"                   // Display text with unit if needed
+/>
+
+--------------------------------------------------------------------------------
+
+Computation Types:
+- count - Count items (no field needed)
+- sum - Sum numeric values
+- average - Mean (use filterZeros: true to exclude zeros)
+- median, min, max - Self-explanatory
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+<KpiCard
+  dataSource="readingBooks"
+  computation="count"
+  label="Books Read"
+/>
+
+<KpiCard
+  dataSource="readingBooks"
+  field="my_rating"
+  computation="average"
+  computationOptions={{ decimals: 1, filterZeros: true }}
+  label="Average Rating"
+/>
+
+================================================================================
+
+## 5️⃣ CARD DISPLAY
+
+⚠️ What should appear on each card (grid/list views):
+
+Image URL field: _________________ (or "none")
+
+Title field: _________________
+
+Subtitle field: _________________
+
+Metadata (3-5 small details): _________________, _________________, _________________
+
+Date field: _________________
+
+Tags/category fields: _________________
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+Image: cover_image_url
+Title: title
+Subtitle: author
+Metadata: my_rating, original_publication_year, number_of_pages, reading_duration_final
+Date field: timestamp
+Tags: fiction_yn, genre
+
+================================================================================
+
+## 6️⃣ DETAIL MODAL
+
+⚠️ What should appear in the modal when a card is clicked:
+
+Main info sections (group related fields):
+
+- Section 1 name: _________________
+  Fields: _________________, _________________, _________________
+
+- Section 2 name: _________________
+  Fields: _________________, _________________, _________________
+
+Ratings/scores (if any): _________________
+
+Categories/tags: _________________
+
+Description/notes field: _________________ (or "none")
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+- Basic Info: original_publication_year, number_of_pages, reading_duration_final
+- Ratings: my_rating, average_rating
+Categories: fiction_yn, genre
+Description: none
+
+================================================================================
+
+## 7️⃣ ANALYSIS CHARTS
+
+⚠️ Copy this block for each chart:
+
+<[ChartType]
+  data={filtered_______}            // Usually secondary data source
+  dateColumnName="_______"          // Timestamp column name
+  metricColumnName="_______"        // OR valueColumnName for value to aggregate
+  title="_______"                   // Chart title
+  yAxisLabel="_______"              // (for bar/line charts) Unit label
+  [specificProp]="_______"          // Chart-specific options
+/>
+
+--------------------------------------------------------------------------------
+
+Available Chart Types:
+- TimeSeriesBarChart - Trends over time (daily/weekly/monthly auto-aggregation)
+- IntensityHeatmap - Day × hour activity heatmap (prop: treatMidnightAsUnknown: true/false)
+- TopChart - Top N items bar chart
+- TreemapChart - Hierarchical categories
+- PieChart - Distribution pie chart
+- ScatterPlot - Two-variable correlation
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+<TimeSeriesBarChart
+  data={filteredReadingEntries}
+  dateColumnName="timestamp"
+  metricColumnName="page_split"
+  title="Total Pages Read by Period"
+  yAxisLabel="Pages"
+/>
+
+<IntensityHeatmap
+  data={filteredReadingEntries}
+  dateColumnName="timestamp"
+  valueColumnName="page_split"
+  title="Reading Activity by Day and Time"
+  treatMidnightAsUnknown={true}
+/>
+
+================================================================================
+
+## 8️⃣ UNIQUE IDENTIFIER
+
+⚠️ What uniquely identifies each item in your data?
+
+Unique ID: _________________
+(e.g., "id", "movie_id", "combination of timestamp + title", "not sure - figure it out")
+
+This is used for React keys. If unsure, I'll determine it from the CSV structure.
+
+================================================================================
+
+## ✅ SUBMISSION
+
+Once you fill this out and send it to me, I will:
+1. Extract Google Drive file IDs from URLs
+2. Build all components following the ReadingPage.jsx pattern
+3. Implement responsive grid/list views
+4. Add all filtering and statistics
+5. Create analysis charts
+6. Style everything using the design system
+
+We'll fix any issues during testing - no need to be perfect!
+
+================================================================================

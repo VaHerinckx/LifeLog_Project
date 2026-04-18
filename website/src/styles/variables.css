@@ -1,0 +1,32 @@
+/* ===== LIFELOG DESIGN SYSTEM VARIABLES ===== */
+/* This file re-exports all design tokens for backward compatibility */
+/* All new imports should use ./tokens/index.css directly */
+
+/* Import the complete design token system */
+@import './tokens/index.css';
+
+/* ===== HOW TO CHANGE THE WEBSITE THEME ===== */
+/*
+To change the entire website color scheme:
+1. Open ./tokens/colors.base.css
+2. Update the base color values (21 foundation colors)
+3. All semantic colors throughout the site will automatically update
+
+Example theme changes:
+
+CURRENT THEME (Purple):
+--base-color-primary: #3423A6
+--base-color-accent: #FB4B4E
+
+ANTWARP BLUE THEME:
+--base-color-primary: #0066A3
+--base-color-primary-dark: #004d7a
+--base-color-primary-light: #cce5f0
+
+BENZOL GREEN THEME:
+--base-color-primary: #001288
+--base-color-primary-dark: #000b5c
+--base-color-primary-light: #ccd0e8
+
+For more details, see documentation in ./tokens/colors.base.css
+*/

@@ -1,0 +1,65 @@
+/* CardGroup - Generic container for grid/list/timeline views */
+@import '../../../../styles/variables.css';
+
+/* Wrapper for pagination support */
+.card-group-wrapper {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Base container */
+.card-group {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Virtual scrolling container */
+.virtual-list {
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+/* Grid View Layout */
+.card-group--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+/* List View Layout */
+.card-group--list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Timeline View Layout */
+.card-group--timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xl);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .card-group--grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: var(--spacing-md);
+  }
+
+  .card-group--list {
+    gap: var(--spacing-sm);
+  }
+
+  .card-group--timeline {
+    gap: var(--spacing-lg);
+  }
+}
+
+@media (max-width: 480px) {
+  .card-group--grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--spacing-sm);
+  }
+}

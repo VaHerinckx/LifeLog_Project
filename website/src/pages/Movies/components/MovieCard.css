@@ -1,0 +1,356 @@
+/* MovieCard Component Styles */
+@import '../../../styles/variables.css';
+
+/* Base Card Styles (common to both grid and list) */
+.movie-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+  cursor: pointer;
+}
+
+.movie-card:hover {
+  transform: translateY(calc(-1 * var(--spacing-xs)));
+  box-shadow: var(--shadow-lg);
+}
+
+/* Grid View - Vertical Layout */
+.movie-card--grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.movie-card--grid .movie-poster-container {
+  width: 100%;
+  height: var(--card-image-height-tall);
+  overflow: hidden;
+  background-color: var(--color-primary);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) 0;
+}
+
+.movie-card--grid .movie-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: var(--color-primary);
+  transition: transform var(--transition-normal);
+}
+
+.movie-card--grid:hover .movie-poster {
+  transform: scale(1.05);
+}
+
+.movie-card--grid .movie-info {
+  padding: var(--spacing-sm);
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-base);
+}
+
+/* List View - Horizontal Layout */
+.movie-card--list {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-lg);
+}
+
+.movie-card--list:hover {
+  transform: translateY(calc(-1 * var(--spacing-2xs)));
+  box-shadow: var(--shadow-md);
+}
+
+.movie-card--list .movie-poster-container {
+  flex: 0 0 var(--list-image-width);
+  height: var(--card-image-height-list);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+}
+
+.movie-card--list .movie-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.movie-card--list .movie-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Movie Info Section */
+.movie-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.movie-title {
+  color: var(--background-color);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+}
+
+.movie-card--grid .movie-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.movie-card--list .movie-title {
+  font-size: var(--font-size-lg);
+  margin-bottom: 0;
+}
+
+.movie-year {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.movie-card--list .movie-year {
+  font-size: var(--font-size-base);
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Metadata Badges Row */
+.movie-metadata-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+  align-items: center;
+}
+
+.movie-year-badge {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--spacing-xs) / 2);
+  background-color: var(--color-accent-light);
+  color: var(--color-accent);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.certification-badge {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--color-warning);
+  color: var(--color-white);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Director */
+.movie-director {
+  color: var(--color-text-on-surface-secondary);
+  font-size: var(--font-size-sm);
+  margin: 0 0 var(--spacing-xs) 0;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.movie-meta {
+  color: var(--color-text-gray);
+  font-size: var(--font-size-xs);
+  margin-bottom: var(--spacing-xs);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.movie-card--list .movie-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+/* Genre Tags */
+.movie-genre-tags {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.movie-card--list .movie-genre-tags {
+  margin-left: auto;
+  margin-top: 0;
+}
+
+.movie-genre {
+  display: inline-block;
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.movie-card--list .movie-genre {
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.movie-genre-more {
+  display: inline-block;
+  background-color: var(--color-text-gray);
+  color: var(--color-white);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.movie-card--list .movie-genre-more {
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Rewatch Badge */
+.rewatch-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-accent);
+  color: var(--color-white);
+  padding: var(--spacing-2xs);
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.rewatch-badge-overlay {
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
+  background-color: var(--color-accent);
+  color: var(--color-white);
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  z-index: 1;
+}
+
+/* Rating Stars */
+.rating-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: var(--spacing-xs) 0;
+}
+
+.rating-value {
+  margin-left: var(--spacing-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Rating and Date Wrapper (List View) */
+.rating-and-date {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Watch Date */
+.watch-date {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.watch-date-container {
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--text-element);
+}
+
+.date-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.date-value {
+  margin-left: var(--spacing-2xs);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .movie-card--grid .movie-poster-container {
+    height: var(--card-image-height);
+  }
+
+  .movie-card--grid .movie-title {
+    font-size: var(--font-size-sm);
+  }
+
+  .movie-card--grid .movie-year {
+    font-size: var(--font-size-xs);
+  }
+
+  .movie-card--list {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .movie-card--list .movie-poster-container {
+    width: 100%;
+    height: var(--card-image-height-mobile);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .movie-card--list .movie-info {
+    width: 100%;
+  }
+
+  .movie-card--list .movie-genre-tags {
+    margin-left: 0;
+    margin-top: var(--spacing-sm);
+  }
+
+  .movie-genre {
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-2xs) var(--spacing-2xs);
+  }
+
+  .rewatch-badge-overlay {
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-2xs) var(--spacing-xs);
+  }
+}

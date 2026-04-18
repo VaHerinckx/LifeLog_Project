@@ -1,0 +1,62 @@
+/* ===== BASE COLOR PALETTE ===== */
+/* Foundation colors - change these to reskin the entire application */
+/* All semantic color names (color-primary, color-accent, etc.) reference these base colors */
+
+:root {
+  /* ===== PRIMARY PURPLE PALETTE ===== */
+  /* Main brand purple used throughout the application */
+  --base-color-primary: #3423A6;        /* Main brand purple */
+  --base-color-primary-dark: #2A1C85;   /* Darker purple for text/emphasis */
+  --base-color-primary-light: #D8DCFF;  /* Light purple/lavender for surfaces */
+  --base-color-primary-purple: #6D62C4; /* Medium purple for tags/badges */
+
+  /* ===== ACCENT RED PALETTE ===== */
+  /* Accent colors for highlights and important elements */
+  --base-color-accent: #FB4B4E;         /* Primary accent red */
+  --base-color-accent-dark: #DC2626;    /* Darker red for emphasis */
+
+  /* ===== BACKGROUND PALETTE ===== */
+  /* Dark backgrounds for the main application theme */
+  --base-color-background-dark: #171738;  /* Primary dark background */
+  --base-color-background-darker: #210F04; /* Darker background for contrast */
+
+  /* ===== NEUTRAL PALETTE ===== */
+  /* Grays and neutrals for text, borders, and subtle elements */
+  --base-color-white: #ffffff;
+  --base-color-gray-light: #cccccc;     /* Light gray for borders */
+  --base-color-gray-medium: #9CA3AF;    /* Medium gray for muted text */
+  --base-color-gray-dark: #555555;      /* Dark gray for secondary text */
+
+  /* ===== STATUS COLORS ===== */
+  /* Semantic colors for success, warning, error, and info states */
+  --base-color-success: #10B981;        /* Green for success/positive */
+  --base-color-warning: #F59E0B;        /* Orange for warnings */
+  --base-color-error: #EF4444;          /* Red for errors */
+  --base-color-info: #3B82F6;           /* Blue for informational */
+
+  /* ===== SPECIAL PURPOSE COLORS ===== */
+  /* Colors for specific UI elements */
+  --base-color-rating: #EAC435;         /* Yellow/gold for rating stars */
+
+  /* ===== TIMELINE CHART COLORS ===== */
+  /* Distinct colors for timeline visualizations */
+  --base-color-timeline-1: #3B82F6;     /* Blue */
+  --base-color-timeline-2: #14B8A6;     /* Teal */
+  --base-color-timeline-3: #F97316;     /* Orange */
+  --base-color-timeline-4: #A78BFA;     /* Lavender */
+  --base-color-timeline-5: #10B981;     /* Green */
+}
+
+/* ===== COLOR PALETTE REFERENCE ===== */
+/*
+To change the entire website color scheme, update the base colors above:
+
+PURPLE THEME (Current):
+- Primary: #3423A6 (Royal Purple)
+- Accent: #FB4B4E (Coral Red)
+
+
+
+All semantic color variables (defined in colors.semantic.css) will
+automatically update to reflect your base color changes.
+*/

@@ -1,0 +1,321 @@
+/* Import design system variables */
+@import '../../../styles/variables.css';
+
+/* src/components/charts/TimeSeriesBarChart/TimeSeriesBarChart.css */
+.time-series-chart-container {
+  background-color: var(--chart-background);
+  border-radius: var(--chart-border-radius);
+  padding: var(--chart-padding);
+  box-shadow: var(--chart-shadow);
+  color: var(--color-text-primary);
+  width: 100%;
+  height: 100%;  /* Fill parent analysis-chart-section */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;  /* Prevent any overflow */
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: 0 0 auto;  /* Don't shrink, size to content */
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Responsive chart height - ensures ResponsiveContainer has proper sizing */
+.time-series-chart-container .recharts-responsive-container {
+  height: var(--chart-content-height-ratio) !important;  /* 80% from variables */
+  flex-shrink: 0;  /* Never shrink */
+}
+
+.time-series-chart__title {
+  color: var(--chart-title-color);
+  font-size: var(--chart-title-size);
+  font-weight: var(--chart-title-weight);
+  margin: 0;
+}
+
+/* Container for multiple filter controls */
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.chart-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.chart-filter label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  width: auto;
+  white-space: nowrap;
+}
+
+/* Chart Type Toggle Buttons */
+.chart-type-toggle {
+  display: flex;
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.chart-type-toggle .toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--color-surface-elevated);
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-primary);
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.chart-type-toggle .toggle-btn:first-child {
+  border-right: var(--border-width-thin) solid var(--border-color-medium);
+}
+
+.chart-type-toggle .toggle-btn:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.chart-type-toggle .toggle-btn.active {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.chart-filter .filter-select {
+  width: 120px;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  background-color: var(--color-surface-elevated);
+}
+
+/* Chart styling */
+.time-series-chart-container .recharts-cartesian-grid-horizontal line,
+.time-series-chart-container .recharts-cartesian-grid-vertical line {
+  stroke: var(--chart-grid-line, rgba(23, 23, 56, 0.2));
+}
+
+.time-series-chart-container .recharts-text {
+  fill: var(--color-text-primary) !important;
+  font-size: var(--font-size-xs);
+}
+
+.time-series-chart-container .recharts-tooltip-wrapper {
+  background-color: white !important;
+}
+
+.recharts-surface {
+  fill: var(--chart-primary-color);
+}
+
+.time-series-chart-container .recharts-legend-item-text {
+  color: var(--color-text-primary) !important;
+}
+
+/* Define the bar color in CSS instead of inline in JSX */
+.time-series-chart__bar {
+  fill: var(--chart-primary-color);
+}
+
+.no-chart-data {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: var(--card-image-height);
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* ===== CLICKABLE CHART INDICATOR ===== */
+.time-series-chart-container {
+  cursor: pointer;
+  transition: box-shadow var(--transition-fast);
+}
+
+.time-series-chart-container:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Prevent controls from triggering focus mode */
+.time-series-chart-container .chart-controls,
+.time-series-chart-container .chart-filter,
+.time-series-chart-container .chart-type-toggle {
+  cursor: default;
+}
+
+/* ===== FOCUS MODE STYLES ===== */
+.chart-focus-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--overlay-backdrop);
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-lg);
+  backdrop-filter: blur(5px);
+}
+
+.chart-focus-content {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 95vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+/* Close Button - Top Left */
+.focus-close-button {
+  position: absolute;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  background-color: var(--overlay-light);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast);
+  color: var(--color-text-primary);
+}
+
+.focus-close-button:hover {
+  background-color: var(--overlay-light-hover);
+}
+
+/* Controls Bar - Horizontal Layout */
+.focus-controls-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-xl);
+  padding-left: 60px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Chart Container in Focus Mode */
+.focus-chart-container {
+  flex: 1;
+  padding: var(--spacing-lg);
+  padding-top: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.focus-chart-container .recharts-responsive-container {
+  flex: 1;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .time-series-chart-container {
+    padding: var(--spacing-md);
+  }
+
+  .time-series-chart__title {
+    font-size: var(--font-size-base);
+  }
+
+  /* Stack controls vertically on mobile */
+  .chart-controls {
+    flex-direction: column;
+    width: 100%;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+    margin-top: 0;
+  }
+
+  .chart-filter {
+    width: 100%;
+    gap: var(--spacing-xs);
+  }
+
+  .chart-filter label {
+    font-size: var(--font-size-xs);
+  }
+
+  .chart-filter .filter-select {
+    width: 100%;
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  /* Allow chart content to use remaining space */
+  .time-series-chart-container .recharts-responsive-container {
+    height: auto !important;
+    min-height: 180px !important;
+    flex: 1 1 auto;
+  }
+}
+
+/* ===== FOCUS MODE MOBILE STYLES ===== */
+/* Mobile Portrait - Compact layout */
+@media (max-width: 768px) and (orientation: portrait) {
+  .chart-focus-content {
+    width: 98vw;
+    height: 95vh;
+  }
+
+  .focus-controls-bar {
+    flex-wrap: wrap;
+    padding: var(--spacing-sm);
+    padding-left: 50px;
+    gap: var(--spacing-sm);
+  }
+
+  .focus-controls-bar .chart-filter {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+
+  .focus-chart-container {
+    padding: var(--spacing-sm);
+  }
+}
+
+/* Mobile Landscape - Optimized full-width layout */
+@media (max-width: 768px) and (orientation: landscape) {
+  .chart-focus-content {
+    width: 98vw;
+    height: 95vh;
+  }
+
+  .focus-controls-bar {
+    padding: var(--spacing-sm) var(--spacing-md);
+    gap: var(--spacing-md);
+  }
+
+  .focus-chart-container {
+    padding: var(--spacing-sm);
+  }
+}

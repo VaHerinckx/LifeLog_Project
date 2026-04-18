@@ -1,0 +1,101 @@
+/* Import design system */
+/* Using tokens/index.css directly for optimal bundle size */
+@import './styles/tokens/index.css';
+@import './styles/components.css';
+
+:root {
+  font-family: var(--font-primary);
+  line-height: var(--line-height-normal);
+  font-weight: var(--font-weight-normal);
+
+  color-scheme: light dark;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  text-decoration: inherit;
+}
+a:hover {
+  color: var(--color-primary-dark);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-family: var(--font-primary);
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+}
+
+
+h1 {
+  font-size: var(--font-size-4xl);
+  line-height: var(--line-height-tight);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+button {
+  border-radius: var(--radius-md);
+  border: var(--border-width-thin) solid transparent;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  font-family: var(--font-primary);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+button:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-surface-elevated);
+}
+button:focus,
+button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Sticky bottom spacer - creates persistent bottom viewport padding */
+.bottom-spacer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--spacing-2xl);  /* Desktop: 48px */
+  background-color: var(--color-background);
+  pointer-events: none;  /* Allow clicks to pass through */
+  z-index: 50;  /* Above content but below modals */
+}
+
+@media (max-width: 768px) {
+  .bottom-spacer {
+    height: var(--spacing-lg);  /* Mobile: 24px */
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: var(--color-text-primary);
+    background-color: var(--color-background);
+  }
+  a:hover {
+    color: var(--color-primary-dark);
+  }
+  button {
+    background-color: var(--color-surface-elevated);
+  }
+}
+

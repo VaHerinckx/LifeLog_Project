@@ -1,0 +1,327 @@
+/* BarChartRace Component Styles */
+@import '../../../styles/variables.css';
+
+/* ===== MAIN CONTAINER ===== */
+.bar-chart-race-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 500px;
+  background-color: var(--chart-background);
+  border-radius: var(--chart-border-radius);
+  padding: var(--chart-padding);
+  box-shadow: var(--chart-shadow);
+  cursor: pointer;
+  transition: box-shadow var(--transition-fast);
+}
+
+.bar-chart-race-container:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* ===== HEADER ===== */
+.chart-header {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.chart-title {
+  color: var(--chart-title-color);
+  font-size: var(--chart-title-size);
+  font-weight: var(--chart-title-weight);
+  margin: 0;
+}
+
+/* ===== CONTROLS ===== */
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--chart-control-gap);
+  flex-wrap: wrap;
+}
+
+.chart-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.chart-filter label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.filter-select {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  min-width: 100px;
+}
+
+.filter-select:hover {
+  border-color: var(--color-primary);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+/* ===== PLAYBACK CONTROLS ===== */
+.racing-controls {
+  display: flex;
+  gap: var(--spacing-xs);
+  align-items: center;
+  padding-left: var(--spacing-md);
+  border-left: var(--border-width-thin) solid var(--border-color-medium);
+  margin-left: var(--spacing-xs);
+}
+
+.racing-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--spacing-xs);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.racing-btn:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-surface);
+  transform: translateY(-1px);
+}
+
+.racing-btn:active {
+  transform: translateY(0);
+}
+
+.racing-btn-primary {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-white);
+}
+
+.racing-btn-primary:hover {
+  background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+/* ===== CHART AREA ===== */
+.racing-chart-wrapper {
+  flex: 1;
+  min-height: 400px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Empty state */
+.racing-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+}
+
+/* ===== FOCUS MODE ===== */
+.racing-focus-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--overlay-backdrop);
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-lg);
+  backdrop-filter: blur(5px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.racing-focus-content {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 95vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.focus-close-button {
+  position: absolute;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  background-color: var(--overlay-light);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast);
+  color: var(--color-text-primary);
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.focus-close-button:hover {
+  background-color: var(--overlay-light-hover);
+  transform: scale(1.05);
+}
+
+.focus-close-button:active {
+  transform: scale(0.98);
+}
+
+.racing-focus-controls-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-xl);
+  padding-left: 60px; /* Account for close button */
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  border-bottom: var(--border-width-thin) solid var(--border-color-light);
+}
+
+.racing-focus-chart-container {
+  flex: 1;
+  padding: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+@media (max-width: 768px) {
+  .bar-chart-race-container {
+    padding: var(--spacing-md);
+    min-height: 400px;
+  }
+
+  .chart-header {
+    gap: var(--spacing-sm);
+  }
+
+  .chart-controls {
+    flex-direction: column;
+    width: 100%;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+  }
+
+  .chart-filter {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .filter-select {
+    flex: 1;
+    min-width: auto;
+  }
+
+  .racing-controls {
+    border-left: none;
+    border-top: var(--border-width-thin) solid var(--border-color-medium);
+    padding-left: 0;
+    padding-top: var(--spacing-sm);
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .racing-chart-wrapper {
+    min-height: 300px;
+  }
+
+  .racing-focus-overlay {
+    padding: var(--spacing-sm);
+  }
+
+  .racing-focus-content {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .racing-focus-controls-bar {
+    padding: var(--spacing-sm);
+    padding-left: 50px;
+    gap: var(--spacing-sm);
+  }
+
+  .racing-focus-chart-container {
+    padding: var(--spacing-sm);
+  }
+
+  .focus-close-button {
+    top: var(--spacing-sm);
+    left: var(--spacing-sm);
+  }
+}
+
+/* ===== RACING BARS SPECIFIC OVERRIDES ===== */
+/* Ensure racing-bars content inherits our theme */
+.racing-chart-wrapper svg,
+.racing-focus-chart-container svg {
+  font-family: var(--font-family);
+}
+
+.racing-chart-wrapper text,
+.racing-focus-chart-container text {
+  font-family: var(--font-family);
+}
+
+/* Style the racing bars date counter */
+.racing-chart-wrapper .dateCounter,
+.racing-focus-chart-container .dateCounter {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+}

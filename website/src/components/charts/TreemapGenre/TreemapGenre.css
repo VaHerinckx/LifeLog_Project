@@ -1,0 +1,70 @@
+/* src/components/charts/TreemapGenre/TreemapGenre.css */
+.treemap-container {
+  background-color: var(--chart-background);
+  border-radius: var(--chart-border-radius);
+  padding: var(--chart-padding);
+  margin-bottom: var(--chart-margin-bottom);
+  box-shadow: var(--chart-shadow);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: var(--border-width-thin) solid var(--border-color-light);
+}
+
+.treemap-title {
+  color: var(--chart-title-color);
+  font-size: var(--chart-title-size);
+  font-weight: var(--chart-title-weight);
+  margin: 0 0 var(--chart-title-margin) 0;
+  text-align: var(--chart-title-align);
+}
+
+.treemap-chart-container {
+  width: 100%;
+  height: var(--chart-height-default);
+}
+
+.treemap-tooltip {
+  background-color: var(--color-surface-elevated);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+}
+
+.tooltip-title {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-base);
+}
+
+.tooltip-content {
+  color: var(--color-text-secondary);
+  margin: var(--spacing-xs) 0;
+  font-size: var(--font-size-sm);
+}
+
+.no-data-message {
+  color: var(--color-text-primary);
+  text-align: center;
+  padding: var(--spacing-xl);
+  font-size: var(--font-size-lg);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .treemap-container {
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .treemap-chart-container {
+    height: var(--chart-height-mobile);
+  }
+
+  .treemap-title {
+    font-size: var(--font-size-lg);
+  }
+}

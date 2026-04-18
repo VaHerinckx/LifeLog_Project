@@ -1,0 +1,124 @@
+/* ===== SEMANTIC COLORS ===== */
+/* UI element colors mapped to the base color palette */
+/* These variables reference base colors from colors.base.css */
+/* Change base colors to update the entire theme */
+
+@import './colors.base.css';
+
+:root {
+  /* ===== PRIMARY BRAND COLORS ===== */
+  /* Main brand colors used for primary UI elements */
+  --color-primary: var(--base-color-primary);              /* Uses: Primary buttons, links, highlights */
+  --color-primary-dark: var(--base-color-primary-dark);    /* Uses: Primary text, dark emphasis */
+  --color-primary-light: var(--base-color-primary-light);  /* Uses: Surfaces, cards, backgrounds */
+  --color-accent: var(--base-color-accent);                /* Uses: Titles, important highlights */
+  --color-accent-dark: var(--base-color-accent-dark);      /* Uses: Accent emphasis, hover states */
+
+  /* ===== BACKGROUND COLORS ===== */
+  /* Application background and surface colors */
+  --color-background: var(--base-color-background-dark);        /* Uses: Main app background */
+  --color-dark-background: var(--base-color-background-darker); /* Uses: Darker sections, contrast areas */
+  --color-surface: var(--base-color-primary-light);             /* Uses: Cards, panels, content areas */
+  --color-surface-elevated: var(--base-color-primary-light);    /* Uses: Elevated cards, modals */
+
+  /* ===== TEXT COLORS ===== */
+  /* Text colors for different contexts and surfaces */
+  --color-text-primary: var(--base-color-primary-dark);    /* Uses: Primary text on light surfaces */
+  --color-text-secondary: rgba(255, 255, 255, 0.7);        /* Uses: Secondary text on dark backgrounds */
+  --color-text-inverse: var(--base-color-background-dark); /* Uses: Text on light backgrounds */
+  --color-text-muted: var(--base-color-gray-medium);       /* Uses: Muted/disabled text */
+  --color-text-on-surface: var(--base-color-background-dark);          /* Uses: Text on surface/card backgrounds */
+  --color-text-on-surface-secondary: var(--base-color-gray-dark);      /* Uses: Secondary text on surfaces */
+
+  /* ===== INTERACTIVE STATE COLORS ===== */
+  /* Colors for hover, active, and focus states */
+  --color-hover: rgba(52, 35, 166, 0.1);    /* Uses: Hover state overlays (based on primary) */
+  --color-active: rgba(52, 35, 166, 0.2);   /* Uses: Active/pressed state overlays */
+  --color-focus: rgba(52, 35, 166, 0.3);    /* Uses: Focus state outlines */
+
+  /* ===== STATUS COLORS ===== */
+  /* Semantic colors for different states and messages */
+  --color-success: var(--base-color-success);  /* Uses: Success messages, positive actions */
+  --color-warning: var(--base-color-warning);  /* Uses: Warning messages, caution states */
+  --color-error: var(--base-color-error);      /* Uses: Error messages, destructive actions */
+  --color-info: var(--base-color-info);        /* Uses: Informational messages, hints */
+
+  /* ===== BADGE COLORS ===== */
+  /* Colors for badges and tags */
+  --color-badge-new: var(--color-success);                      /* Uses: "New" badges (green) */
+  --color-badge-recurring: var(--color-info);                   /* Uses: "Recurring" badges (blue) */
+  --color-badge-language: var(--base-color-primary-purple);     /* Uses: Language tags (purple) */
+
+  /* ===== UTILITY COLORS ===== */
+  /* Special purpose colors for specific UI elements */
+  --color-white: var(--base-color-white);                /* Uses: Pure white text/backgrounds */
+  --color-rating-star: var(--base-color-rating);         /* Uses: Star ratings (yellow/gold) */
+  --color-purple-light: var(--base-color-primary-purple); /* Uses: Tags, badges, accents */
+  --color-border-gray: var(--base-color-gray-light);     /* Uses: Light borders */
+  --color-text-gray: var(--base-color-gray-dark);        /* Uses: Gray text */
+
+  /* ===== BORDER COLORS ===== */
+  /* Border colors for different contexts */
+  --border-color-light: rgba(255, 255, 255, 0.1);     /* Uses: Subtle borders on dark backgrounds */
+  --border-color-medium: rgba(52, 35, 166, 0.2);      /* Uses: Medium borders (based on primary) */
+  --border-color-dark: var(--base-color-background-dark); /* Uses: Dark borders */
+
+  /* ===== CHART COLORS ===== */
+  /* Colors specific to chart visualizations */
+  --chart-primary-color: var(--color-primary);       /* Uses: Main chart color (purple) */
+  --chart-secondary-color: var(--color-accent);      /* Uses: Accent chart color (red) */
+  --chart-grid-line: rgba(23, 23, 56, 0.2);         /* Uses: Subtle grid lines */
+  --chart-title-color: var(--color-accent);         /* Uses: Chart titles (red) */
+  --chart-background: var(--color-surface);         /* Uses: Chart backgrounds */
+
+  /* ===== TIMELINE COLORS ===== */
+  /* Distinct colors for timeline visualizations */
+  --timeline-color-1: var(--base-color-timeline-1);  /* Blue */
+  --timeline-color-2: var(--base-color-timeline-2);  /* Teal */
+  --timeline-color-3: var(--base-color-timeline-3);  /* Orange */
+  --timeline-color-4: var(--base-color-timeline-4);  /* Lavender */
+  --timeline-color-5: var(--base-color-timeline-5);  /* Green */
+
+  /* ===== OVERLAY & TINT COLORS ===== */
+  /* Semi-transparent colors for overlays, backgrounds, and tints */
+
+  /* Modal/Dialog overlays */
+  --overlay-backdrop: rgba(23, 23, 56, 0.8);        /* Modal backdrop */
+  --overlay-dark: rgba(0, 0, 0, 0.7);               /* Dark overlay (labels on images) */
+  --overlay-light: rgba(255, 255, 255, 0.5);        /* Light overlay (close buttons) */
+  --overlay-light-hover: rgba(255, 255, 255, 0.8);  /* Light overlay hover state */
+
+  /* Primary color tints (for backgrounds, highlights) */
+  --color-primary-tint-5: rgba(52, 35, 166, 0.05);  /* Very subtle primary tint */
+  --color-primary-tint-8: rgba(52, 35, 166, 0.08);  /* Subtle primary tint */
+  --color-primary-tint-10: rgba(52, 35, 166, 0.1);  /* Light primary tint */
+  --color-primary-tint-20: rgba(52, 35, 166, 0.2);  /* Medium primary tint */
+
+  /* Shadow overlay colors (for box-shadow rgba values) */
+  --shadow-color-sm: rgba(0, 0, 0, 0.1);            /* Light shadow */
+  --shadow-color-md: rgba(0, 0, 0, 0.15);           /* Medium shadow */
+  --shadow-color-lg: rgba(0, 0, 0, 0.2);            /* Strong shadow */
+  --shadow-color-xl: rgba(0, 0, 0, 0.3);            /* Extra strong shadow */
+
+  /* Text on dark backgrounds (inverse text) */
+  --color-text-inverse-muted: rgba(255, 255, 255, 0.7);   /* Muted white text */
+  --color-text-inverse-subtle: rgba(255, 255, 255, 0.9);  /* Subtle white text */
+
+  /* Border with opacity */
+  --border-color-primary-light: rgba(23, 23, 56, 0.2);    /* Light primary border */
+
+  /* ===== FINANCE/TRANSACTION STATUS COLORS ===== */
+  /* Semantic colors for financial transaction types */
+  --color-expense: #e74c3c;    /* Red - Expenses/outgoing */
+  --color-income: #27ae60;     /* Green - Income/incoming */
+  --color-transfer: #3498db;   /* Blue - Transfers */
+  --color-neutral: #95a5a6;    /* Gray - Neutral/other */
+
+  /* ===== LEGACY VARIABLE MAPPINGS ===== */
+  /* Backward compatibility with old variable names */
+  --title-color: var(--color-accent);
+  --text-element: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --element-background-color: var(--color-surface);
+  --background-color: var(--color-background);
+}

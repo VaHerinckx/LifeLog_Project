@@ -1,0 +1,408 @@
+/* Import design system variables */
+@import '../../../styles/variables.css';
+
+/* src/components/charts/IntensityHeatmap/IntensityHeatmap.css */
+.heatmap-container {
+  background-color: var(--chart-background);
+  border-radius: var(--chart-border-radius);
+  padding: var(--chart-padding);
+  box-shadow: var(--chart-shadow);
+  width: 100%;
+  box-sizing: border-box;
+
+  /* Match TimeSeriesBarChart structure */
+  display: flex;
+  flex-direction: column;
+  height: 100%;  /* Fill parent analysis-chart-section */
+  overflow: hidden;  /* Prevent overflow */
+}
+
+/* Header container with title and optional controls */
+.heatmap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: var(--chart-header-height-ratio);  /* 20% */
+  flex-shrink: 0;  /* Never shrink */
+  gap: var(--spacing-md);
+}
+
+.heatmap-title {
+  color: var(--chart-title-color);
+  font-size: var(--chart-title-size);
+  font-weight: var(--chart-title-weight);
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Controls container for metric selector */
+.heatmap-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+/* Chart filter styling (matches TimeSeriesBarChart pattern) */
+.heatmap-container .chart-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.heatmap-container .chart-filter label {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}
+
+.heatmap-container .filter-select {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  background-color: var(--color-surface-elevated);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  min-width: 120px;
+}
+
+.heatmap-container .filter-select:hover {
+  border-color: var(--color-primary);
+}
+
+.heatmap-container .filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-tint-20);
+}
+
+/* Axis swap button */
+.axis-swap-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 32px;
+  height: 32px;
+}
+
+.axis-swap-button:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-tint-5);
+}
+
+.axis-swap-button:active {
+  background-color: var(--color-primary-tint-10);
+}
+
+.axis-swap-button:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-tint-20);
+}
+
+.axis-swap-button svg {
+  flex-shrink: 0;
+}
+
+.heatmap-table-container {
+  height: var(--chart-content-height-ratio);  /* 80% */
+  flex: 1 1 auto;  /* Allow growing/shrinking */
+  overflow: hidden;  /* No scroll */
+  width: 100%;
+  font-size: clamp(0.1rem, 1.5vmin, 1rem);  /* Increased max for better vertical fill */
+  display: flex;
+  align-items: stretch;
+}
+
+.heatmap-table {
+  width: 100%;
+  height: 100%;  /* Fill container - rows will distribute evenly */
+  border-collapse: collapse;
+  text-align: center;
+  table-layout: fixed;  /* Fixed layout for consistent column widths */
+}
+
+.heatmap-table th,
+.heatmap-table td {
+  padding: clamp(0.1rem, 0.8vmin, 0.5rem);  /* Increased max padding for better vertical fill */
+  border: var(--border-width-thin) solid var(--color-primary-tint-10);
+  white-space: nowrap;  /* Prevent text wrapping - keep all columns visible */
+}
+
+.heatmap-table th {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-element);
+  background-color: var(--color-primary-tint-5);
+  white-space: normal;  /* Allow header text to wrap */
+}
+
+.day-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-element);
+  text-align: left;
+  background-color: var(--color-primary-tint-5);
+}
+
+.heatmap-cell {
+  transition: background-color 0.2s ease, color 0.2s ease;
+  /* font-size inherited from .heatmap-table-container for responsive scaling */
+}
+
+/* Smooth transition for axis swap */
+.heatmap-table tr,
+.heatmap-table th,
+.heatmap-table td {
+  transition: height 0.2s ease, padding 0.2s ease;
+}
+
+.heatmap-cell:hover {
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+.heatmap-cell:hover {
+  opacity: 0.8;
+  cursor: pointer;
+}
+
+/* Styling for the totals */
+.total-header,
+.total-label {
+  font-weight: var(--font-weight-bold);
+  background-color: var(--color-active);
+  color: var(--color-text-on-surface);
+}
+
+.total-cell {
+  font-weight: var(--font-weight-bold);
+  background-color: var(--color-hover);
+  color: var(--color-text-on-surface);
+}
+
+.grand-total-cell {
+  font-weight: var(--font-weight-bold);
+  background-color: var(--color-active);
+  color: var(--color-text-primary);
+}
+
+.total-row {
+  border-top: var(--border-width-medium) solid var(--border-color-medium);
+}
+
+/* Styling for percentage text */
+.percentage {
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+/* Responsive table sizing - removed fixed sizes to allow clamp() scaling */
+/* The clamp() values in .heatmap-table-container handle all responsive sizing */
+
+/* ===== CLICKABLE CHART INDICATOR ===== */
+.heatmap-container {
+  cursor: pointer;
+  transition: box-shadow var(--transition-fast);
+}
+
+.heatmap-container:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Prevent controls from triggering focus mode */
+.heatmap-container .heatmap-controls,
+.heatmap-container .chart-filter,
+.heatmap-container .axis-swap-button {
+  cursor: default;
+}
+
+/* ===== FOCUS MODE STYLES ===== */
+.heatmap-focus-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--overlay-backdrop);
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-lg);
+  backdrop-filter: blur(5px);
+}
+
+.heatmap-focus-content {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 95vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+/* Close Button - Top Left */
+.heatmap-focus-content .focus-close-button {
+  position: absolute;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  background-color: var(--overlay-light);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast);
+  color: var(--color-text-primary);
+}
+
+.heatmap-focus-content .focus-close-button:hover {
+  background-color: var(--overlay-light-hover);
+}
+
+/* Controls Bar - Horizontal Layout */
+.heatmap-focus-controls-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-xl);
+  padding-left: 60px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Chart Container in Focus Mode */
+.heatmap-focus-chart-container {
+  flex: 1;
+  padding: var(--spacing-lg);
+  padding-top: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.heatmap-focus-chart-container .heatmap-table-container {
+  flex: 1;
+  height: 100%;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .heatmap-container {
+    padding: var(--spacing-md);
+  }
+
+  .heatmap-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    height: auto;
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .heatmap-title {
+    font-size: var(--font-size-base);
+  }
+
+  .heatmap-controls {
+    width: 100%;
+  }
+
+  .heatmap-container .chart-filter {
+    width: 100%;
+  }
+
+  .heatmap-container .filter-select {
+    flex: 1;
+  }
+
+  /* Reduce table font size further on mobile */
+  .heatmap-table-container {
+    font-size: clamp(0.1rem, 1.2vmin, 0.875rem);
+  }
+
+  .heatmap-table th,
+  .heatmap-table td {
+    padding: clamp(0.1rem, 0.6vmin, 0.4rem);
+  }
+
+  /* Enable horizontal scroll for narrow screens */
+  .heatmap-table-container {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  /* Ensure table doesn't collapse too much */
+  .heatmap-table {
+    min-width: 600px;
+  }
+
+  /* Allow table container to use remaining space - match TimeSeriesBarChart behavior */
+  .heatmap-table-container {
+    min-height: 180px;
+    flex: 1 1 auto;
+  }
+
+  /* Table still fills container on mobile */
+  .heatmap-table {
+    height: 100%;
+    min-width: 400px;  /* Reduced from 600px for better mobile fit */
+  }
+}
+
+/* ===== FOCUS MODE MOBILE STYLES ===== */
+/* Mobile Portrait - Compact layout */
+@media (max-width: 768px) and (orientation: portrait) {
+  .heatmap-focus-content {
+    width: 98vw;
+    height: 95vh;
+  }
+
+  .heatmap-focus-controls-bar {
+    flex-wrap: wrap;
+    padding: var(--spacing-sm);
+    padding-left: 50px;
+    gap: var(--spacing-sm);
+  }
+
+  .heatmap-focus-controls-bar .chart-filter {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+
+  .heatmap-focus-chart-container {
+    padding: var(--spacing-sm);
+  }
+}
+
+/* Mobile Landscape - Optimized full-width layout */
+@media (max-width: 768px) and (orientation: landscape) {
+  .heatmap-focus-content {
+    width: 98vw;
+    height: 95vh;
+  }
+
+  .heatmap-focus-controls-bar {
+    padding: var(--spacing-sm) var(--spacing-md);
+    gap: var(--spacing-md);
+  }
+
+  .heatmap-focus-chart-container {
+    padding: var(--spacing-sm);
+  }
+}

@@ -1,0 +1,956 @@
+import os
+import zipfile
+import shutil
+import glob
+import json
+import pandas as pd
+import requests
+import time
+from datetime import datetime
+from dotenv import load_dotenv
+from src.utils.file_operations import clean_rename_move_file, check_file_exists
+from src.utils.web_operations import open_web_urls, prompt_user_download_status
+from src.utils.utils_functions import record_successful_run, enforce_snake_case
+
+load_dotenv()
+from src.utils.logger import log
+
+
+def download_trakt_data():
+    """
+    Opens Trakt export page and prompts user to download data.
+    Returns True if user confirms download, False otherwise.
+    """
+    log.progress("Starting Trakt data download...")
+    
+    urls = ['https://trakt.tv/settings/data']
+    open_web_urls(urls)
+    
+    log.info("Instructions:")
+    log.info(" 1. Click 'Export your data'")
+    log.info(" 2. Wait for the export to be prepared")
+    log.info(" 3. Download the ZIP file when ready")
+    log.info(" 4. The file will be named like 'YYYY-MM-DDTHH-MM-SSZ-entinval.zip'")
+    log.info(" 5. The ZIP will contain multiple history-X.json files in the watched folder")
+    
+    response = prompt_user_download_status("Trakt")
+    return response
+
+
+def move_trakt_files():
+    """
+    Moves the downloaded Trakt files from Downloads, unzips the file,
+    and extracts all history-X.json files from the watched subfolder.
+    Returns True if successful, False otherwise.
+    """
+    log.info("📁 Moving and extracting Trakt files...")
+
+    downloads_path = "/Users/valen/Downloads"
+
+    # Find the timestamped entinval zip file
+    zip_pattern = os.path.join(downloads_path, "*entinval.zip")
+    zip_files = glob.glob(zip_pattern)
+
+    if not zip_files:
+        log.error("No entinval.zip file found in Downloads folder")
+        return False
+
+    # Use the most recent file if multiple exist
+    zip_file_path = max(zip_files, key=os.path.getctime)
+    log.progress(f"Found zip file: {os.path.basename(zip_file_path)}")
+
+    # Create export folder if it doesn't exist
+    export_folder = "files/exports/trakt_exports"
+    os.makedirs(export_folder, exist_ok=True)
+
+    try:
+        # Extract the zip file
+        log.progress("Extracting zip file...")
+        temp_extract_path = os.path.join(downloads_path, "entinval_temp")
+
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_extract_path)
+
+        # Look for all history*.json files in the entinval/watched subfolder
+        watched_folder = os.path.join(temp_extract_path, "entinval", "watched")
+
+        if not os.path.exists(watched_folder):
+            log.error("entinval/watched subfolder not found")
+            shutil.rmtree(temp_extract_path, ignore_errors=True)
+            return False
+
+        # Find all history files (history.json, history-1.json, history-2.json, etc.)
+        history_files = glob.glob(os.path.join(watched_folder, "history*.json"))
+
+        if not history_files:
+            log.error("No history files found in entinval/watched subfolder")
+            shutil.rmtree(temp_extract_path, ignore_errors=True)
+            return False
+
+        log.progress(f"Found {len(history_files)} history file(s)")
+
+        # Move all history files to the export folder
+        moved_count = 0
+        for history_file_path in history_files:
+            filename = os.path.basename(history_file_path)
+            destination_path = os.path.join(export_folder, filename)
+            shutil.move(history_file_path, destination_path)
+            log.success(f"Moved {filename}")
+            moved_count += 1
+
+        log.success(f"Successfully moved {moved_count} history file(s) to {export_folder}")
+
+        # Look for ratings files in the entinval/ratings subfolder
+        ratings_folder = os.path.join(temp_extract_path, "entinval", "ratings")
+
+        if os.path.exists(ratings_folder):
+            ratings_files = glob.glob(os.path.join(ratings_folder, "ratings*.json"))
+
+            if ratings_files:
+                log.progress(f"Found {len(ratings_files)} ratings file(s)")
+
+                # Move all ratings files to the export folder
+                ratings_moved = 0
+                for ratings_file_path in ratings_files:
+                    filename = os.path.basename(ratings_file_path)
+                    destination_path = os.path.join(export_folder, filename)
+                    shutil.move(ratings_file_path, destination_path)
+                    log.success(f"Moved {filename}")
+                    ratings_moved += 1
+
+                log.success(f"Successfully moved {ratings_moved} ratings file(s) to {export_folder}")
+            else:
+                log.info("No ratings files found in ratings subfolder")
+        else:
+            log.info("No ratings subfolder found")
+
+        # Clean up temp folder and original zip
+        shutil.rmtree(temp_extract_path, ignore_errors=True)
+        os.remove(zip_file_path)
+
+        return True
+
+    except Exception as e:
+        log.error(f"Error processing Trakt files: {e}")
+        # Clean up temp folder if it exists
+        temp_extract_path = os.path.join(downloads_path, "entinval_temp")
+        shutil.rmtree(temp_extract_path, ignore_errors=True)
+        return False
+
+
+def load_ratings_data():
+    """
+    Load ratings data from ratings JSON files.
+    Returns dictionaries for episode, season, and show ratings.
+    """
+    log.info("Loading ratings data...")
+
+    export_folder = "files/exports/trakt_exports"
+
+    episode_ratings = {}
+    season_ratings = {}
+    show_ratings = {}
+
+    # Load episode ratings
+    episode_ratings_file = os.path.join(export_folder, "ratings-episodes.json")
+    if os.path.exists(episode_ratings_file):
+        try:
+            with open(episode_ratings_file, 'r', encoding='utf-8') as f:
+                episode_data = json.load(f)
+
+            for entry in episode_data:
+                episode_trakt_id = entry.get('episode', {}).get('ids', {}).get('trakt')
+                rating = entry.get('rating')
+                if episode_trakt_id and rating:
+                    episode_ratings[episode_trakt_id] = rating
+
+            log.info(f"Loaded {len(episode_ratings)} episode ratings")
+        except Exception as e:
+            log.warning(f"Error loading episode ratings: {e}")
+
+    # Load season ratings
+    season_ratings_file = os.path.join(export_folder, "ratings-seasons.json")
+    if os.path.exists(season_ratings_file):
+        try:
+            with open(season_ratings_file, 'r', encoding='utf-8') as f:
+                season_data = json.load(f)
+
+            for entry in season_data:
+                show_trakt_id = entry.get('show', {}).get('ids', {}).get('trakt')
+                season_num = entry.get('season', {}).get('number')
+                rating = entry.get('rating')
+                if show_trakt_id and season_num is not None and rating:
+                    # Key format: "show_trakt_id_season_num"
+                    season_ratings[f"{show_trakt_id}_{season_num}"] = rating
+
+            log.info(f"Loaded {len(season_ratings)} season ratings")
+        except Exception as e:
+            log.warning(f"Error loading season ratings: {e}")
+
+    # Load show ratings
+    show_ratings_file = os.path.join(export_folder, "ratings-shows.json")
+    if os.path.exists(show_ratings_file):
+        try:
+            with open(show_ratings_file, 'r', encoding='utf-8') as f:
+                show_data = json.load(f)
+
+            for entry in show_data:
+                show_trakt_id = entry.get('show', {}).get('ids', {}).get('trakt')
+                rating = entry.get('rating')
+                if show_trakt_id and rating:
+                    show_ratings[show_trakt_id] = rating
+
+            log.info(f"Loaded {len(show_ratings)} show ratings")
+        except Exception as e:
+            log.warning(f"Error loading show ratings: {e}")
+
+    return episode_ratings, season_ratings, show_ratings
+
+
+def load_season_artwork_cache():
+    """Load season artwork cache from JSON file"""
+    cache_path = 'files/work_files/trakt_work_files/season_artwork_cache.json'
+
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r') as f:
+                cache_data = json.load(f)
+            log.info(f"🎨 Loaded {len(cache_data)} season artwork URLs from cache")
+            return cache_data
+        except Exception as e:
+            log.warning(f"Error loading artwork cache: {e}")
+            return {}
+    else:
+        log.info("🎨 No existing season artwork cache found - creating new one")
+        return {}
+
+
+def save_season_artwork_cache(cache_data):
+    """Save season artwork cache to JSON file"""
+    cache_path = 'files/work_files/trakt_work_files/season_artwork_cache.json'
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+
+    try:
+        with open(cache_path, 'w') as f:
+            json.dump(cache_data, f, indent=2)
+        log.success(f"Saved {len(cache_data)} season artwork URLs to cache")
+        return True
+    except Exception as e:
+        log.error(f"Error saving artwork cache: {e}")
+        return False
+
+
+# ============================================================================
+# TMDB EPISODE DATA FUNCTIONS
+# ============================================================================
+
+def load_episode_tmdb_cache():
+    """Load episode TMDB cache from JSON file"""
+    cache_path = 'files/work_files/trakt_work_files/episode_tmdb_cache.json'
+
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+            log.progress(f"Loaded {len(cache_data)} episode TMDB entries from cache")
+            return cache_data
+        except Exception as e:
+            log.warning(f"Error loading episode cache: {e}")
+            return {}
+    else:
+        log.progress("No existing episode TMDB cache found - creating new one")
+        return {}
+
+
+def save_episode_tmdb_cache(cache_data):
+    """Save episode TMDB cache to JSON file"""
+    cache_path = 'files/work_files/trakt_work_files/episode_tmdb_cache.json'
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+
+    try:
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(cache_data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        log.error(f"Error saving episode cache: {e}")
+        return False
+
+
+def _get_default_episode_data():
+    """Returns default structure with None/empty values for episode data"""
+    return {
+        'runtime': None,
+        'overview': '',
+        'air_date': None,
+        'vote_average': None,
+        'vote_count': None,
+        'still_url': '',
+        'production_code': '',
+        'director': '',
+        'writer': '',
+        'cinematographer': '',
+        'editor': '',
+        'cast': '',
+        'guest_stars': '',
+        'cached_at': datetime.now().isoformat()
+    }
+
+
+def extract_episode_director(crew_list):
+    """Extract director(s) from episode crew list"""
+    directors = [person.get('name', '') for person in crew_list
+                 if person.get('job') == 'Director' and person.get('name')]
+    return ', '.join(directors) if directors else ''
+
+
+def extract_episode_writer(crew_list):
+    """Extract writer(s) from episode crew list (department=Writing)"""
+    writers = [person.get('name', '') for person in crew_list
+               if person.get('department') == 'Writing' and person.get('name')]
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_writers = []
+    for w in writers:
+        if w not in seen:
+            seen.add(w)
+            unique_writers.append(w)
+    return ', '.join(unique_writers) if unique_writers else ''
+
+
+def extract_cinematographer(crew_list):
+    """Extract cinematographer (job=Director of Photography)"""
+    cinematographers = [person.get('name', '') for person in crew_list
+                        if person.get('job') == 'Director of Photography' and person.get('name')]
+    return ', '.join(cinematographers) if cinematographers else ''
+
+
+def extract_editor(crew_list):
+    """Extract editor(s) from episode crew list"""
+    editors = [person.get('name', '') for person in crew_list
+               if person.get('job') == 'Editor' and person.get('name')]
+    return ', '.join(editors) if editors else ''
+
+
+def extract_cast(cast_list):
+    """Extract all main cast as comma-separated string"""
+    cast_names = [person.get('name', '') for person in cast_list if person.get('name')]
+    return ', '.join(cast_names) if cast_names else ''
+
+
+def extract_guest_stars(guest_stars_list):
+    """Extract all guest stars as comma-separated string"""
+    guest_names = [person.get('name', '') for person in guest_stars_list if person.get('name')]
+    return ', '.join(guest_names) if guest_names else ''
+
+
+def get_tmdb_show_id(show_title, show_year, show_id_cache):
+    """
+    Get TMDB show ID, using cache to avoid repeated searches.
+    Returns: (tv_id, success) tuple
+    """
+    cache_key = f"{show_title}_{show_year}"
+
+    if cache_key in show_id_cache:
+        cached_value = show_id_cache[cache_key]
+        if cached_value == 'Not found':
+            return None, False
+        return cached_value, True
+
+    # Get TMDB API key
+    api_key = os.environ.get('TMDB_Key')
+    if not api_key:
+        return None, False
+
+    try:
+        # Search for TV show
+        search_url = "https://api.themoviedb.org/3/search/tv"
+        params = {
+            'api_key': api_key,
+            'query': show_title,
+            'first_air_date_year': show_year
+        }
+
+        response = requests.get(search_url, params=params)
+        time.sleep(0.25)
+
+        if response.status_code != 200:
+            show_id_cache[cache_key] = 'Not found'
+            return None, False
+
+        search_data = response.json()
+
+        if not search_data.get('results'):
+            show_id_cache[cache_key] = 'Not found'
+            return None, False
+
+        tv_id = search_data['results'][0]['id']
+        show_id_cache[cache_key] = tv_id
+        return tv_id, True
+
+    except Exception as e:
+        show_id_cache[cache_key] = 'Not found'
+        return None, False
+
+
+def get_tmdb_episode_info(show_title, show_year, season_number, episode_number, episode_cache, show_id_cache):
+    """
+    Fetches comprehensive episode data from TMDB API with caching.
+
+    Args:
+        show_title: Title of the TV show
+        show_year: Year the show first aired
+        season_number: Season number
+        episode_number: Episode number
+        episode_cache: Dict to store/retrieve episode data
+        show_id_cache: Dict to cache show ID lookups
+
+    Returns:
+        Dict with episode data
+    """
+    cache_key = f"{show_title}_{show_year}_S{season_number}_E{episode_number}"
+
+    # Check if already cached
+    if cache_key in episode_cache:
+        return episode_cache[cache_key]
+
+    # Get TMDB API key
+    api_key = os.environ.get('TMDB_Key')
+    if not api_key:
+        log.warning("TMDB_Key not found in environment variables")
+        default_data = _get_default_episode_data()
+        episode_cache[cache_key] = default_data
+        return default_data
+
+    try:
+        # Get show ID (cached)
+        tv_id, success = get_tmdb_show_id(show_title, show_year, show_id_cache)
+
+        if not success:
+            default_data = _get_default_episode_data()
+            episode_cache[cache_key] = default_data
+            return default_data
+
+        # Fetch episode details with credits
+        episode_url = f"https://api.themoviedb.org/3/tv/{tv_id}/season/{season_number}/episode/{episode_number}"
+        params = {
+            'api_key': api_key,
+            'append_to_response': 'credits'
+        }
+
+        response = requests.get(episode_url, params=params)
+        time.sleep(0.25)
+
+        if response.status_code != 200:
+            default_data = _get_default_episode_data()
+            episode_cache[cache_key] = default_data
+            return default_data
+
+        data = response.json()
+
+        # Extract all fields
+        credits = data.get('credits', {})
+        crew = credits.get('crew', [])
+        cast = credits.get('cast', [])
+        guest_stars = data.get('guest_stars', [])
+
+        # Build still URL
+        still_url = ''
+        if data.get('still_path'):
+            still_url = f"https://image.tmdb.org/t/p/w300{data['still_path']}"
+
+        episode_data = {
+            'runtime': data.get('runtime'),
+            'overview': data.get('overview', ''),
+            'air_date': data.get('air_date'),
+            'vote_average': data.get('vote_average'),
+            'vote_count': data.get('vote_count'),
+            'still_url': still_url,
+            'production_code': data.get('production_code', ''),
+            'director': extract_episode_director(crew),
+            'writer': extract_episode_writer(crew),
+            'cinematographer': extract_cinematographer(crew),
+            'editor': extract_editor(crew),
+            'cast': extract_cast(cast),
+            'guest_stars': extract_guest_stars(guest_stars),
+            'cached_at': datetime.now().isoformat()
+        }
+
+        episode_cache[cache_key] = episode_data
+        return episode_data
+
+    except Exception as e:
+        default_data = _get_default_episode_data()
+        episode_cache[cache_key] = default_data
+        return default_data
+
+
+def get_tmdb_season_artwork(show_title, show_year, season_number, cache_data):
+    """
+    Fetches season artwork from TMDB API with caching
+    Returns: season_poster_url or 'No poster found'
+    """
+    # Create cache key
+    cache_key = f"{show_title}_{show_year}_S{season_number}"
+    
+    # Check if we already have this in cache
+    if cache_key in cache_data:
+        return cache_data[cache_key]
+    
+    # Get TMDB API key
+    api_key = os.environ.get('TMDB_Key')
+    if not api_key:
+        log.warning("TMDB_Key not found in environment variables")
+        cache_data[cache_key] = 'No API key'
+        return 'No API key'
+    
+    try:
+        log.progress(f"Fetching season artwork for: {show_title} ({show_year}) - Season {season_number}")
+        
+        # Step 1: Search for TV show
+        search_url = f"https://api.themoviedb.org/3/search/tv"
+        params = {
+            'api_key': api_key,
+            'query': show_title,
+            'first_air_date_year': show_year
+        }
+        
+        response = requests.get(search_url, params=params)
+        time.sleep(0.25)  # Be respectful to API
+        
+        if response.status_code != 200:
+            log.error(f"TMDB search failed with status {response.status_code}")
+            cache_data[cache_key] = 'API error'
+            return 'API error'
+        
+        search_data = response.json()
+        
+        if not search_data['results']:
+            log.error(f"No TMDB results found for {show_title} ({show_year})")
+            cache_data[cache_key] = 'No show found'
+            return 'No show found'
+        
+        # Get the first result (usually most relevant)
+        tv_show = search_data['results'][0]
+        tv_id = tv_show['id']
+        
+        # Step 2: Get season details
+        season_url = f"https://api.themoviedb.org/3/tv/{tv_id}/season/{season_number}"
+        season_params = {'api_key': api_key}
+        
+        season_response = requests.get(season_url, params=season_params)
+        time.sleep(0.25)  # Be respectful to API
+        
+        if season_response.status_code != 200:
+            log.error(f"Season details failed with status {season_response.status_code}")
+            cache_data[cache_key] = 'Season not found'
+            return 'Season not found'
+        
+        season_data = season_response.json()
+        
+        # Step 3: Extract poster URL
+        poster_url = 'No poster found'
+        if season_data.get('poster_path'):
+            poster_url = f"https://image.tmdb.org/t/p/w500{season_data['poster_path']}"
+            log.success(f"Found season artwork for {show_title} S{season_number}")
+        else:
+            log.error(f"No poster found for {show_title} S{season_number}")
+        
+        # Cache the result
+        cache_data[cache_key] = poster_url
+        return poster_url
+        
+    except Exception as e:
+        log.error(f"Error fetching season artwork: {e}")
+        cache_data[cache_key] = 'Error'
+        return 'Error'
+
+
+def get_existing_season_artwork(processed_file_path):
+    """
+    Load existing season artwork from processed CSV file
+    Returns dict of {show_title_year_season: poster_url}
+    """
+    existing_artwork = {}
+    
+    if not os.path.exists(processed_file_path):
+        return existing_artwork
+    
+    try:
+        # Read existing processed file
+        df_existing = pd.read_csv(processed_file_path, sep='|', encoding='utf-8')
+        
+        # Check if season_poster_url column exists
+        if 'season_poster_url' in df_existing.columns:
+            # Extract unique combinations that have artwork
+            for _, row in df_existing.iterrows():
+                if pd.notna(row['season_poster_url']) and row['season_poster_url'] != '':
+                    cache_key = f"{row['show_title']}_{row['show_year']}_S{row['season']}"
+                    existing_artwork[cache_key] = row['season_poster_url']
+            
+            log.progress(f"Found {len(existing_artwork)} existing season artwork URLs")
+        
+        return existing_artwork
+        
+    except Exception as e:
+        log.warning(f"Error reading existing artwork: {e}")
+        return {}
+
+
+def create_trakt_file():
+    """
+    Processes all history*.json files and converts them to CSV format.
+    Automatically fetches missing season artwork from TMDB.
+    Returns True if successful, False otherwise.
+    """
+    log.info("⚙️  Processing Trakt history data...")
+
+    # Find all history files in the exports folder
+    export_folder = "files/exports/trakt_exports"
+    history_pattern = os.path.join(export_folder, "history*.json")
+    history_files = glob.glob(history_pattern)
+
+    if not history_files:
+        log.error("No history files found in exports folder")
+        return False
+
+    log.progress(f"Found {len(history_files)} history file(s)")
+
+    try:
+        # Load and combine data from all history files
+        all_history_data = []
+
+        for history_file in sorted(history_files):
+            filename = os.path.basename(history_file)
+            log.progress(f"Reading {filename}...")
+
+            with open(history_file, 'r', encoding='utf-8') as f:
+                history_data = json.load(f)
+
+            log.info(f"Loaded {len(history_data)} entries")
+            all_history_data.extend(history_data)
+
+        log.progress(f"Total combined entries: {len(all_history_data)}")
+
+        # Load ratings data
+        episode_ratings, season_ratings, show_ratings = load_ratings_data()
+
+        # Filter for episodes only
+        episodes = [entry for entry in all_history_data if entry.get('type') == 'episode']
+        log.progress(f"Found {len(episodes)} episode entries")
+
+        # Convert to CSV format
+        csv_data = []
+
+        for entry in episodes:
+            # Extract IDs for rating lookup
+            show_trakt_id = entry.get('show', {}).get('ids', {}).get('trakt', '')
+            episode_trakt_id = entry.get('episode', {}).get('ids', {}).get('trakt', '')
+            season_num = entry.get('episode', {}).get('season', '')
+
+            # Look up ratings
+            episode_rating = episode_ratings.get(episode_trakt_id, '')
+            season_rating = season_ratings.get(f"{show_trakt_id}_{season_num}", '')
+            show_rating = show_ratings.get(show_trakt_id, '')
+
+            # Extract data with safe defaults
+            episode_data = {
+                'watch_id': entry.get('id', ''),
+                'watched_at': entry.get('watched_at', ''),
+                'show_title': entry.get('show', {}).get('title', ''),
+                'show_year': entry.get('show', {}).get('year', ''),
+                'season': season_num,
+                'episode_number': entry.get('episode', {}).get('number', ''),
+                'episode_title': entry.get('episode', {}).get('title', ''),
+                'progress': entry.get('progress', ''),
+                'location': entry.get('location', ''),
+                'duration': entry.get('duration', ''),
+                'show_trakt_id': show_trakt_id,
+                'show_imdb_id': entry.get('show', {}).get('ids', {}).get('imdb', ''),
+                'episode_trakt_id': episode_trakt_id,
+                'episode_imdb_id': entry.get('episode', {}).get('ids', {}).get('imdb', ''),
+                'episode_rating': episode_rating,
+                'season_rating': season_rating,
+                'season_show_id': f"{show_trakt_id}_S{season_num}",
+                'show_rating': show_rating
+            }
+
+            csv_data.append(episode_data)
+
+        # Create DataFrame
+        df = pd.DataFrame(csv_data)
+
+        # Remove duplicates based on watch_id (unique identifier for each watch event)
+        initial_count = len(df)
+        df = df.drop_duplicates(subset=['watch_id'], keep='first')
+        duplicates_removed = initial_count - len(df)
+
+        if duplicates_removed > 0:
+            log.progress(f"Removed {duplicates_removed} duplicate entries")
+
+        # Convert watched_at to datetime
+        df['watched_at'] = pd.to_datetime(df['watched_at'])
+
+        # Replace 1970-01-01 timestamps with NaT (null)
+        df.loc[df['watched_at'].dt.year == 1970, 'watched_at'] = pd.NaT
+
+        # Sort by watched_at descending (nulls last), then by show_year descending
+        df = df.sort_values(['watched_at', 'show_year'], ascending=[False, False], na_position='last')
+        
+        # Add additional columns for consistency with other processing
+        df['Seconds'] = pd.NaT
+        df['Source'] = 'Trakt'
+        df['Timestamp'] = df['watched_at']
+        
+        # Create processed files directory
+        output_file = 'files/source_processed_files/trakt/trakt_processed.csv'
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        
+        # ARTWORK FETCHING SECTION
+        log.info("\n🎨 Fetching season artwork...")
+        
+        # Load existing artwork cache
+        artwork_cache = load_season_artwork_cache()
+        
+        # Load existing artwork from processed file (if it exists)
+        existing_artwork = get_existing_season_artwork(output_file)
+        
+        # Merge existing artwork into cache
+        artwork_cache.update(existing_artwork)
+        
+        # Find unique show+season combinations that need artwork
+        unique_seasons = df.groupby(['show_title', 'show_year', 'season']).size().reset_index(name='count')
+        
+        seasons_needing_artwork = []
+        for _, row in unique_seasons.iterrows():
+            cache_key = f"{row['show_title']}_{row['show_year']}_S{row['season']}"
+            if cache_key not in artwork_cache or artwork_cache[cache_key] in ['', 'No poster found', 'API error', 'Error']:
+                seasons_needing_artwork.append({
+                    'show_title': row['show_title'],
+                    'show_year': row['show_year'],
+                    'season': row['season'],
+                    'cache_key': cache_key
+                })
+        
+        log.progress(f"Found {len(unique_seasons)} unique seasons")
+        log.info(f"🎨 Have artwork for {len(artwork_cache)} seasons")
+        log.progress(f"Need to fetch artwork for {len(seasons_needing_artwork)} seasons")
+        log.normal(f"Season artwork: {len(unique_seasons)} unique seasons, {len(unique_seasons) - len(seasons_needing_artwork)} cached, {len(seasons_needing_artwork)} to fetch from TMDB")
+        
+        # Fetch missing artwork automatically
+        if seasons_needing_artwork:
+            log.milestone("Fetching season artwork from TMDB...")
+
+            fetch_count = 0
+            for season_info in seasons_needing_artwork:
+                artwork_url = get_tmdb_season_artwork(
+                    season_info['show_title'],
+                    season_info['show_year'],
+                    season_info['season'],
+                    artwork_cache
+                )
+
+                fetch_count += 1
+
+                # Save cache every 5 retrievals
+                if fetch_count % 5 == 0:
+                    save_season_artwork_cache(artwork_cache)
+                    log.success(f"Saved cache progress ({fetch_count}/{len(seasons_needing_artwork)} fetched)")
+
+                # Small delay between requests
+                time.sleep(0.5)
+
+            # Save final cache update
+            save_season_artwork_cache(artwork_cache)
+            log.success(f"Updated artwork cache with {len(seasons_needing_artwork)} new entries")
+
+        # Summarize artwork results
+        artwork_found = sum(1 for s in seasons_needing_artwork
+                           if artwork_cache.get(s['cache_key'], '') not in ['', 'No poster found', 'API error', 'Error', 'No show found', 'Season not found', 'No API key'])
+        artwork_missing = len(seasons_needing_artwork) - artwork_found
+        if seasons_needing_artwork:
+            log.normal_success(f"Season artwork: fetched {artwork_found}/{len(seasons_needing_artwork)} posters ({artwork_missing} not found)")
+        else:
+            log.normal_success(f"Season artwork: all {len(unique_seasons)} seasons already cached")
+
+        # Add season_poster_url column to dataframe
+        df['season_poster_url'] = df.apply(
+            lambda row: artwork_cache.get(f"{row['show_title']}_{row['show_year']}_S{row['season']}", ''),
+            axis=1
+        )
+
+        # ================================================================
+        # TMDB EPISODE DATA ENRICHMENT
+        # ================================================================
+        log.progress("\n Fetching TMDB episode data...")
+
+        episode_cache = load_episode_tmdb_cache()
+        show_id_cache = {}  # In-memory cache for show ID lookups
+
+        # Get unique episodes needing data
+        unique_episodes = df[['show_title', 'show_year', 'season', 'episode_number']].drop_duplicates()
+        log.progress(f"Found {len(unique_episodes)} unique episodes")
+
+        # Check which need fetching
+        episodes_needing_data = []
+        for _, row in unique_episodes.iterrows():
+            cache_key = f"{row['show_title']}_{row['show_year']}_S{row['season']}_E{row['episode_number']}"
+            if cache_key not in episode_cache:
+                episodes_needing_data.append(row)
+
+        log.progress(f"Need to fetch data for {len(episodes_needing_data)} episodes")
+        log.normal(f"Episode TMDB data: {len(unique_episodes)} unique episodes, {len(unique_episodes) - len(episodes_needing_data)} cached, {len(episodes_needing_data)} to fetch from TMDB")
+
+        # Fetch missing data with progress
+        if episodes_needing_data:
+            log.milestone("Fetching episode data from TMDB...")
+
+            for i, row in enumerate(episodes_needing_data):
+                get_tmdb_episode_info(
+                    row['show_title'],
+                    row['show_year'],
+                    row['season'],
+                    row['episode_number'],
+                    episode_cache,
+                    show_id_cache
+                )
+
+                # Save cache every 10 fetches
+                if (i + 1) % 10 == 0:
+                    save_episode_tmdb_cache(episode_cache)
+                    log.success(f"Processed {i + 1}/{len(episodes_needing_data)} episodes...")
+
+            # Final cache save
+            save_episode_tmdb_cache(episode_cache)
+            log.success(f"Fetched TMDB data for {len(episodes_needing_data)} episodes")
+
+        # Helper function to get episode field from cache
+        def get_episode_field(row, field, default=None):
+            cache_key = f"{row['show_title']}_{row['show_year']}_S{row['season']}_E{row['episode_number']}"
+            return episode_cache.get(cache_key, {}).get(field, default)
+
+        # Map cache data to dataframe columns
+        df['episode_runtime'] = df.apply(lambda r: get_episode_field(r, 'runtime'), axis=1)
+        df['episode_overview'] = df.apply(lambda r: get_episode_field(r, 'overview', ''), axis=1)
+        df['episode_air_date'] = df.apply(lambda r: get_episode_field(r, 'air_date'), axis=1)
+        df['episode_vote_average'] = df.apply(lambda r: get_episode_field(r, 'vote_average'), axis=1)
+        df['episode_vote_count'] = df.apply(lambda r: get_episode_field(r, 'vote_count'), axis=1)
+        df['episode_still_url'] = df.apply(lambda r: get_episode_field(r, 'still_url', ''), axis=1)
+        df['episode_production_code'] = df.apply(lambda r: get_episode_field(r, 'production_code', ''), axis=1)
+        df['episode_director'] = df.apply(lambda r: get_episode_field(r, 'director', ''), axis=1)
+        df['episode_writer'] = df.apply(lambda r: get_episode_field(r, 'writer', ''), axis=1)
+        df['episode_cinematographer'] = df.apply(lambda r: get_episode_field(r, 'cinematographer', ''), axis=1)
+        df['episode_editor'] = df.apply(lambda r: get_episode_field(r, 'editor', ''), axis=1)
+        df['episode_cast'] = df.apply(lambda r: get_episode_field(r, 'cast', ''), axis=1)
+        df['episode_guest_stars'] = df.apply(lambda r: get_episode_field(r, 'guest_stars', ''), axis=1)
+
+        log.success(f"Added TMDB data to {len(df)} episode records")
+
+        # Summarize TMDB episode enrichment quality
+        full_data_count = df['episode_runtime'].notna().sum()
+        partial_count = len(df) - full_data_count
+        if episodes_needing_data:
+            log.normal_success(f"Episode TMDB data: fetched {len(episodes_needing_data)} new entries")
+        else:
+            log.normal_success(f"Episode TMDB data: all {len(unique_episodes)} episodes already cached")
+        log.normal(f"Data quality: {full_data_count}/{len(df)} episode records have full TMDB data, {partial_count} have partial/missing data")
+
+        # Enforce snake_case before saving
+        df = enforce_snake_case(df, "processed file")
+
+        # Save to CSV with pipe separator (consistent with other processors)
+        df.to_csv(output_file, sep='|', index=False, encoding='utf-8')
+        
+        log.success(f"Successfully processed {len(df)} episodes")
+        log.info(f"📁 Saved to: {output_file}")
+        log.progress(f"Date range: {df['watched_at'].min()} to {df['watched_at'].max()}")
+
+        # End summary for NORMAL verbosity
+        unique_shows = df['show_title'].nunique()
+        log.normal_success(f"Trakt processing complete: {len(df)} episodes across {unique_shows} shows and {len(unique_seasons)} seasons")
+
+        return True
+
+    except Exception as e:
+        log.error(f"Error processing Trakt data: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def full_trakt_pipeline(auto_full=False, auto_process_only=False):
+    """
+    Complete Trakt SOURCE pipeline with 2 options.
+
+    Options:
+    1. Download new data and process
+    2. Process existing data
+
+    Args:
+        auto_full (bool): If True, automatically runs option 1 without user input
+        auto_process_only (bool): If True, automatically runs option 2 without user input
+
+    Returns:
+        bool: True if pipeline completed successfully, False otherwise
+    """
+    log.info("\n" + "="*60)
+    log.progress("TRAKT SOURCE DATA PIPELINE")
+    log.info("="*60)
+
+    if auto_process_only:
+        log.info("🤖 Auto process mode: Processing existing data...")
+        choice = "2"
+    elif auto_full:
+        log.info("🤖 Auto mode: Running full pipeline...")
+        choice = "1"
+    else:
+        log.prompt("\nSelect an option:")
+        log.prompt("1. Download new data and process")
+        log.prompt("2. Process existing data")
+
+        choice = input("\nEnter your choice (1-2): ").strip()
+
+    success = False
+
+    if choice == "1":
+        log.milestone("\n Download new data and process...")
+        download_success = download_trakt_data()
+
+        if download_success:
+            move_success = move_trakt_files()
+        else:
+            log.warning("Download not confirmed, but checking for existing files...")
+            move_success = move_trakt_files()
+
+        if move_success:
+            process_success = create_trakt_file()
+        else:
+            log.warning("No new files found, attempting to process existing files...")
+            process_success = create_trakt_file()
+
+        success = process_success
+
+    elif choice == "2":
+        log.info("\n⚙️  Process existing data...")
+        success = create_trakt_file()
+
+    else:
+        log.error("Invalid choice. Please select 1-2.")
+        return False
+
+    log.info("\n" + "="*60)
+    if success:
+        log.success("Trakt source pipeline completed successfully!")
+        log.info("Note: To upload to Drive, run the Shows topic pipeline.")
+        record_successful_run('source_trakt', 'active')
+    else:
+        log.error("Trakt source pipeline failed")
+    log.info("="*60)
+
+    return success
+
+
+if __name__ == "__main__":
+    log.progress("Trakt Source Processing Tool")
+    log.info("This tool processes Trakt exports into source data files.")
+    log.info("For website generation and upload, use the Shows topic coordinator.")
+    full_trakt_pipeline(auto_full=False)

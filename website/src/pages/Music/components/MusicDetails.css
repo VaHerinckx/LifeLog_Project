@@ -1,0 +1,320 @@
+@import '../../../styles/variables.css';
+@import '../../../styles/components.css';
+
+/* ============================================
+   MODAL OVERLAY
+   ============================================ */
+/* Overlay extends modal-overlay from components.css */
+/* Inherits: position, layout, background, z-index, backdrop-filter */
+.music-details-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--overlay-backdrop);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-md);
+  z-index: var(--z-modal);
+  backdrop-filter: blur(5px);
+}
+
+/* ============================================
+   MODAL CONTAINER
+   ============================================ */
+/* Modal extends modal-container from components.css */
+/* Inherits: background, border-radius, dimensions, overflow, shadow */
+.music-details-modal {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: var(--modal-max-width);
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: var(--shadow-xl);
+}
+
+/* ============================================
+   CLOSE BUTTON
+   ============================================ */
+/* Close button extends modal-close-button from components.css */
+/* Inherits: position, styling, transitions, hover effects */
+.close-button {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  background: none;
+  border: none;
+  color: var(--color-text-on-surface);
+  cursor: pointer;
+  z-index: 10;
+  padding: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background-color: var(--overlay-light);
+}
+
+.close-button:hover {
+  background-color: var(--overlay-light-hover);
+}
+
+/* ============================================
+   MODAL CONTENT
+   ============================================ */
+
+.music-details-content {
+  display: flex;
+  padding: var(--spacing-xl);
+}
+
+/* ============================================
+   ARTWORK SECTION
+   ============================================ */
+
+.music-details-artwork-section {
+  flex: 0 0 var(--modal-cover-width);
+  margin-right: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.music-details-artwork {
+  width: 100%;
+}
+
+.music-details-artwork img {
+  width: 100%;
+  max-height: var(--modal-cover-width);
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  background-color: var(--color-primary);
+}
+
+.music-placeholder-large {
+  width: 100%;
+  height: var(--modal-cover-width);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-surface);
+  background-color: var(--color-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.music-details-artist-artwork {
+  position: relative;
+  width: 100%;
+}
+
+.music-details-artist-artwork img {
+  width: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.artist-artwork-label {
+  position: absolute;
+  bottom: var(--spacing-xs);
+  left: var(--spacing-xs);
+  background-color: var(--overlay-dark);
+  color: var(--color-white);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ============================================
+   INFORMATION SECTION
+   ============================================ */
+
+.music-details-info {
+  flex: 1;
+  color: var(--color-text-on-surface);
+}
+
+.music-details-info h2 {
+  font-size: var(--font-size-2xl);
+  color: var(--color-text-on-surface);
+  margin-bottom: var(--spacing-xs);
+}
+
+.music-details-info h3 {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-primary);
+  margin-top: 0;
+  margin-bottom: var(--spacing-md);
+}
+
+.music-details-info .album-name {
+  font-size: var(--font-size-base);
+  color: var(--color-text-on-surface);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+/* ============================================
+   METADATA GRID
+   ============================================ */
+
+.music-details-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-base);
+}
+
+/* ============================================
+   SECTIONS
+   ============================================ */
+
+.music-details-section {
+  background-color: var(--color-primary-tint-10);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.music-details-section h4 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-on-surface);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.artist-info,
+.listening-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.info-row,
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--color-text-on-surface);
+  font-size: var(--font-size-base);
+}
+
+/* ============================================
+   DISCOVERY BADGES
+   ============================================ */
+
+.discovery-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.discovery-badge {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  border: var(--border-width-thin) solid;
+}
+
+.discovery-badge.new-artist {
+  background: color-mix(in srgb, var(--color-badge-new) 10%, transparent);
+  color: var(--color-badge-new);
+  border-color: var(--color-badge-new);
+}
+
+.discovery-badge.new-track {
+  background: color-mix(in srgb, var(--color-badge-recurring) 10%, transparent);
+  color: var(--color-badge-recurring);
+  border-color: var(--color-badge-recurring);
+}
+
+/* ============================================
+   GENRES SECTION
+   ============================================ */
+
+.music-genres-section {
+  background-color: var(--color-primary-tint-10);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.music-genres-section h4 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-on-surface);
+  margin: 0 0 var(--spacing-md) 0;
+}
+
+.genres-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.genre-badge {
+  display: inline-block;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  background-color: var(--color-primary);
+  color: var(--color-white);
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .music-details-content {
+    flex-direction: column;
+    padding: var(--spacing-md);
+    padding-top: var(--spacing-2xl); /* Extra padding to account for the close button */
+  }
+
+  .music-details-artwork-section {
+    margin-right: 0;
+    margin-bottom: var(--spacing-md);
+    align-self: center;
+    max-width: 220px;
+    flex: none;
+  }
+
+  .music-details-artwork {
+    margin-right: 0;
+  }
+
+  .music-details-modal {
+    max-height: 95vh;
+    margin: var(--spacing-sm);
+  }
+
+  .music-details-info h2 {
+    font-size: var(--font-size-xl);
+  }
+
+  .music-details-info h3 {
+    font-size: var(--font-size-lg);
+  }
+
+  .meta-item {
+    font-size: var(--font-size-sm);
+  }
+}

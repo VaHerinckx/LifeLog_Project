@@ -1,0 +1,19 @@
+/* ===== BORDER TOKENS ===== */
+/* Consistent border radius and width scale */
+
+:root {
+  /* ===== BORDER RADIUS ===== */
+  /* Border radius scale for rounded corners */
+  --radius-none: 0;           /* No rounding - sharp corners */
+  --radius-sm: 0.25rem;       /* 4px  - Subtle rounding */
+  --radius-md: 0.5rem;        /* 8px  - Standard rounding */
+  --radius-lg: 0.75rem;       /* 12px - Prominent rounding */
+  --radius-xl: 1rem;          /* 16px - Strong rounding */
+  --radius-full: 9999px;      /* Fully circular - for icon containers */
+
+  /* ===== BORDER WIDTHS ===== */
+  /* Border width scale for consistent stroke thickness */
+  --border-width-thin: 1px;   /* Thin borders - default */
+  --border-width-medium: 2px; /* Medium borders - emphasis */
+  --border-width-thick: 4px;  /* Thick borders - strong emphasis */
+}
