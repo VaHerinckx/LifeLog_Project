@@ -16,7 +16,7 @@ Three menu options:
 2. Process existing data and upload to Drive
 3. Upload existing processed files to Drive
 
-**Reference implementation:** `moneymgr_processing.py`
+**Reference implementation:** `src/sources_processing/moneymgr/moneymgr_processing.py`
 
 **Function naming convention:**
 - `download_[source]_data()` — Download

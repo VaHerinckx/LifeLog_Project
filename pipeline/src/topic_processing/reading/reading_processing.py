@@ -963,7 +963,7 @@ def upload_books_results():
     success = upload_multiple_files(existing_files)
 
     if success:
-        log.success("Website files uploaded successfully!")
+        log.normal_success("Website files uploaded successfully!")
     else:
         log.error("Some website files failed to upload")
 
@@ -1021,15 +1021,15 @@ def update_cover_url():
             log.error(f"No books found containing '{search_term}'")
             continue
 
-        log.progress(f"\n Found {len(matches)} books:")
+        log.normal(f"\n Found {len(matches)} books:")
 
         # Display matches with numbers
         for i, book in enumerate(matches, 1):
             current_url = book['cover_url'] if book['cover_url'] else 'No cover URL'
             if len(str(current_url)) > 60:
                 current_url = str(current_url)[:60] + "..."
-            log.info(f"{i}. {book['title']}")
-            log.info(f"Current cover: {current_url}")
+            log.normal(f"{i}. {book['title']}")
+            log.normal(f"Current cover: {current_url}")
             log.blank()
 
         # Get user selection
@@ -1047,8 +1047,8 @@ def update_cover_url():
         selected_book_id = selected_book['book_id']
         selected_title = selected_book['title']
 
-        log.success(f"\n Selected: {selected_title}")
-        log.info(f"Current cover URL: {selected_book['cover_url'] or 'None'}")
+        log.normal(f"\n Selected: {selected_title}")
+        log.normal(f"Current cover URL: {selected_book['cover_url'] or 'None'}")
 
         # Get new URL
         new_url = input("\nEnter new cover URL: ").strip()
@@ -1058,7 +1058,7 @@ def update_cover_url():
 
         # Update the cover URL in the JSON data
         dates_data[selected_book_id]['cover_url'] = new_url
-        log.success(f"Updated cover URL for '{selected_title}'")
+        log.normal(f"Updated cover URL for '{selected_title}'")
         updated_books.append(selected_title)
 
         # Ask if user wants to continue
@@ -1083,7 +1083,7 @@ def update_cover_url():
 
     # Step 2: Regenerate Goodreads processed file (loads updated JSON with new cover URLs)
     try:
-        log.progress("\n Regenerating Goodreads processed file with updated cover URLs...")
+        log.normal("\n Regenerating Goodreads processed file with updated cover URLs...")
         from src.sources_processing.goodreads.goodreads_processing import create_goodreads_file
         gr_success = create_goodreads_file()
         if not gr_success:
@@ -1095,7 +1095,7 @@ def update_cover_url():
 
     # Step 3: Regenerate the unified books file (merges updated Goodreads data with Kindle)
     try:
-        log.progress("\n Regenerating unified books file...")
+        log.normal("\n Regenerating unified books file...")
         create_success = create_books_file()
         if not create_success:
             log.error("Failed to regenerate books file")
@@ -1106,11 +1106,11 @@ def update_cover_url():
 
     # Step 4: Upload website files to Google Drive
     try:
-        log.info("\n📤 Uploading website files to Google Drive...")
+        log.normal("\n📤 Uploading website files to Google Drive...")
         upload_success = upload_books_results()
         if upload_success:
-            log.success("Successfully uploaded website files to Google Drive!")
-            log.success(f"Cover URLs updated for: {', '.join(updated_books)}")
+            log.normal_success("Successfully uploaded website files to Google Drive!")
+            log.normal_success(f"Cover URLs updated for: {', '.join(updated_books)}")
             log.info(f"Updates are now permanent - they will persist through future pipeline runs")
             return True
         else:
@@ -1263,7 +1263,7 @@ def full_books_pipeline(auto_full=False, auto_process_only=False, merge_only=Fal
         log.info("\n⚙️  Processing existing export files and uploading...")
 
         # Step 1: Process Goodreads data from existing exports
-        log.progress("\n Step 1: Processing Goodreads data from existing exports...")
+        log.normal("\n Step 1: Processing Goodreads data from existing exports...")
         try:
             gr_success = full_goodreads_pipeline(auto_process_only=True)
             if not gr_success:
@@ -1274,7 +1274,7 @@ def full_books_pipeline(auto_full=False, auto_process_only=False, merge_only=Fal
             return False
 
         # Step 2: Process Kindle data from existing exports
-        log.progress("\n Step 2: Processing Kindle data from existing exports...")
+        log.normal("\n Step 2: Processing Kindle data from existing exports...")
         try:
             kindle_success = full_kindle_pipeline(auto_process_only=True)
             if not kindle_success:
@@ -1285,14 +1285,14 @@ def full_books_pipeline(auto_full=False, auto_process_only=False, merge_only=Fal
             return False
 
         # Step 3: Merge the processed data
-        log.info("\n🔗 Step 3: Merging Goodreads and Kindle data...")
+        log.normal("\n🔗 Step 3: Merging Goodreads and Kindle data...")
         merge_success = create_books_file()
         if not merge_success:
             log.error("Books merge failed, stopping pipeline")
             return False
 
         # Step 4: Upload results
-        log.progress("\n Step 4: Uploading results...")
+        log.normal("\n Step 4: Uploading results...")
         success = upload_books_results()
 
     elif choice == "3":

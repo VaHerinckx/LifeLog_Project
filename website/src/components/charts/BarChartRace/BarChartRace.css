@@ -49,7 +49,7 @@
   gap: var(--spacing-xs);
 }
 
-.chart-filter label {
+.bar-chart-race-container .chart-filter label {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   white-space: nowrap;
