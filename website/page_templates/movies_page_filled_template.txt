@@ -1,0 +1,353 @@
+# NEW PAGE CREATION TEMPLATE - MOVIES PAGE (FILLED EXAMPLE)
+
+Fill in the sections below. I'll create the complete page following the ReadingPage.jsx gold standard pattern.
+
+================================================================================
+
+## 📋 WHAT I'LL BUILD
+
+Based on your inputs, I will:
+- ✅ Create the main page component (following ReadingPage.jsx structure)
+- ✅ Create [Item]Card.jsx component (similar to BookCard.jsx) with grid/list views
+- ✅ Create [Item]Details.jsx modal component (similar to BookDetails.jsx)
+- ✅ Add data source configuration to config.js and DataContext.jsx
+- ✅ Add environment variables to .env
+- ✅ Create CSS files using the design system from variables.css
+- ✅ Select appropriate lucide-react icons
+- ✅ Write all labels, descriptions, and helper text
+
+⚠️ ADDITIONAL INSTRUCTIONS (optional):
+
+Display star ratings (0.5 to 5.0 scale) for movies
+Add rewatch badges for movies that have been watched multiple times
+Show movie posters with fallback placeholder images
+Color-code or badge rewatches vs first-time watches
+
+================================================================================
+
+## 1️⃣ DATA SOURCE
+
+⚠️ Google Drive File URL(s):
+
+Primary file: https://drive.google.com/file/d/1yBt_YMcztQBTPNGSTNkRyyk5OXU5d347/view?usp=sharing
+
+Secondary file (optional): N/A (single file source)
+
+
+⚠️ DataContext fetch name(s):
+
+Primary: movies
+
+Secondary: N/A
+
+================================================================================
+
+## 2️⃣ PAGE INFO
+
+⚠️ PAGE TITLE: Movies & TV Tracker
+
+⚠️ PAGE DESCRIPTION: Track your viewing habits and discover insights about your movie preferences
+
+⚠️ CONTENT TAB NAME: Movies
+
+⚠️ ITEM NAME: movie
+
+================================================================================
+
+## 3️⃣ FILTERS
+
+⚠️ Copy this block for each filter you want:
+
+<Filter
+  type="daterange"
+  label="Watch Date"
+  field="Date"
+  dataSources={['movies']}
+/>
+
+<Filter
+  type="multiselect"
+  label="Genres"
+  field="Genre"
+  placeholder="Select genres"
+  dataSources={['movies']}
+/>
+
+<Filter
+  type="multiselect"
+  label="Years"
+  field="Year"
+  placeholder="Select years"
+  dataSources={['movies']}
+/>
+
+<Filter
+  type="multiselect"
+  label="My Rating"
+  field="Rating"
+  placeholder="Select ratings"
+  dataSources={['movies']}
+/>
+
+--------------------------------------------------------------------------------
+
+Filter Types:
+- multiselect - Multiple checkboxes, auto-populated from data
+- singleselect - Radio buttons, requires static options array
+- daterange - Date range picker for timestamp fields
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+<Filter
+  type="multiselect"
+  label="Genres"
+  field="genre"
+  placeholder="Select genres"
+  dataSources={['readingBooks', 'readingSessions']}
+/>
+
+<Filter
+  type="singleselect"
+  label="Fiction/Non-Fiction"
+  field="fiction_yn"
+  defaultValue="all"
+  dataSources={['readingBooks']}
+  options={['all', 'Fiction', 'Non-Fiction']}
+/>
+
+================================================================================
+
+## 4️⃣ KPI CARDS
+
+⚠️ Copy this block for each statistic card:
+
+<KpiCard
+  dataSource="movies"
+  computation="count"
+  label="Movies Watched"
+/>
+
+<KpiCard
+  dataSource="movies"
+  field="Rating"
+  computation="average"
+  computationOptions={{ decimals: 1, filterZeros: true }}
+  label="Average Rating"
+/>
+
+<KpiCard
+  dataSource="movies"
+  computation="count"
+  label="Movies This Month"
+  // NOTE: This needs custom logic - filter by last 30 days before counting
+/>
+
+<KpiCard
+  dataSource="movies"
+  computation="count"
+  label="Rewatches"
+  // NOTE: This needs custom logic - count movies with isRewatch flag
+/>
+
+--------------------------------------------------------------------------------
+
+Computation Types:
+- count - Count items (no field needed)
+- sum - Sum numeric values
+- average - Mean (use filterZeros: true to exclude zeros)
+- median, min, max - Self-explanatory
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+<KpiCard
+  dataSource="readingBooks"
+  computation="count"
+  label="Books Read"
+/>
+
+<KpiCard
+  dataSource="readingBooks"
+  field="my_rating"
+  computation="average"
+  computationOptions={{ decimals: 1, filterZeros: true }}
+  label="Average Rating"
+/>
+
+================================================================================
+
+## 5️⃣ CARD DISPLAY
+
+⚠️ What should appear on each card (grid/list views):
+
+Image URL field: poster_url (with fallback to placeholder)
+
+Title field: Name
+
+Subtitle field: Year
+
+Metadata (3-5 small details): Rating (with stars), isRewatch badge
+
+Date field: Date (labeled as "Watched:")
+
+Tags/category fields: Genre, isRewatch (as badge)
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+Image: cover_image_url
+Title: title
+Subtitle: author
+Metadata: my_rating, original_publication_year, number_of_pages, reading_duration_final
+Date field: timestamp
+Tags: fiction_yn, genre
+
+================================================================================
+
+## 6️⃣ DETAIL MODAL
+
+⚠️ What should appear in the modal when a card is clicked:
+
+Main info sections (group related fields):
+
+- Movie Info: Name, Year, Genre
+  Fields: Name, Year, Genre
+
+- Viewing Details: Date, Rating, Rewatch Status
+  Fields: Date, Rating, isRewatch
+
+Ratings/scores (if any): Rating (0.5 to 5.0 stars)
+
+Categories/tags: Genre, Rewatch badge
+
+Description/notes field: none (Letterboxd export doesn't include descriptions)
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+- Basic Info: original_publication_year, number_of_pages, reading_duration_final
+- Ratings: my_rating, average_rating
+Categories: fiction_yn, genre
+Description: none
+
+================================================================================
+
+## 7️⃣ ANALYSIS CHARTS
+
+⚠️ Copy this block for each chart:
+
+<TimeSeriesBarChart
+  data={filteredMovies}
+  dateColumnName="Date"
+  metricColumnName="count"
+  title="Movies Watched Over Time"
+  yAxisLabel="Movies"
+/>
+
+<TopChart
+  data={filteredMovies}
+  categoryField="Genre"
+  title="Top Genres"
+  topN={10}
+/>
+
+<TopChart
+  data={filteredMovies}
+  categoryField="Year"
+  title="Movies by Release Year"
+  topN={15}
+/>
+
+<TimeSeriesBarChart
+  data={filteredMovies}
+  dateColumnName="Date"
+  metricColumnName="Rating"
+  aggregation="average"
+  title="Average Rating Over Time"
+  yAxisLabel="Rating"
+/>
+
+--------------------------------------------------------------------------------
+
+Available Chart Types:
+- TimeSeriesBarChart - Trends over time (daily/weekly/monthly auto-aggregation)
+- IntensityHeatmap - Day × hour activity heatmap (prop: treatMidnightAsUnknown: true/false)
+- TopChart - Top N items bar chart
+- TreemapChart - Hierarchical categories
+- PieChart - Distribution pie chart
+- ScatterPlot - Two-variable correlation
+
+--------------------------------------------------------------------------------
+
+📝 EXAMPLE:
+
+<TimeSeriesBarChart
+  data={filteredReadingEntries}
+  dateColumnName="timestamp"
+  metricColumnName="page_split"
+  title="Total Pages Read by Period"
+  yAxisLabel="Pages"
+/>
+
+<IntensityHeatmap
+  data={filteredReadingEntries}
+  dateColumnName="timestamp"
+  valueColumnName="page_split"
+  title="Reading Activity by Day and Time"
+  treatMidnightAsUnknown={true}
+/>
+
+================================================================================
+
+## 8️⃣ UNIQUE IDENTIFIER
+
+⚠️ What uniquely identifies each item in your data?
+
+Unique ID: Combination of Name + Year + index (since same movie can be watched multiple times)
+
+Note: The archived code uses: `${movieName}-${movieYear}-${index}`
+
+This is used for React keys. If unsure, I'll determine it from the CSV structure.
+
+================================================================================
+
+## 9️⃣ DATA PROCESSING NOTES
+
+Special handling required from archived code:
+
+1. **Rewatch Detection**: Need to track if a movie (Name+Year combo) appears multiple times
+   in the data. First occurrence is original watch, subsequent ones are rewatches.
+
+2. **Date Processing**: The Date field needs to be converted to Date object and validated.
+
+3. **Rating Processing**: Rating field is numeric (0.5 to 5.0 scale), needs to filter out
+   zero/null values for average calculation.
+
+4. **Genre Splitting**: Genre field contains comma-separated values that need to be split
+   for filtering purposes.
+
+5. **Poster URL Handling**: poster_url field from CSV, with fallback placeholder if missing.
+
+6. **Multiple Views**: Grid view and List view layouts (both needed).
+
+7. **Column Name Variations**: Code handles both PascalCase (Name, Year, Rating) and
+   snake_case (name, year, rating) column names.
+
+================================================================================
+
+## ✅ SUBMISSION
+
+Once you fill this out and send it to me, I will:
+1. Extract Google Drive file IDs from URLs
+2. Build all components following the ReadingPage.jsx pattern
+3. Implement responsive grid/list views
+4. Add all filtering and statistics
+5. Create analysis charts
+6. Style everything using the design system
+
+We'll fix any issues during testing - no need to be perfect!

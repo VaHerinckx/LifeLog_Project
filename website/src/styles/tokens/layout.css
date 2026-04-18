@@ -1,0 +1,29 @@
+/* ===== LAYOUT TOKENS ===== */
+/* Breakpoints, containers, and z-index scale for layout management */
+
+:root {
+  /* ===== BREAKPOINTS ===== */
+  /* Responsive design breakpoints for different screen sizes */
+  --breakpoint-sm: 640px;    /* Small - Mobile landscape */
+  --breakpoint-md: 768px;    /* Medium - Tablet portrait */
+  --breakpoint-lg: 1024px;   /* Large - Tablet landscape / Small desktop */
+  --breakpoint-xl: 1280px;   /* Extra large - Desktop */
+  --breakpoint-2xl: 1536px;  /* 2X large - Large desktop */
+
+  /* ===== CONTAINER SIZES ===== */
+  /* Standardized container dimensions for consistent layouts */
+  --container-width: 95%;                   /* Default container width */
+  --container-max-width: 96vw;              /* Maximum container width */
+  --container-padding: var(--spacing-xl);   /* Container padding (32px) */
+  --container-padding-mobile: var(--spacing-lg); /* Mobile container padding (24px) */
+
+  /* ===== Z-INDEX SCALE ===== */
+  /* Consistent layering system for stacking elements */
+  --z-dropdown: 1000;       /* Dropdown menus */
+  --z-sticky: 1010;         /* Sticky elements */
+  --z-fixed: 1020;          /* Fixed position elements */
+  --z-modal-backdrop: 1030; /* Modal backdrop overlays */
+  --z-modal: 1040;          /* Modal dialogs */
+  --z-popover: 1050;        /* Popovers and tooltips */
+  --z-tooltip: 1060;        /* Tooltips (highest) */
+}

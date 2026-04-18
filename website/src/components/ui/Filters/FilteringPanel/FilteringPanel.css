@@ -1,0 +1,414 @@
+/* src/components/ui/Filters/FilteringPanel/FilteringPanel.css */
+@import '../../../../styles/variables.css';
+
+.filtering-panel {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--element-background-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+  color: var(--text-element);
+}
+
+.filtering-panel.loading {
+  opacity: 0.7;
+}
+
+.filtering-panel-header {
+  margin-bottom: var(--spacing-lg);
+}
+
+.filtering-panel-title {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-element);
+}
+
+.filtering-panel-description {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-element);
+  opacity: 0.8;
+  line-height: var(--line-height-normal);
+}
+
+.filtering-panel-content {
+  width: 100%;
+}
+
+/* Grid layout for filters */
+.filters-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  width: 100%;
+}
+
+.filter-item {
+  flex: 1 1 calc(20% - var(--spacing-md)); /* 5 items per row by default */
+  min-width: 180px;
+  min-width: 0; /* Allow shrinking below content size */
+}
+
+/* Make the first filter (usually date range) take more space */
+.filter-item:first-child {
+  flex: 1 1 calc(30% - var(--spacing-md));
+  min-width: 240px;
+}
+
+/* Loading skeleton styles */
+.filter-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.skeleton-label {
+  height: 14px;
+  background-color: var(--border-color-primary-light);
+  border-radius: var(--radius-sm);
+  width: 60%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-filter {
+  height: 38px;
+  background-color: var(--border-color-primary-light);
+  border-radius: var(--radius-sm);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Debug info styling */
+.filter-debug {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--color-primary-tint-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.filter-debug summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+}
+
+.filter-debug pre {
+  margin: 0;
+  font-family: 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Responsive design */
+@media (max-width: 1400px) {
+  .filter-item {
+    flex: 1 1 calc(33.33% - var(--spacing-md)); /* 3 items per row */
+  }
+
+  .filter-item:first-child {
+    flex: 1 1 calc(50% - var(--spacing-md));
+  }
+}
+
+@media (max-width: 1200px) {
+  .filter-item {
+    flex: 1 1 calc(33.33% - var(--spacing-md)); /* 3 items per row */
+  }
+}
+
+@media (max-width: 992px) {
+  .filters-grid {
+    flex-wrap: wrap;
+  }
+
+  .filter-item {
+    flex: 1 1 calc(50% - var(--spacing-md)); /* 2 items per row */
+    min-width: calc(50% - var(--spacing-md));
+  }
+
+  .filter-item:first-child {
+    flex: 1 1 100%; /* Date range takes full width */
+  }
+}
+
+@media (max-width: 768px) {
+  .filtering-panel {
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+  }
+
+  .filters-grid {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .filter-item {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+}
+
+/* Ensure filters work well together visually */
+.filter-item .filter-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.filter-item .filter-header {
+  margin-top: auto;
+}
+
+/* ========================================
+   MOBILE FILTER MODAL STYLES
+   ======================================== */
+
+/* Filter Toggle Button - Always visible (modal-first approach) */
+.filter-toggle-button {
+  position: fixed;
+  top: calc(var(--nav-height, 60px) + var(--spacing-md));
+  right: var(--spacing-md);
+  z-index: 1020; /* Below navigation bar */
+  display: flex; /* Always visible on all screen sizes */
+
+  background-color: var(--color-surface);
+  border: 2px solid var(--color-primary);
+  color: var(--color-primary);
+  border-radius: var(--radius-full);
+  padding: var(--spacing-sm) var(--spacing-md);
+
+  align-items: center;
+  gap: var(--spacing-xs);
+
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  transition: all 0.2s ease;
+}
+
+.filter-toggle-button:hover {
+  background-color: var(--color-primary-tint-10);
+}
+
+.filter-toggle-button.active {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  color: white;
+}
+
+.filter-badge {
+  background-color: currentColor;
+  color: var(--color-surface);
+  border-radius: var(--radius-full);
+  padding: calc(var(--spacing-xs) * 0.25) calc(var(--spacing-xs) * 0.75);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  min-width: var(--icon-size-sm);
+  text-align: center;
+}
+
+.filter-toggle-button.active .filter-badge {
+  background-color: white;
+  color: var(--color-accent);
+}
+
+/* Modal Overlay & Container */
+.filter-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--overlay-backdrop);
+  z-index: 1030;
+  backdrop-filter: blur(5px);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.filter-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-surface);
+
+  display: flex;
+  flex-direction: column;
+}
+
+/* Modal Header (Sticky) */
+.filter-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-md) var(--spacing-lg);
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.filter-modal-header h2 {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.filter-modal-header-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.filter-modal-header-button {
+  background-color: var(--overlay-light);
+  /*border: none;*/
+  border-color: var(--base-color-accent);
+  color: var(--base-color-accent);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  transition: all var(--transition-normal);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  flex-shrink: 0;
+  min-height: var(--icon-size-lg);
+  min-width: var(--icon-size-lg);
+}
+
+.filter-modal-header-button:hover {
+  background-color: var(--overlay-light-hover);
+  color: var(--color-text-primary);
+}
+
+/* Modal Content (Scrollable) */
+.filter-modal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  padding-bottom: var(--spacing-6xl);
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+.filter-modal-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Make filters full-width in modal */
+.filter-modal-filters > * {
+  width: 100%;
+}
+
+/* Separator lines between filters in modal (bubble mode) */
+.filter-modal-filters > .filter-item {
+  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--color-text-primary);
+}
+
+/* Remove border from last filter */
+.filter-modal-filters > .filter-item:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* Desktop: Centered modal with backdrop blur */
+@media (min-width: 993px) {
+  .filter-modal {
+    /* Override full-screen positioning */
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    bottom: auto;
+    right: auto;
+
+    /* Centered modal sizing */
+    width: 90%;
+    max-width: 800px;
+    max-height: 85vh;
+
+    /* Rounded corners for desktop */
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .filter-modal-overlay {
+    /* Enhanced backdrop blur on desktop */
+    backdrop-filter: blur(8px);
+  }
+
+  .filter-modal-header {
+    /* Rounded top corners */
+    border-top-left-radius: var(--radius-lg);
+    border-top-right-radius: var(--radius-lg);
+  }
+
+  .filter-modal-footer {
+    /* Rounded bottom corners */
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+  }
+}
+
+/* Mobile: Add margins around modal and ensure header visibility */
+@media (max-width: 992px) {
+  .filter-modal {
+    top: var(--nav-height-mobile);
+    left: var(--spacing-md);
+    right: var(--spacing-md);
+    bottom: var(--spacing-md);
+    border-radius: var(--radius-md);
+
+    /* Adjust height calculation to account for nav bar offset */
+    height: calc(100vh - var(--nav-height-mobile) - var(--spacing-md));
+  }
+
+  /* Ensure header content is vertically centered and fully visible */
+  .filter-modal-header {
+    padding: 0 var(--spacing-lg);
+    min-height: calc(var(--icon-size-lg) * 2.25);
+    align-items: center;
+  }
+}
+
+/* Hide old desktop inline grid (no longer used) */
+.filtering-panel {
+  display: none;
+}

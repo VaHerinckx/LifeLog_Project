@@ -1,0 +1,285 @@
+@import '../../../styles/variables.css';
+
+/* ============================================
+   BASE CARD STYLES
+   ============================================ */
+
+.music-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+  overflow: hidden;
+}
+
+.music-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ============================================
+   GRID VIEW (VERTICAL LAYOUT)
+   ============================================ */
+
+.music-card--grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.music-card--grid .music-artwork-container {
+  position: relative;
+  width: 100%;
+  height: var(--card-image-height);
+  background-color: var(--color-primary);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) 0;
+}
+
+.music-card--grid .music-artwork {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: var(--color-primary);
+  transition: transform var(--transition-normal);
+}
+
+.music-card--grid:hover .music-artwork {
+  transform: scale(1.05);
+}
+
+.music-card--grid .music-placeholder-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-surface);
+  background-color: var(--color-primary);
+}
+
+.music-card--grid .music-info {
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+}
+
+.music-card--grid .music-track-name {
+  color: var(--background-color);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--spacing-xs) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-card--grid .music-artist-name {
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  margin: 0 0 var(--spacing-xs) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-card--grid .music-album-name {
+  color: var(--color-text-gray);
+  font-size: var(--font-size-xs);
+  margin: 0 0 var(--spacing-xs) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-card--grid .music-meta {
+  color: var(--color-text-gray);
+  font-size: var(--font-size-xs);
+  margin-bottom: var(--spacing-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.music-card--grid .music-genres {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+/* ============================================
+   LIST VIEW (HORIZONTAL LAYOUT)
+   ============================================ */
+
+.music-card--list {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-lg);
+}
+
+.music-card--list:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.music-card--list .music-artwork-container {
+  flex: 0 0 var(--list-image-width);
+  height: var(--card-image-height-list);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+}
+
+.music-card--list .music-artwork {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.music-card--list .music-placeholder-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-surface);
+}
+
+.music-card--list .music-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.music-card--list .music-track-name {
+  color: var(--background-color);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--spacing-xs) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-card--list .music-artist-name {
+  color: var(--color-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  margin: 0 0 var(--spacing-sm) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-card--list .music-album-name {
+  color: var(--color-text-gray);
+  font-size: var(--font-size-xs);
+  margin: 0 0 var(--spacing-xs) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-card--list .music-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-gray);
+}
+
+.music-card--list .music-genres {
+  margin-left: auto;
+  margin-top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+/* ============================================
+   COMMON ELEMENTS
+   ============================================ */
+
+.music-completion {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+}
+
+.music-date,
+.music-duration {
+  color: var(--color-text-gray);
+}
+
+.genre-tag {
+  display: inline-block;
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  padding: var(--spacing-xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.music-card--list .genre-tag {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.genre-tag.genre-more {
+  background-color: var(--color-rating-star);
+  color: var(--background-color);
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .music-card--grid .music-artwork-container {
+    height: var(--card-image-height-mobile);
+  }
+
+  .music-card--grid .music-track-name {
+    font-size: var(--font-size-sm);
+  }
+
+  .music-card--grid .music-artist-name {
+    font-size: var(--font-size-xs);
+  }
+
+  .music-card--list {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .music-card--list .music-artwork-container {
+    width: 100%;
+    height: var(--card-image-height-mobile);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .music-card--list .music-info {
+    width: 100%;
+  }
+
+  .music-card--list .music-genres {
+    margin-left: 0;
+    margin-top: var(--spacing-sm);
+  }
+
+  .genre-tag {
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-xs);
+  }
+}

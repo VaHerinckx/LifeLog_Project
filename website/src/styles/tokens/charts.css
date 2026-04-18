@@ -1,0 +1,74 @@
+/* ===== CHART TOKENS ===== */
+/* Specific design tokens for chart and visualization components */
+
+:root {
+  /* ===== CHART CONTAINER STYLING ===== */
+  /* Visual styling for chart containers */
+  --chart-border-radius: var(--radius-lg);      /* Chart container rounding (12px) */
+  --chart-padding: var(--spacing-lg);           /* Chart internal padding (24px) */
+  --chart-margin-bottom: var(--spacing-xl);     /* Space between charts (32px) */
+  --chart-shadow: var(--shadow-md);             /* Chart elevation shadow */
+
+  /* ===== CHART DIMENSIONS ===== */
+  /* Responsive height scale for chart containers */
+  --chart-height-default: 500px;   /* Default chart height */
+  --chart-height-mobile: 400px;    /* Mobile chart height */
+  --chart-height-tablet: 400px;    /* Tablet chart height */
+  --chart-height-desktop: 550px;   /* Desktop chart height */
+
+  /* ===== CHART LAYOUT PROPORTIONS ===== */
+  /* Internal layout ratios for chart components */
+  --chart-header-height-ratio: 20%;  /* Header takes 1/5 of container */
+  --chart-content-height-ratio: 80%; /* Chart content takes 4/5 of container */
+
+  /* ===== CHART TYPOGRAPHY ===== */
+  /* Text styling for chart titles and labels */
+  --chart-title-size: var(--font-size-xl);           /* Chart title font size (20px) */
+  --chart-title-weight: var(--font-weight-semibold); /* Chart title weight (600) */
+  --chart-title-margin: var(--spacing-md);           /* Space below title (16px) */
+  --chart-title-align: left;                         /* Chart title alignment */
+  --chart-title-color: var(--color-text-primary);    /* Chart title text color */
+
+  /* Chart element text sizes */
+  --chart-axis-label-size: var(--font-size-xs);      /* Axis labels (12px) */
+  --chart-legend-size: var(--font-size-sm);          /* Legend text (14px) */
+  --chart-tooltip-size: var(--font-size-base);       /* Tooltip text (16px) */
+
+  /* Fluid typography for responsive text scaling */
+  --chart-fluid-text-base: clamp(0.7rem, 2vw, 1rem);           /* Body text: 11.2px → 16px */
+  --chart-fluid-text-small: clamp(0.6rem, 1.5vw, 0.875rem);    /* Small labels: 9.6px → 14px */
+  --chart-fluid-text-large: clamp(0.9rem, 2.5vw, 1.25rem);     /* Large titles: 14.4px → 20px */
+
+  /* ===== CHART COLORS ===== */
+  /* Color system for chart components and data visualization */
+  --chart-primary-color: var(--color-primary);              /* Primary bars/lines (#6366f1) */
+  --chart-secondary-color: var(--color-accent);             /* Secondary series (#8b5cf6) */
+  --chart-tertiary-color: var(--base-color-info);           /* Third series (#3b82f6) */
+  --chart-background: var(--color-surface);                 /* Chart container background */
+  --chart-grid-line: rgba(23, 23, 56, 0.2);                 /* Grid line color (subtle) */
+
+  /* ===== CHART CONTROLS ===== */
+  /* Sizing for dropdown menus and filter controls within charts */
+  --chart-control-width-sm: 100px;                /* Small dropdown width */
+  --chart-control-width-md: 120px;                /* Medium dropdown width */
+  --chart-control-width-lg: 160px;                /* Large dropdown width */
+  --chart-control-gap: var(--spacing-md);         /* Space between controls (16px) */
+  --chart-control-padding: var(--spacing-xs);     /* Internal control padding (8px) */
+
+  /* ===== CHART MARGINS ===== */
+  /* Recharts-specific margins for labels and spacing */
+  --chart-margin-top: 20px;                       /* Top margin for chart area */
+  --chart-margin-right: 100px;                    /* Right margin (for labels extending beyond) */
+  --chart-margin-bottom: 20px;                    /* Bottom margin for chart area */
+  --chart-margin-left: 200px;                     /* Left margin (for long Y-axis labels) */
+}
+
+/* ===== RESPONSIVE OVERRIDES ===== */
+/* Adjust chart tokens for smaller screens */
+@media (max-width: 768px) {
+  :root {
+    --chart-margin-left: 120px;                   /* Reduced left margin on mobile */
+    --chart-margin-right: 60px;                   /* Reduced right margin on mobile */
+    --chart-control-width-md: 100%;               /* Full width controls on mobile */
+  }
+}

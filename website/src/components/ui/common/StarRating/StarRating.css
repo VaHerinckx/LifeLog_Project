@@ -1,0 +1,25 @@
+/**
+ * StarRating Component Styles
+ */
+
+.star-rating {
+  display: flex;
+  gap: var(--spacing-2xs);
+  align-items: center;
+}
+
+.star-rating .star {
+  flex-shrink: 0;
+}
+
+.star-rating .star-filled {
+  color: var(--color-rating-star);
+}
+
+.star-rating .star-half {
+  color: var(--color-rating-star);
+}
+
+.star-rating .star-empty {
+  color: var(--color-border-gray);
+}

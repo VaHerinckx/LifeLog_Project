@@ -1,0 +1,285 @@
+/* EpisodeCard Component Styles */
+@import '../../../styles/variables.css';
+
+/* Base Card Styles (common to both grid and list) */
+.episode-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+  cursor: pointer;
+}
+
+.episode-card:hover {
+  transform: translateY(calc(-1 * var(--spacing-xs)));
+  box-shadow: var(--shadow-lg);
+}
+
+/* Grid View - Vertical Layout */
+.episode-card--grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.episode-card--grid .episode-artwork-container {
+  width: 100%;
+  height: var(--card-image-height);
+  overflow: hidden;
+  background-color: var(--color-primary);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs);
+  box-sizing: border-box;
+}
+
+.episode-card--grid .episode-artwork {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform var(--transition-normal);
+}
+
+.episode-card--grid:hover .episode-artwork {
+  transform: scale(1.05);
+}
+
+.episode-card--grid .episode-info {
+  padding: var(--spacing-sm);
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-base);
+}
+
+/* List View - Horizontal Layout */
+.episode-card--list {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-lg);
+}
+
+.episode-card--list:hover {
+  transform: translateY(calc(-1 * var(--spacing-2xs)));
+  box-shadow: var(--shadow-md);
+}
+
+.episode-card--list .episode-artwork-container {
+  flex: 0 0 var(--list-image-width);
+  height: var(--list-image-width);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.episode-card--list .episode-artwork {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.episode-card--list .episode-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Episode Info Section */
+.episode-title {
+  color: var(--background-color);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+  line-height: var(--line-height-normal);
+}
+
+.episode-card--grid .episode-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.episode-card--list .episode-title {
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--spacing-xs);
+}
+
+.podcast-name {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.episode-card--grid .podcast-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.episode-card--list .podcast-name {
+  font-size: var(--font-size-base);
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Episode Meta */
+.episode-meta {
+  color: var(--color-text-gray);
+  font-size: var(--font-size-xs);
+  margin-bottom: var(--spacing-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.episode-card--list .episode-meta {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.meta-item--highlight {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Completion Progress */
+.completion-container {
+  margin-top: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.completion-bar {
+  width: 100%;
+  height: var(--spacing-xs);
+  background-color: var(--color-border-gray);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--spacing-2xs);
+}
+
+.completion-fill {
+  height: 100%;
+  background-color: var(--color-success);
+  transition: width var(--transition-normal);
+}
+
+.completion-text {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-gray);
+  font-weight: var(--font-weight-medium);
+}
+
+.episode-card--list .completion-info {
+  display: flex;
+  align-items: center;
+}
+
+.episode-card--list .completion-text {
+  font-size: var(--font-size-sm);
+}
+
+/* Episode Badges */
+.episode-badges {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding-top: var(--spacing-xs);
+}
+
+.episode-card--list .episode-badges {
+  margin-left: auto;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.episode-badge {
+  display: inline-block;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.episode-card--list .episode-badge {
+  padding: var(--spacing-2xs) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+}
+
+.episode-badge--language {
+  background-color: color-mix(in srgb, var(--color-badge-language) 20%, transparent);
+  color: var(--color-badge-language);
+}
+
+.episode-badge--new {
+  background-color: color-mix(in srgb, var(--color-badge-new) 20%, transparent);
+  color: var(--color-badge-new);
+}
+
+.episode-badge--recurring {
+  background-color: color-mix(in srgb, var(--color-badge-recurring) 20%, transparent);
+  color: var(--color-badge-recurring);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .episode-card--grid .episode-artwork-container {
+    height: var(--card-image-height-mobile);
+  }
+
+  .episode-card--grid .episode-title {
+    font-size: var(--font-size-sm);
+  }
+
+  .episode-card--grid .podcast-name {
+    font-size: var(--font-size-xs);
+  }
+
+  .episode-card--list {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .episode-card--list .episode-artwork-container {
+    width: 100%;
+    height: var(--card-image-height-mobile);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .episode-card--list .episode-info {
+    width: 100%;
+  }
+
+  .episode-card--list .episode-badges {
+    margin-left: 0;
+    margin-top: var(--spacing-sm);
+  }
+
+  .episode-card--list .episode-meta {
+    flex-direction: column;
+    gap: var(--spacing-2xs);
+  }
+
+  .episode-badge {
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-2xs) var(--spacing-xs);
+  }
+}

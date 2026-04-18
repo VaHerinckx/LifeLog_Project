@@ -1,0 +1,49 @@
+/* ===== LIFELOG DESIGN SYSTEM - DESIGN TOKENS ===== */
+/* Master import file for all design tokens */
+/* Import this file to access the complete design system */
+
+/* IMPORTANT: Import order matters! */
+/* Base colors must be imported before semantic colors that reference them */
+
+/* ===== COLOR SYSTEM ===== */
+/* Import base colors first, then semantic mappings */
+@import './colors.base.css';      /* Foundation color palette (21 base colors) */
+@import './colors.semantic.css';  /* Semantic color mappings (references base colors) */
+
+/* ===== LAYOUT & STRUCTURE ===== */
+@import './spacing.css';          /* Spacing scale + icon sizes (13 variables) */
+@import './layout.css';           /* Containers, breakpoints, z-index (16 variables) */
+
+/* ===== VISUAL STYLE ===== */
+@import './typography.css';       /* Fonts, sizes, weights, line heights (13 variables) */
+@import './borders.css';          /* Border radius + widths (9 variables) */
+@import './shadows.css';          /* Shadow scale for depth (5 variables) */
+
+/* ===== BEHAVIOR ===== */
+@import './transitions.css';      /* Animation timing (3 variables) */
+
+/* ===== COMPONENT-SPECIFIC ===== */
+@import './charts.css';           /* Chart-specific tokens (18 variables) */
+
+/* ===== USAGE ===== */
+/*
+To use the design system in your components:
+
+1. Import all tokens:
+   @import '../../../styles/tokens/index.css';
+
+2. Import specific token files (for better tree-shaking):
+   @import '../../../styles/tokens/colors.semantic.css';
+   @import '../../../styles/tokens/spacing.css';
+
+3. Use variables in your styles:
+   .my-component {
+     color: var(--color-primary);
+     padding: var(--spacing-lg);
+     font-size: var(--font-size-base);
+   }
+
+To change the website theme:
+- Edit base colors in colors.base.css
+- All semantic colors automatically update
+*/

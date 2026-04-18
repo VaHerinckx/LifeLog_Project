@@ -1,0 +1,421 @@
+/* TopChart component using standardized design system */
+.top-artists-container,
+.top-tracks-container,
+.top-albums-container,
+.top-categorys-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  background-color: var(--chart-background);
+  border-radius: var(--chart-border-radius);
+  padding: var(--chart-padding);
+  padding-bottom: calc(var(--chart-padding) + var(--spacing-lg));
+  box-shadow: var(--chart-shadow);
+}
+
+/* Chart header with title and controls */
+.top-artists-container .chart-header,
+.top-tracks-container .chart-header,
+.top-albums-container .chart-header,
+.top-categorys-container .chart-header {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.top-artists-title,
+.top-tracks-title,
+.top-albums-title,
+.chart-title {
+  color: var(--chart-title-color);
+  font-size: var(--chart-title-size);
+  font-weight: var(--chart-title-weight);
+  margin: 0;
+  text-align: var(--chart-title-align);
+}
+
+/* Controls container for multiple dropdowns */
+.chart-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--chart-control-gap);
+  flex-wrap: wrap;
+}
+
+/* Individual filter control */
+.chart-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.chart-filter label {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  width: auto;
+  white-space: nowrap;
+}
+
+.chart-filter .filter-select {
+  width: var(--chart-control-width-lg);
+  padding: var(--chart-control-padding);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  background-color: var(--color-surface-elevated);
+  cursor: pointer;
+}
+
+.chart-filter .filter-select:hover {
+  border-color: var(--color-primary);
+}
+
+/* Chart content area - fills remaining space */
+.top-artists-container .recharts-responsive-container,
+.top-tracks-container .recharts-responsive-container,
+.top-albums-container .recharts-responsive-container,
+.top-categorys-container .recharts-responsive-container {
+  flex-grow: 1;
+  flex-shrink: 0;
+  min-height: 0;
+}
+
+/* Scrollable container for fixed bar height mode */
+.chart-scrollable-container {
+  overflow-y: auto;
+  flex-grow: 1;
+  min-height: 0;
+}
+
+.chart-scrollable-container::-webkit-scrollbar {
+  width: var(--spacing-xs);
+}
+
+.chart-scrollable-container::-webkit-scrollbar-track {
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-sm);
+}
+
+.chart-scrollable-container::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: var(--radius-sm);
+}
+
+.chart-scrollable-container::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* Sort direction toggle button */
+.sort-direction-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--spacing-xs);
+  border: var(--border-width-thin) solid var(--border-color-medium);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.sort-direction-btn:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-surface);
+}
+
+.sort-direction-btn:active {
+  background-color: var(--color-active);
+}
+
+/* Artwork image styling */
+.chart-item-artwork {
+  border-radius: var(--radius-xs);
+  border: var(--border-width-thin) solid var(--border-color-light);
+}
+
+/* Indicator styles */
+.popularity-indicator,
+.year-indicator {
+  stroke: var(--background-color);
+  stroke-width: var(--border-width-thin);
+}
+
+.popularity-text,
+.year-text {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Name labels */
+.artist-name,
+.track-name,
+.album-name {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  fill: var(--color-text-primary);
+}
+
+.value-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  fill: var(--color-text-primary);
+}
+
+/* Tooltip styling */
+.top-artists-tooltip,
+.top-tracks-tooltip,
+.top-albums-tooltip {
+  background-color: var(--color-white);
+  padding: var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
+.tooltip-name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-on-surface);
+  margin-bottom: var(--spacing-2xs);
+}
+
+.tooltip-time {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-on-surface);
+}
+
+.tooltip-popularity {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+}
+
+/* ===== CLICKABLE CHART INDICATOR ===== */
+.top-artists-container,
+.top-tracks-container,
+.top-albums-container,
+.top-categorys-container {
+  cursor: pointer;
+  transition: box-shadow var(--transition-fast);
+}
+
+.top-artists-container:hover,
+.top-tracks-container:hover,
+.top-albums-container:hover,
+.top-categorys-container:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Prevent controls from triggering focus mode */
+.top-categorys-container .chart-controls,
+.top-categorys-container .chart-filter,
+.top-categorys-container .sort-direction-btn {
+  cursor: default;
+}
+
+/* ===== FOCUS MODE STYLES ===== */
+.topchart-focus-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--overlay-backdrop);
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--spacing-lg);
+  backdrop-filter: blur(5px);
+}
+
+.topchart-focus-content {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 95vw;
+  height: 90vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}
+
+/* Close Button - Top Left */
+.topchart-focus-content .focus-close-button {
+  position: absolute;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  background-color: var(--overlay-light);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast);
+  color: var(--color-text-primary);
+}
+
+.topchart-focus-content .focus-close-button:hover {
+  background-color: var(--overlay-light-hover);
+}
+
+/* Controls Bar - Horizontal Layout */
+.topchart-focus-controls-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-xl);
+  padding-left: 60px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+/* Chart Container in Focus Mode */
+.topchart-focus-chart-container {
+  flex: 1;
+  padding: var(--spacing-lg);
+  padding-top: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.topchart-focus-chart-container .recharts-responsive-container {
+  flex: 1;
+}
+
+.topchart-focus-chart-container .chart-scrollable-container {
+  flex: 1;
+  max-height: 100%;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .top-artists-container,
+  .top-tracks-container,
+  .top-albums-container,
+  .top-categorys-container {
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  /* Stack header vertically on mobile */
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  /* Stack controls vertically on mobile */
+  .chart-controls {
+    flex-direction: column;
+    width: 100%;
+    gap: var(--spacing-sm);
+    align-items: stretch;
+  }
+
+  .chart-filter {
+    width: 100%;
+    gap: var(--spacing-xs);
+  }
+
+  .chart-filter label {
+    font-size: var(--font-size-xs);
+  }
+
+  .chart-filter .filter-select {
+    width: 100%;
+    font-size: var(--font-size-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  /* Stack sort button with filters */
+  .sort-direction-btn {
+    width: 100%;
+    min-height: var(--nav-height-mobile);
+    font-size: var(--font-size-sm);
+  }
+
+  /* Allow chart content to use remaining space - match TimeSeriesBarChart behavior */
+  .top-artists-container .recharts-responsive-container,
+  .top-tracks-container .recharts-responsive-container,
+  .top-albums-container .recharts-responsive-container,
+  .top-categorys-container .recharts-responsive-container {
+    height: auto !important;
+    min-height: 180px !important;
+    flex: 1 1 auto;
+  }
+
+  .top-artists-title,
+  .top-tracks-title,
+  .top-albums-title,
+  .chart-title {
+    font-size: var(--font-size-base);
+  }
+
+  .artist-name,
+  .track-name,
+  .album-name {
+    font-size: var(--chart-fluid-text-small);
+  }
+
+  .value-label {
+    font-size: var(--chart-fluid-text-small);
+  }
+}
+
+/* ===== FOCUS MODE MOBILE STYLES ===== */
+/* Mobile Portrait - Compact layout */
+@media (max-width: 768px) and (orientation: portrait) {
+  .topchart-focus-content {
+    width: 98vw;
+    height: 95vh;
+  }
+
+  .topchart-focus-controls-bar {
+    flex-wrap: wrap;
+    padding: var(--spacing-sm);
+    padding-left: 50px;
+    gap: var(--spacing-sm);
+  }
+
+  .topchart-focus-controls-bar .chart-filter {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+
+  .topchart-focus-chart-container {
+    padding: var(--spacing-sm);
+  }
+}
+
+/* Mobile Landscape - Optimized full-width layout */
+@media (max-width: 768px) and (orientation: landscape) {
+  .topchart-focus-content {
+    width: 98vw;
+    height: 95vh;
+  }
+
+  .topchart-focus-controls-bar {
+    padding: var(--spacing-sm) var(--spacing-md);
+    gap: var(--spacing-md);
+  }
+
+  .topchart-focus-chart-container {
+    padding: var(--spacing-sm);
+  }
+}

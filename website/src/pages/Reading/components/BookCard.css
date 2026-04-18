@@ -1,0 +1,294 @@
+/* BookCard Component Styles */
+@import '../../../styles/variables.css';
+
+/* Base Card Styles (common to both grid and list) */
+.book-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+  cursor: pointer;
+}
+
+.book-card:hover {
+  transform: translateY(calc(-1 * var(--spacing-xs)));
+  box-shadow: var(--shadow-lg);
+}
+
+/* Grid View - Vertical Layout */
+.book-card--grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.book-card--grid .book-cover-container {
+  width: 100%;
+  height: var(--card-image-height);
+  overflow: hidden;
+  background-color: var(--color-primary);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) 0;
+}
+
+.book-card--grid .book-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background-color: var(--color-primary);
+  transition: transform var(--transition-normal);
+}
+
+.book-card--grid:hover .book-cover {
+  transform: scale(1.05);
+}
+
+.book-card--grid .book-info {
+  padding: var(--spacing-sm);
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-base);
+}
+
+/* List View - Horizontal Layout */
+.book-card--list {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: var(--spacing-md);
+  gap: var(--spacing-lg);
+}
+
+.book-card--list:hover {
+  transform: translateY(calc(-1 * var(--spacing-xs) / 2));
+  box-shadow: var(--shadow-md);
+}
+
+.book-card--list .book-cover-container {
+  flex: 0 0 var(--list-image-width);
+  height: var(--card-image-height-list);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+}
+
+.book-card--list .book-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.book-card--list .book-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Book Info Section */
+.book-title {
+  color: var(--background-color);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+}
+
+.book-card--grid .book-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-card--list .book-title {
+  font-size: var(--font-size-lg);
+  margin-bottom: var(--spacing-xs);
+}
+
+.book-author {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.book-card--grid .book-author {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-card--list .book-author {
+  font-size: var(--font-size-base);
+  margin-bottom: var(--spacing-xs);
+}
+
+.book-meta {
+  color: var(--color-text-gray);
+  font-size: var(--font-size-xs);
+  margin-bottom: var(--spacing-xs);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.book-card--list .book-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  font-size: var(--font-size-sm);
+}
+
+.pages-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* Genre Tags */
+.book-genre-tags {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.book-card--list .book-genre-tags {
+  margin-left: auto;
+  margin-top: 0;
+}
+
+.book-genre {
+  display: inline-block;
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  padding: calc(var(--spacing-xs) / 2) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.book-card--list .book-genre {
+  padding: calc(var(--spacing-xs) / 2) var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.fiction-tag {
+  background-color: var(--color-rating-star);
+  color: var(--background-color);
+}
+
+.non-fiction-tag {
+  background-color: var(--color-primary);
+}
+
+/* Rating, Pages, Duration Wrapper (List View) */
+.rating-pages-duration {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+/* Rating Stars */
+.rating-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: var(--spacing-xs) 0;
+}
+
+.rating-label {
+  font-size: var(--font-size-sm);
+  color: var(--background-color);
+}
+
+.stars {
+  display: flex;
+  gap: calc(var(--spacing-xs) / 4);
+}
+
+.star {
+  color: var(--color-rating-star);
+}
+
+.empty-star {
+  color: var(--color-border-gray);
+}
+
+.rating-value {
+  margin-left: var(--spacing-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Reading Dates and Duration */
+.reading-dates {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-element);
+}
+
+.date-label {
+  font-weight: var(--font-weight-medium);
+}
+
+.date-value {
+  margin-left: calc(var(--spacing-xs) / 2);
+}
+
+.reading-duration {
+  font-size: var(--font-size-xs);
+  color: var(--text-element);
+  margin-top: calc(var(--spacing-xs) / 2);
+}
+
+.book-card--list .reading-duration {
+  margin-left: var(--spacing-xs);
+}
+
+.duration-value {
+  font-style: italic;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .book-card--grid .book-cover-container {
+    height: var(--card-image-height-mobile);
+  }
+
+  .book-card--grid .book-title {
+    font-size: var(--font-size-sm);
+  }
+
+  .book-card--grid .book-author {
+    font-size: var(--font-size-xs);
+  }
+
+  .book-card--list {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .book-card--list .book-cover-container {
+    width: 100%;
+    height: var(--card-image-height-mobile);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .book-card--list .book-info {
+    width: 100%;
+  }
+
+  .book-card--list .book-genre-tags {
+    margin-left: 0;
+    margin-top: var(--spacing-xs);
+  }
+
+  .book-genre {
+    font-size: var(--font-size-xs);
+    padding: calc(var(--spacing-xs) / 4) calc(var(--spacing-xs) / 2);
+  }
+}

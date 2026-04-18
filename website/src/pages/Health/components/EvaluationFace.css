@@ -1,0 +1,45 @@
+/* EvaluationFace Component Styles */
+@import '../../../styles/variables.css';
+
+.evaluation-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.face-svg {
+  width: 100%;
+  height: 100%;
+  color: var(--face-color);
+  transition: color var(--transition-normal);
+}
+
+/* Size variants */
+.evaluation-face--sm {
+  width: var(--icon-size-md);
+  height: var(--icon-size-md);
+}
+
+.evaluation-face--md {
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+.evaluation-face--lg {
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
+}
+
+/* Smooth transitions for face elements */
+.face-eyes,
+.face-mouth {
+  transition: all var(--transition-normal);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .evaluation-face--lg {
+    width: var(--icon-size-lg);
+    height: var(--icon-size-lg);
+  }
+}

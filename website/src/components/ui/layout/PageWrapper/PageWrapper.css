@@ -1,0 +1,41 @@
+/* PageWrapper Error State Styles */
+
+.page-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: var(--spacing-xl);
+  text-align: center;
+}
+
+.page-error-icon {
+  width: var(--icon-xl);
+  height: var(--icon-xl);
+  color: var(--color-error);
+  margin-bottom: var(--spacing-lg);
+}
+
+.layout {
+  padding-bottom: var(--spacing-md);
+}
+
+.page-error-title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.page-error-message {
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  max-width: 600px;
+  line-height: var(--line-height-relaxed);
+}
+
+/* Wide page variant */
+.page-container--wide .page-content {
+  max-width: 1400px;
+}

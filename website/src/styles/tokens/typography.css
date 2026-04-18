@@ -1,0 +1,38 @@
+/* ===== TYPOGRAPHY SCALE ===== */
+/* Modular scale for consistent typography hierarchy */
+
+/* Import custom fonts */
+@import '../../assets/fonts/fonts.css';
+
+:root {
+  /* ===== FONT SIZES ===== */
+  /* Modular scale for text sizing */
+  --font-size-xs: 0.75rem;     /* 12px - Very small text, labels */
+  --font-size-sm: 0.875rem;    /* 14px - Small text, captions */
+  --font-size-base: 1rem;      /* 16px - Base body text */
+  --font-size-lg: 1.125rem;    /* 18px - Slightly larger body text */
+  --font-size-xl: 1.25rem;     /* 20px - Small headings */
+  --font-size-2xl: 1.5rem;     /* 24px - Medium headings */
+  --font-size-3xl: 2rem;       /* 32px - Large headings */
+  --font-size-4xl: 2.5rem;     /* 40px - Extra large headings */
+  --font-size-5xl: 3rem;       /* 48px - Hero headings */
+  --font-size-6xl: 3.75rem;    /* 60px - Display headings, hero text */
+
+  /* ===== LINE HEIGHTS ===== */
+  /* Line height scale for optimal readability */
+  --line-height-tight: 1.25;    /* Tight line height for headings */
+  --line-height-normal: 1.5;    /* Normal line height for body text */
+  --line-height-relaxed: 1.75;  /* Relaxed line height for long-form content */
+
+  /* ===== FONT WEIGHTS ===== */
+  /* Font weight scale for emphasis */
+  --font-weight-normal: 400;    /* Normal/regular weight */
+  --font-weight-medium: 500;    /* Medium weight */
+  --font-weight-semibold: 600;  /* Semi-bold weight */
+  --font-weight-bold: 700;      /* Bold weight */
+
+  /* ===== FONT FAMILIES ===== */
+  /* Font family stacks with fallbacks */
+  --font-primary: 'Wotfard', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --font-secondary: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+}

@@ -1,0 +1,976 @@
+/* src/components/ui/Filters/Filter/Filter.css */
+@import '../../../../styles/variables.css';
+
+.filter-container {
+  position: relative;
+  width: 100%;
+  font-family: var(--font-primary);
+}
+
+.filter-label {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+  color: var(--text-element);
+  text-shadow: 0 1px 2px var(--shadow-color-sm);
+}
+
+.filter-header {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--border-color-primary-light);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-white);
+  cursor: pointer;
+  min-height: 38px;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.filter-header:hover {
+  border-color: var(--color-primary);
+}
+
+.filter-header.open {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-tint-20);
+}
+
+.filter-icon {
+  margin-right: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  color: var(--color-primary);
+}
+
+.filter-selection-display {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-placeholder {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.filter-selected {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-element);
+}
+
+.filter-clear-btn {
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--spacing-xs) / 2);
+  cursor: pointer;
+  color: var(--color-text-muted);
+  margin: 0 calc(var(--spacing-xs) / 2);
+  border-radius: var(--radius-full);
+  transition: all var(--transition-fast);
+}
+
+.filter-clear-btn:hover {
+  color: var(--text-element);
+  background-color: var(--color-primary-tint-10);
+}
+
+.filter-dropdown-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--color-primary);
+  transition: transform var(--transition-fast);
+}
+
+.open .filter-dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.filter-dropdown {
+  position: absolute;
+  top: calc(100% + var(--spacing-xs));
+  left: 0;
+  right: 0;
+  background-color: var(--color-white);
+  border: var(--border-width-thin) solid var(--border-color-primary-light);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 8px var(--shadow-color-sm);
+  z-index: var(--z-dropdown);
+  display: flex;
+  flex-direction: column;
+  max-height: 400px;
+}
+
+.filter-search-container {
+  position: relative;
+  padding: var(--spacing-sm);
+  border-bottom: var(--border-width-thin) solid var(--color-primary-tint-10);
+}
+
+.filter-search-icon {
+  position: absolute;
+  left: var(--spacing-md);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-primary);
+}
+
+.filter-search-input {
+  /*width: 100%;*/
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-xl);
+  border: var(--border-width-thin) solid var(--border-color-primary-light);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  outline: none;
+  background-color: var(--color-white);
+  color: var(--text-element);
+}
+
+.filter-search-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-tint-20);
+}
+
+.filter-select-all-container {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-bottom: var(--border-width-thin) solid var(--color-primary-tint-10);
+}
+
+.filter-options-list {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: var(--spacing-xs) 0;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  border-radius: var(--radius-sm);
+  margin: 0 calc(var(--spacing-xs) / 2);
+  color: var(--text-element);
+}
+
+.filter-option:hover {
+  background-color: var(--element-background-color);
+}
+
+.filter-option.selected {
+  background-color: var(--color-primary-tint-10);
+}
+
+/* Control styling */
+.filter-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: var(--spacing-sm);
+}
+
+/* Radio button styling (circles) */
+.radio-control {
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
+}
+
+.radio-button {
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
+  border: var(--border-width-medium) solid var(--border-color-primary-light);
+  border-radius: var(--radius-full);
+  background-color: var(--color-white);
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.radio-button.selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-white);
+}
+
+.radio-dot {
+  width: calc(var(--icon-size-xs) * 0.5);
+  height: calc(var(--icon-size-xs) * 0.5);
+  background-color: var(--color-primary);
+  border-radius: var(--radius-full);
+}
+
+/* Checkbox styling (squares) - consistent size always */
+.checkbox-control {
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
+  flex-shrink: 0;
+}
+
+.checkbox {
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
+  min-width: var(--icon-size-xs);
+  min-height: var(--icon-size-xs);
+  border: var(--border-width-medium) solid var(--color-primary);
+  border-radius: var(--radius-xs);
+  background-color: var(--color-white);
+  transition: background-color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-white);
+  box-sizing: border-box;
+}
+
+.checkbox.selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: var(--color-white);
+}
+
+.filter-option-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-no-results {
+  padding: var(--spacing-md);
+  text-align: center;
+  color: var(--text-element);
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* ============================================================
+   GENERIC RANGE FILTER STYLES (Date & Number)
+   Shared by both daterange and numberrange filter types
+   ============================================================ */
+
+/* Dropdown mode container */
+.filter-range-content {
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+/* Input container (Start/End or Min/Max) */
+.range-inputs {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+/* Individual input wrapper (label + input) */
+.range-input-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+}
+
+.range-input-group label {
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  min-width: 35px; /* Accommodates both "Start:"/"End:" and "Min:"/"Max:" */
+  color: var(--text-element);
+}
+
+/* Input fields - works for both date and number types */
+.range-input-group input {
+  flex: 1;
+  padding: calc(var(--spacing-xs) * 0.75) var(--spacing-xs);
+  border: var(--border-width-thin) solid var(--color-border); /* Matches bubbles */
+  border-radius: var(--radius-md); /* 8px - matches bubbles (was --radius-sm/4px) */
+  background-color: var(--color-white);
+  font-size: var(--font-size-sm);
+  color: var(--text-element);
+  min-height: 32px;
+  transition: border-color 0.2s ease;
+}
+
+.range-input-group input:hover {
+  border-color: var(--border-color-primary);
+}
+
+.range-input-group input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-tint-20);
+}
+
+/* Number input spinner styling */
+.range-input-group input[type="number"]::-webkit-inner-spin-button,
+.range-input-group input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+}
+
+/* Slider container */
+.range-slider {
+  position: relative;
+  height: 38px;
+  width: 100%;
+  cursor: pointer;
+  margin-top: var(--spacing-xs);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .range-inputs {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .range-input-group label {
+    min-width: 30px;
+  }
+}
+
+.slider-track {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  height: 5px;
+  background-color: var(--color-primary-tint-10);
+  border-radius: var(--radius-xs);
+}
+
+.slider-fill {
+  position: absolute;
+  height: 100%;
+  background-color: var(--color-primary);
+  border-radius: var(--radius-xs);
+  z-index: 2;
+}
+
+.slider-handle {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
+  background-color: var(--color-white);
+  border: var(--border-width-medium) solid var(--color-primary);
+  border-radius: var(--radius-full);
+  cursor: grab;
+  z-index: 3;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: 0 1px 3px var(--shadow-color-sm);
+}
+
+.slider-handle:hover,
+.slider-handle:active {
+  transform: translate(-50%, -50%) scale(1.1);
+  box-shadow: 0 1px 6px var(--shadow-color-lg);
+}
+
+.slider-handle:active {
+  cursor: grabbing;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--spacing-xs);
+  color: var(--text-element);
+  font-size: var(--font-size-xs);
+  opacity: 0.8;
+}
+
+/* Scrollbar styling */
+.filter-options-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.filter-options-list::-webkit-scrollbar-track {
+  background: var(--color-primary-tint-5);
+  border-radius: var(--radius-lg);
+}
+
+.filter-options-list::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  opacity: 0.3;
+  border-radius: var(--radius-lg);
+}
+
+.filter-options-list::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+  opacity: 0.5;
+}
+
+/* Responsive styling */
+@media (max-width: 768px) {
+  .filter-container {
+    padding-top: var(--spacing-xs);
+  }
+
+  .filter-label {
+    margin-top: var(--spacing-xs);
+    margin-bottom: var(--spacing-sm);
+  }
+
+  .filter-header {
+    min-height: 42px;
+    padding: var(--spacing-sm);
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .filter-dropdown {
+    top: calc(100% + var(--spacing-sm));
+  }
+
+  .filter-search-input {
+    font-size: 16px; /* Prevent zoom on mobile */
+    padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) calc(var(--spacing-xl) + var(--spacing-xs));
+  }
+
+  .filter-option {
+    padding: var(--spacing-sm);
+  }
+
+  .radio-button,
+  .checkbox {
+    width: var(--icon-size-sm);
+    height: var(--icon-size-sm);
+  }
+
+  .radio-control,
+  .checkbox-control {
+    width: var(--icon-size-sm);
+    height: var(--icon-size-sm);
+  }
+
+  /* Clear button - more visible on mobile */
+  .filter-clear-btn {
+    color: var(--color-primary);
+    padding: var(--spacing-xs);
+    min-width: var(--icon-size-lg);
+    min-height: var(--icon-size-lg);
+    background-color: var(--color-primary-tint-5);
+  }
+
+  .filter-clear-btn:active {
+    background-color: var(--color-primary-tint-20);
+    transform: scale(0.95);
+  }
+
+  /* Date range responsive */
+  .daterange-inputs {
+    flex-direction: column;
+    gap: var(--spacing-xs);
+  }
+
+  .daterange-input-group {
+    margin-bottom: var(--spacing-xs);
+  }
+
+  .slider-handle {
+    width: var(--icon-size-sm);
+    height: var(--icon-size-sm);
+  }
+
+  .daterange-slider {
+    height: 45px;
+  }
+
+  .slider-track {
+    height: 6px;
+  }
+
+  .daterange-input-group input {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 16px; /* Prevent zoom on mobile */
+  }
+}
+
+/* Touch-friendly adjustments for mobile */
+@media (pointer: coarse) {
+  .slider-handle {
+    width: calc(var(--icon-size-sm) * 1.1);
+    height: calc(var(--icon-size-sm) * 1.1);
+  }
+
+  .daterange-slider {
+    height: 50px;
+  }
+
+  .slider-track {
+    height: 6px;
+  }
+}
+
+/* HIERARCHICAL FILTER STYLES */
+.hierarchical-options-list {
+  /* Inherits .filter-options-list styles */
+}
+
+.hierarchical-parent-group {
+  margin-bottom: var(--spacing-xs);
+}
+
+.hierarchical-parent {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  position: relative;
+  /* Reserve space for expand icon even when not present */
+  padding-left: calc(var(--spacing-sm) + var(--icon-size-xs) + var(--spacing-xs));
+}
+
+.hierarchical-expand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: var(--spacing-xs);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+  min-width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
+  /* Position absolute to take it out of flow */
+  position: absolute;
+  left: var(--spacing-sm);
+}
+
+.hierarchical-expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.hierarchical-parent-content {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  cursor: pointer;
+}
+
+.hierarchical-count {
+  color: var(--text-element);
+  opacity: 0.6;
+  font-size: var(--font-size-sm);
+  margin-left: var(--spacing-xs);
+}
+
+.hierarchical-children {
+  padding-left: var(--spacing-xl);
+  margin-top: var(--spacing-xs);
+}
+
+.hierarchical-child {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  padding-left: var(--spacing-md);
+}
+
+/* Ensure expand icon doesn't affect option hover state */
+.hierarchical-parent:hover .hierarchical-expand-icon {
+  color: var(--color-primary);
+}
+
+/* Responsive adjustments for hierarchical filters */
+@media (max-width: 768px) {
+  .hierarchical-parent {
+    padding: var(--spacing-sm);
+  }
+
+  .hierarchical-child {
+    padding: var(--spacing-sm);
+    padding-left: var(--spacing-md);
+  }
+
+  .hierarchical-children {
+    padding-left: var(--spacing-md);
+  }
+}
+
+/* ========================================
+   MODAL CONTEXT Z-INDEX SCOPING
+   ======================================== */
+
+/* Scope z-index for dropdowns inside modal to prevent rendering below overlay */
+.filter-modal-content .filter-dropdown {
+  z-index: 10; /* Relative to modal, not page */
+  position: relative;
+}
+
+.filter-modal-content .filter-container {
+  position: relative;
+  z-index: 1;
+}
+
+/* Make filters full-width in modal */
+@media (max-width: 992px) {
+  .filter-modal-filters .filter-container {
+    width: 100%;
+    flex-basis: 100%;
+  }
+
+  /* Ensure dropdowns don't overflow viewport */
+  .filter-modal-filters .filter-dropdown {
+    max-height: 300px; /* Prevent dropdown from being too tall */
+  }
+
+  /* Adjust date range layout for mobile modal */
+  .filter-modal-filters .date-range-inputs {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+}
+
+/* ===================================================
+   BUBBLE MODE STYLING
+   ================================================ */
+
+/* Bubble mode container */
+.filter-container.bubble-mode {
+  /* Separator borders handled by .filter-item wrapper in FilteringPanel.css */
+}
+
+/* Filter labels in bubble mode - bold and bigger */
+.bubble-mode .filter-label {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-text-primary);
+}
+
+/* Bubble mode container */
+.filter-bubble-mode {
+  width: 100%;
+}
+
+/* Search bar for bubble mode */
+.filter-bubble-search {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  width: 100%;
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background-color: var(--base-color-white);
+}
+
+.filter-bubble-search svg {
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  padding-left: var(--spacing-sm);
+}
+
+.filter-bubble-search-input {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: var(--border-width-thin) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background-color: var(--base-color-white);
+  font-size: var(--font-size-sm);
+
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.filter-bubble-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.filter-bubble-search-input::placeholder {
+  color: var(--color-text-primary);
+}
+
+/* Bubble container */
+.filter-bubble-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  align-items: flex-start;
+  margin-top: var(--spacing-sm);
+}
+
+/* Individual bubble */
+.filter-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  border: none;
+  white-space: nowrap;
+
+  /* Unselected state - lighter background for contrast */
+  background-color: var(--base-color-white);
+  border: var(--border-width-thin) solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.filter-bubble:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-tint-5);
+  transform: translateY(-1px);
+}
+
+.filter-bubble:active {
+  transform: scale(0.95);
+}
+
+.filter-bubble.selected {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.filter-bubble.selected:hover {
+  background-color: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+/* Select All bubble variant */
+.filter-bubble.select-all-bubble {
+  background-color: var(--base-color-white);
+  border: var(--border-width-thin) solid var(--color-border);
+  font-weight: var(--font-weight-bold) !important;
+  font-family: var(--font-secondary); /* Use Inter which has bold weight */
+}
+
+.filter-bubble.select-all-bubble.selected {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+  font-weight: var(--font-weight-bold) !important;
+  font-family: var(--font-secondary); /* Use Inter which has bold weight */
+}
+
+/* Show more/less bubble variant */
+.filter-bubble.show-more {
+  border: var(--border-width-thin) dashed var(--color-border);
+  background-color: var(--base-color-timeline-2);
+  color: var(--color-text-primary);
+  font-style: italic;
+  font-weight: var(--font-weight-normal);
+}
+
+.filter-bubble.show-more:hover {
+  background-color: var(--color-primary-tint-10);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  border-style: solid;
+  font-style: normal;
+}
+
+/* Show less bubble variant */
+.filter-bubble.show-less {
+  border: var(--border-width-thin) dashed var(--color-border);
+  background-color: var(--base-color-timeline-2);
+  color: var(--color-text-primary) !important;
+  font-style: italic;
+  font-weight: var(--font-weight-normal);
+}
+
+.filter-bubble.show-less:hover {
+  background-color: var(--color-primary-tint-10);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  border-style: solid;
+  font-style: normal;
+}
+
+/* Hierarchical parent bubble */
+.filter-bubble.hierarchical-parent {
+  font-weight: var(--font-weight-semibold);
+  padding: 8px 14px;
+  position: relative;
+}
+
+/* Bubble count badge */
+.bubble-count {
+  opacity: 0.7;
+  font-size: var(--font-size-xs);
+  margin-left: 2px;
+  font-weight: var(--font-weight-normal);
+}
+
+/* Hierarchical bubble group container */
+.hierarchical-bubble-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  /* Allow groups to sit side-by-side when no children expanded */
+  flex-shrink: 0;
+}
+
+/* When children are visible, force full width for proper layout */
+.hierarchical-bubble-group:has(.filter-bubble-children) {
+  width: 100%;
+}
+
+/* Parent row - holds parent bubble and chevron on same line */
+.hierarchical-parent-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+/* External chevron button - outside the bubble */
+.bubble-chevron-external {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  /*padding: var(--spacing-xs);*/
+  border-radius: var(--radius-full);
+  color: var(--color-primary);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  width: calc(var(--icon-size-sm) * 1.4);
+  height: calc(var(--icon-size-sm) * 1.4);
+}
+
+.bubble-chevron-external:hover {
+  background-color: var(--color-primary-tint-10);
+  transform: scale(1.1);
+}
+
+.bubble-chevron-external:active {
+  transform: scale(0.95);
+}
+
+.bubble-chevron-external.expanded {
+  transform: rotate(180deg);
+}
+
+.bubble-chevron-external.expanded:hover {
+  transform: rotate(180deg) scale(1.1);
+}
+
+/* Hierarchical children container */
+.filter-bubble-children {
+  margin-left: var(--spacing-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+  padding-left: var(--spacing-sm);
+  border-left: 2px solid var(--color-border);
+}
+
+/* Animation for expanding bubbles */
+@keyframes bubbleSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.filter-bubble.entering {
+  animation: bubbleSlideIn 0.2s ease-out;
+  animation-delay: calc(min(var(--bubble-index), 20) * 0.02s);
+}
+
+/* Performance optimization */
+.filter-bubble-container {
+  contain: layout style paint;
+}
+
+/* Mobile: Touch-friendly sizing */
+@media (max-width: 768px) {
+  .bubble-mode .filter-label {
+    margin-top: var(--spacing-sm);
+  }
+
+  .filter-bubble {
+    padding: 8px 14px;
+    font-size: var(--font-size-base);
+    min-height: 44px;
+    gap: var(--spacing-sm);
+  }
+
+  .filter-bubble.hierarchical-parent {
+    padding: 10px 16px;
+  }
+
+  .filter-bubble-container {
+    gap: var(--spacing-sm);
+    padding-top: var(--spacing-sm);
+  }
+
+  .filter-bubble-search-input {
+    font-size: var(--font-size-base);
+    padding: var(--spacing-sm);
+  }
+
+  .filter-bubble-children {
+    margin-left: var(--spacing-sm);
+  }
+
+  /* Larger touch target for chevron on mobile */
+  .bubble-chevron-external {
+    width: 36px;
+    height: 36px;
+    padding: var(--spacing-xxs);
+  }
+
+  .hierarchical-parent-row {
+    gap: var(--spacing-xs);
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 992px) {
+  .filter-bubble {
+    padding: 7px 13px;
+  }
+}
+
+/* ===================================================
+   RANGE FILTERS INLINE (BUBBLE MODE)
+   ================================================ */
+
+/* Inline range filter container */
+.filter-range-inline {
+  width: 100%;
+  padding: var(--spacing-sm) 0;
+}
+
+/* Ensure date/number range inputs and sliders work inline */
+.filter-range-inline .range-inputs {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.filter-range-inline .range-slider {
+  width: 100%;
+}
+
+/* Mobile: Stack inputs vertically */
+@media (max-width: 768px) {
+  .filter-range-inline {
+    padding-top: var(--spacing-sm);
+  }
+
+  .filter-range-inline .range-inputs {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+}

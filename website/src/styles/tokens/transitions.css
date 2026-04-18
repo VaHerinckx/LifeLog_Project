@@ -1,0 +1,10 @@
+/* ===== TRANSITION TOKENS ===== */
+/* Consistent animation timing for smooth interactions */
+
+:root {
+  /* ===== TRANSITIONS ===== */
+  /* Animation timing scale for UI transitions */
+  --transition-fast: 150ms ease-in-out;    /* Fast transitions - quick feedback */
+  --transition-normal: 250ms ease-in-out;  /* Normal transitions - default interactions */
+  --transition-slow: 350ms ease-in-out;    /* Slow transitions - deliberate animations */
+}

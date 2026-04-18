@@ -1,0 +1,12 @@
+/* ===== SHADOW TOKENS ===== */
+/* Consistent shadow system for depth and elevation */
+
+:root {
+  /* ===== SHADOWS ===== */
+  /* Shadow scale for creating depth hierarchy */
+  --shadow-none: none;                              /* No shadow - flat elements */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);      /* Subtle shadow - slight elevation */
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);       /* Medium shadow - moderate elevation */
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);     /* Large shadow - high elevation */
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.1);     /* Extra large shadow - maximum elevation */
+}

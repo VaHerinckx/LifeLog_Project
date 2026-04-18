@@ -1,0 +1,290 @@
+/* MealDetails.css - Styling for meal details modal */
+@import '../../../styles/variables.css';
+
+.meal-details-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--overlay-dark);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-modal);
+  padding: var(--spacing-md);
+}
+
+.meal-details-modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: var(--shadow-lg);
+}
+
+.close-button {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  background: var(--overlay-light);
+  border: none;
+  border-radius: var(--radius-full);
+  padding: var(--spacing-xs);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-normal);
+  color: var(--color-text-on-surface);
+  z-index: 1001;
+}
+
+.close-button:hover {
+  background: var(--overlay-light-hover);
+  color: var(--color-text-on-surface);
+}
+
+.meal-details-content {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  gap: var(--spacing-lg);
+}
+
+.meal-details-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-3xl);
+  margin: var(--spacing-xl) var(--spacing-xl) 0 var(--spacing-xl);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  border-radius: var(--radius-md);
+  color: var(--color-white);
+  box-shadow: var(--shadow-md);
+}
+
+.meal-icon-large {
+  filter: drop-shadow(0 var(--spacing-xs) var(--spacing-xs) var(--shadow-color-sm));
+}
+
+.meal-details-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: 0 var(--spacing-xl) var(--spacing-xl) var(--spacing-xl);
+}
+
+.meal-details-info h2 {
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.meal-details-info h3 {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-on-surface);
+  margin: 0;
+}
+
+.meal-details-info h4 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.meal-details-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--color-primary-tint-10);
+  border-radius: var(--radius-md);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--color-text-on-surface-secondary);
+}
+
+.meta-item svg {
+  color: var(--color-primary);
+}
+
+/* Food & Drinks Section */
+.meal-content-section {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--color-primary-tint-10);
+  border-radius: var(--radius-md);
+}
+
+.food-section,
+.drinks-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.food-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.food-list li {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-on-surface);
+  font-size: var(--font-size-sm);
+}
+
+.food-list li:before {
+  content: "• ";
+  color: var(--color-primary);
+  font-weight: var(--font-weight-bold);
+  margin-right: var(--spacing-xs);
+}
+
+/* Ratings Section */
+.meal-ratings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--color-primary-tint-10);
+  border-radius: var(--radius-md);
+}
+
+.rating-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.rating-item label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-surface-secondary);
+}
+
+.rating-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.rating-display span {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-on-surface);
+}
+
+.rating-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-on-surface-secondary);
+  font-style: italic;
+}
+
+/* Meal Details Section */
+.meal-details-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  background: var(--color-primary-tint-10);
+  border-radius: var(--radius-sm);
+}
+
+.detail-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-surface-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-surface);
+}
+
+/* Categories/Tags */
+.meal-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding-top: var(--spacing-md);
+  border-top: var(--border-width-thin) solid var(--border-color-medium);
+}
+
+.meal-category {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.location-tag {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.origin-tag {
+  background: var(--color-surface-elevated);
+  color: var(--color-text-on-surface-secondary);
+}
+
+/* Responsive Design */
+@media (min-width: 768px) {
+  .meal-content-section {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .meal-details-modal {
+    max-height: 95vh;
+    margin: var(--spacing-sm);
+  }
+
+  .meal-details-icon {
+    margin: var(--spacing-lg) var(--spacing-lg) 0 var(--spacing-lg);
+  }
+
+  .meal-details-info {
+    padding: 0 var(--spacing-lg) var(--spacing-lg) var(--spacing-lg);
+  }
+
+  .meal-details-info h2 {
+    font-size: var(--font-size-xl);
+  }
+}

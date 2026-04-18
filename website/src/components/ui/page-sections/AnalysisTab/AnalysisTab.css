@@ -1,0 +1,9 @@
+/* AnalysisTab.css - Reusable analysis tab component styles */
+/* Most styles inherited from design system components.css */
+/* Responsive layout (1→2→3 columns) defined in components.css */
+
+@import '../../../../styles/variables.css';
+
+/* ===== COMPONENT-SPECIFIC OVERRIDES ===== */
+/* Add any component-specific styles here if needed */
+/* Most styling comes from design system (analysis-tab-container, analysis-charts-grid, etc.) */
