@@ -52,7 +52,9 @@
       "WebFetch(domain:www.goodreads.com)",
       "Bash(npm audit *)",
       "Bash(git -C /Users/valen/code/VaHerinckx/LifeLog_Project/lifelog_python_processing branch -a)",
-      "Bash(git -C /Users/valen/code/VaHerinckx/LifeLog_Project/lifelog_website log --oneline -10)"
+      "Bash(git -C /Users/valen/code/VaHerinckx/LifeLog_Project/lifelog_website log --oneline -10)",
+      "Bash(pyenv virtualenv *)",
+      "Bash(pyenv activate *)"
     ],
     "deny": []
   }

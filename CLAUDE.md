@@ -16,7 +16,7 @@ LifeLog Project - Personal data aggregation and visualization system processing 
 
 ```bash
 # Python Pipeline
-pyenv activate general_coding  # activate environment first
+pyenv activate lifelog_pipeline  # activate environment first (Python 3.11)
 cd pipeline && python src/process_exports.py  # Interactive CLI
 
 # React Website
