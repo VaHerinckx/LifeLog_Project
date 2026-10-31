@@ -40,3 +40,6 @@ client_secrets.json
 
 # Data files
 *.csv
+
+# Local-only, not for GitHub
+other_data_projects/
