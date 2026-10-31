@@ -1,6 +1,6 @@
 fitparse==1.2.0
 garminconnect==0.1.53
-google_api_python_client==2.86.0
+google_api_python_client==2.201.0
 google_auth_oauthlib==0.4.6
 langdetect==1.0.9
 lingua==4.15.0
