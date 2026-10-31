@@ -4,11 +4,28 @@ import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
+import { google } from 'googleapis';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Authenticated Drive client, used once GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 is set
+// (service account JSON key, base64-encoded to survive env var UIs safely).
+// Falls back to the public uc?export=download URL for any file not yet
+// re-shared with the service account / still "anyone with the link".
+let driveClient = null;
+if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64) {
+    const serviceAccountKey = JSON.parse(
+        Buffer.from(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64, 'base64').toString('utf8')
+    );
+    const auth = new google.auth.GoogleAuth({
+        credentials: serviceAccountKey,
+        scopes: ['https://www.googleapis.com/auth/drive.readonly']
+    });
+    driveClient = google.drive({ version: 'v3', auth });
+}
 
 // HTTP Basic Auth with role-based access
 // AUTH_USER/AUTH_PASS = full access
@@ -114,14 +131,34 @@ app.get('/api/user-info', (req, res) => {
 
 // API endpoint for Google Drive files
 app.get('/api/google-drive/:fileId', async (req, res) => {
-    try {
-        const fileId = req.params.fileId;
+    const fileId = req.params.fileId;
 
-        // Only log in development
-        if (process.env.NODE_ENV !== 'production') {
-            console.log(`Fetching Google Drive file: ${fileId}`);
+    // Only log in development
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`Fetching Google Drive file: ${fileId}`);
+    }
+
+    // Preferred path: authenticated fetch via the service account. Only works
+    // once this specific file has been re-shared with the service account's email.
+    if (driveClient) {
+        try {
+            const driveRes = await driveClient.files.get(
+                { fileId, alt: 'media' },
+                { responseType: 'stream', timeout: 60000 }
+            );
+            res.setHeader('Content-Type', 'text/plain');
+            driveRes.data.on('error', (err) => {
+                console.error(`Drive stream error for ${fileId}:`, err.message);
+                res.destroy();
+            });
+            return driveRes.data.pipe(res);
+        } catch (error) {
+            console.error(`Authenticated Drive fetch failed for ${fileId}, falling back to public URL:`, error.message);
+            // fall through to legacy public fetch below
         }
+    }
 
+    try {
         const response = await axios({
             url: `https://drive.google.com/uc?export=download&id=${fileId}`,
             method: 'GET',
