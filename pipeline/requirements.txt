@@ -3,7 +3,7 @@ garminconnect==0.1.53
 google_api_python_client==2.86.0
 google_auth_oauthlib==0.4.6
 langdetect==1.0.9
-lingua==4.15.0
+lingua==4.16.2
 nltk==3.9.4
 numpy==1.24.3
 pandas==1.5.3
